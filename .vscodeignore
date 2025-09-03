@@ -1,0 +1,27 @@
+# 1. Dependências de Desenvolvimento
+# A pasta node_modules é imensa e contém muitas coisas que não são necessárias no pacote final.
+# O 'vsce' é inteligente e irá empacotar apenas as dependências de produção listadas no package.json.
+node_modules/
+package-lock.json
+
+# 2. Código-Fonte e Configurações de Build
+# O pacote final precisa apenas do JavaScript compilado (da pasta 'dist'), não do código-fonte TypeScript.
+src/
+tsconfig.json
+webpack.config.js
+eslint.config.mjs
+
+# 3. Configurações do Editor e Testes
+# Arquivos de configuração do seu ambiente de desenvolvimento e testes.
+.vscode/
+.vscode-test.mjs
+
+# 4. Controle de Versão e Arquivos Gerados
+# O Git e os próprios pacotes .vsix não devem entrar no pacote.
+.git/
+.gitignore
+*.vsix
+
+# 5. Arquivos de Documentação do Template
+# Arquivos que vêm com o template inicial da extensão.
+vsc-extension-quickstart.md

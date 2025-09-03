@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabControl</title>
+
+    <link href="{{stylesUri}}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Estilos responsivos adicionais */
+        @media (max-width: 768px) {
+            .responsive-grid {
+                grid-template-columns: 1fr !important;
+            }
+            
+            .responsive-card {
+                min-width: 100% !important;
+            }
+            
+            .responsive-table {
+                font-size: 0.8rem;
+            }
+            
+            .responsive-table th, 
+            .responsive-table td {
+                padding: 0.5rem !important;
+            }
+            
+            .responsive-chart {
+                height: 250px !important;
+            }
+            
+            .responsive-filters {
+                grid-template-columns: 1fr !important;
+                gap: 0.5rem !important;
+            }
+        }
+        
+        @media (max-width: 1024px) and (min-width: 769px) {
+            .responsive-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+        }
+        
+        /* Melhorias de usabilidade para mobile */
+        .mobile-optimized {
+            touch-action: manipulation;
+        }
+        
+        .mobile-optimized button {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        /* Scroll suave para áreas com overflow */
+        .smooth-scroll {
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Estilos para a sanfona */
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .accordion-content.expanded {
+            max-height: 500px; /* Valor grande o suficiente para acomodar o conteúdo */
+            transition: max-height 0.3s ease-in;
+        }
+        .accordion-icon.rotated {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="loading-spinner" class="hidden fixed inset-0 bg-white bg-opacity-80 z-50 flex justify-center items-center">
+        <svg class="h-20 w-20 text-blue-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 2H4C2.89543 2 2 2.89543 2 4V20C2 21.1046 2.89543 22 4 22H20C21.1046 22 22 21.1046 22 20V4C22 2.89543 21.1046 2 20 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="13" r="5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M20 5H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20 8H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <g class="animate-spin" style="transform-origin: 12px 13px;">
+                <path d="M12 10L10 12L12 14L14 16" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+        </svg>
+    </div>
+
+    <div id="toast" class="hidden fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg z-50">
+        <p id="toast-message">Operação realizada com sucesso!</p>
+    </div>
+
+    <div id="stock-alert-banner" class="hidden bg-red-500 text-white p-4 text-center shadow-lg flex justify-center items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <span id="stock-alert-text" class="mr-4">Atenção! O número de ensaios possíveis está baixo.</span>
+        <a href="#" id="send-email-button" class="bg-white text-red-600 font-bold py-1 px-3 rounded-md hover:bg-red-100 transition">Enviar E-mail de Notificação</a>
+    </div>
+
+    <div id="modal-template" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 text-gray-800 relative">
+            <h3 class="modal-title text-xl font-bold mb-4"></h3>
+            <button class="modal-close-btn absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content max-h-[80vh] overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+    <div id="password-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-sm mx-4">
+            <h2 class="text-xl font-bold mb-4 text-black">Habilitar Edição</h2>
+            <p class="text-gray-600 mb-6">Por favor, insira a senha para desbloquear o cronograma.</p>
+            <input type="password" id="password-input" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black" placeholder="Senha">
+            <p id="password-error-message" class="text-red-500 text-sm mt-2 h-4"></p>
+            <div class="flex justify-end gap-4 mt-6">
+                <button id="password-cancel-btn" class="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button id="password-submit-btn" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Desbloquear</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tela de Loading/Autenticação -->
+    <div id="loading-screen" class="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-100 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4 border border-gray-100 text-center">
+            <!-- Header com Logo -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Bem-vindo ao</h1>
+                <h2 class="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">LabControl</h2>
+                <p class="text-gray-600 text-lg">Sistema de Controle de Insumos e Ensaios</p>
+                <div class="w-20 h-1 bg-gradient-to-r from-blue-500 to-indigo-500 mx-auto mt-4 rounded-full"></div>
+            </div>
+            
+            <!-- Loading Animation -->
+            <div class="mb-6">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+            
+            <!-- Status Text -->
+            <div class="space-y-2">
+                <p class="text-gray-700 font-medium">Autenticando usuário...</p>
+                <p id="loading-status" class="text-sm text-gray-500">Detectando usuário do sistema</p>
+            </div>
+            
+            <!-- Footer -->
+            <div class="text-center mt-8 pt-6 border-t border-gray-200">
+                <p class="text-xs text-gray-500">Controle de Insumos para Laboratório</p>
+                <p class="text-xs text-gray-400 mt-1">Versão 1.0</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Interface principal (inicialmente oculta) -->
+    <div id="main-interface" class="hidden">
+
+      
+      <div class="flex flex-col md:flex-row h-screen bg-gray-100">
+        <!-- Menu lateral responsivo -->
+        <aside class="bg-gray-800 text-white flex flex-col">
+            <div class="logo-container border-b border-gray-700">
+                <img src="{{iconUri}}" class="h-12 w-12" alt="LabControl Icon">
+                <span>LabControl</span>
+            </div>
+            <nav class="flex-1 px-2 md:px-4 py-4 flex flex-col">
+                <ul>
+                    <li class="mb-2">
+                        <a href="#" id="nav-dashboard" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 bg-blue-600 text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" id="nav-inventory" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3"><rect x="1" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="2" y1="8" x2="20" y2="8"></line><line x1="2" y1="12" x2="20" y2="12"></line><line x1="7" y1="3" x2="7" y2="21"></line><line x1="13" y1="3" x2="13" y2="21"></line></svg>
+                            <span>Inventário</span>
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" id="nav-assays" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            <span>Ensaios</span>
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" id="nav-schedule" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            <span>Cronograma</span>
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" id="nav-settings" class="nav-link py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            <span>Configurações</span>
+                        </a>
+                    </li>
+                    <li class="mb-2" id="nav-bulk-delete-item" style="display: none;">
+                        <a href="#" id="nav-bulk-delete" class="nav-link py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-red-700 hover:text-white border-t border-gray-600 mt-2 pt-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            <span>Exclusão em Massa</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="flex-1 overflow-y-auto">
+            <!-- Dashboard com layout responsivo -->
+            <div id="page-dashboard" class="page p-4 md:p-6 bg-gray-50">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Dashboard</h1>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="btn-open-reagent-modal" class="mobile-optimized flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition duration-300 text-sm md:text-base">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                            <span>Adicionar Insumo</span>
+                        </button>
+                        <button id="btn-open-assay-modal" class="mobile-optimized flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition duration-300 text-sm md:text-base">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5"><path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5h-1c-1.4 0-2.5-1.1-2.5-2.5V2"></path><path d="M8.5 2h7"></path><path d="M14.5 16h-5"></path></svg>
+                            <span>Registrar Ensaio</span>
+                        </button>
+                        <button id="btn-generate-pdf-report" class="mobile-optimized flex items-center bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition duration-300 text-sm md:text-base">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            <span>Gerar Relatório PDF</span>
+                        </button>
+
+                    </div>
+                </div>
+                
+                <div id="dashboard-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
+                
+                <div class="responsive-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Consumo por Lote (g ou un)</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="consumptionChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Estoque Atual por Lote</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="stockChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-6">
+
+                <div class="responsive-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Ensaios por Fabricante</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="assaysByManufacturerChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Consumo de Reagentes por Fabricante</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="consumptionByAssayManufacturerChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-6">
+
+                <div class="responsive-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Ensaios Realizados (Total)</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="assaysOverTimeChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Consumo Mensal de Reagentes</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="monthlyConsumptionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h2 class="text-xl md:text-2xl font-bold text-gray-800 mb-4">Histórico de Ensaios</h2>
+                    <div class="responsive-filters grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-4 mb-4">
+                        <div>
+                            <label for="filter-protocol-dashboard" class="block text-sm font-medium text-gray-700">Protocolo:</label>
+                            <input type="text" id="filter-protocol-dashboard" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black p-2" placeholder="Digite o protocolo...">
+                        </div>
+                        <div>
+                            <label for="filter-orcamento-dashboard" class="block text-sm font-medium text-gray-700">Orçamento:</label>
+                            <input type="text" id="filter-orcamento-dashboard" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black p-2" placeholder="Digite o orçamento...">
+                        </div>
+                        <div>
+                            <label for="filter-model-dashboard" class="block text-sm font-medium text-gray-700">Modelo:</label>
+                            <input type="text" id="filter-model-dashboard" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black p-2" placeholder="Digite o modelo...">
+                        </div>
+                        <div>
+                            <label for="filter-manufacturer-dashboard" class="block text-sm font-medium text-gray-700">Fabricante:</label>
+                            <select id="filter-manufacturer-dashboard" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black p-2">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="dashboard-assays-table" class="overflow-auto smooth-scroll max-h-[50vh] responsive-table"></div>
+                </div>
+            </div>
+            <div id="page-inventory" class="page p-6 hidden">
+                <h1 class="text-3xl font-bold text-gray-800 mb-6">Inventário de Insumos</h1>
+                <div class="mb-4">
+                    <label for="filter-inventory" class="block text-sm font-medium text-gray-700">Buscar no Inventário:</label>
+                    <input type="text" id="filter-inventory" class="mt-1 block w-full md:w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black" placeholder="Digite o reagente, fornecedor ou lote...">
+                </div>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="min-w-full bg-white">
+                        <thead class="bg-gray-800 text-white">
+                            <tr>
+                                <th class="text-left py-3 px-4 uppercase font-semibold text-sm">Reagente</th><th class="text-left py-3 px-4 uppercase font-semibold text-sm">Fornecedor</th><th class="text-left py-3 px-4 uppercase font-semibold text-sm">Lote</th><th class="text-left py-3 px-4 uppercase font-semibold text-sm">Quantidade</th><th class="text-left py-3 px-4 uppercase font-semibold text-sm">Validade</th><th class="text-left py-3 px-4 uppercase font-semibold text-sm">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-table-body" class="text-gray-700"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="page-assays" class="page p-6 hidden">
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-4">Histórico de Ensaios</h1>
+                    <div class="my-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div>
+                            <label for="filter-protocol-assays" class="block text-sm font-medium text-gray-700">Filtrar por Protocolo:</label>
+                            <input type="text" id="filter-protocol-assays" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black" placeholder="Digite o protocolo...">
+                        </div>
+                        <div>
+                            <label for="filter-orcamento-assays" class="block text-sm font-medium text-gray-700">Filtrar por Orçamento:</label>
+                            <input type="text" id="filter-orcamento-assays" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black" placeholder="Digite o orçamento...">
+                        </div>
+                        <div>
+                            <label for="filter-model-assays" class="block text-sm font-medium text-gray-700">Filtrar por Modelo:</label>
+                            <input type="text" id="filter-model-assays" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black" placeholder="Digite o modelo...">
+                        </div>
+                        <div>
+                            <label for="filter-manufacturer-assays" class="block text-sm font-medium text-gray-700">Filtrar por Fabricante:</label>
+                            <select id="filter-manufacturer-assays" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="assays-page-table" class="overflow-auto max-h-[75vh]"></div>
+                </div>
+            </div>
+            <div id="page-schedule" class="page p-6 hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-gray-800">Cronograma de Ensaios</h1>
+                    
+                    <div class="flex items-center space-x-4">
+                        
+                        <div class="flex items-center">
+                            <button id="prev-gantt-btn" class="p-2 rounded-full hover:bg-gray-200" title="Período Anterior">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <h2 id="gantt-period" class="hidden text-xl font-semibold text-gray-700 w-64 text-center whitespace-nowrap"></h2>
+                            <button id="next-gantt-btn" class="p-2 rounded-full hover:bg-gray-200" title="Próximo Período">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+
+                        <div class="border-l h-8 border-gray-300"></div>
+
+                        <button id="btn-open-add-gantt-assay-modal" class="flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
+                            Adicionar Ensaio de Eficiência
+                        </button>
+                        <button id="btn-open-add-safety-assay-modal" class="flex items-center bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><path d="M13.8 2.6a1 1 0 0 0-1.6 0L8.8 6.5a1 1 0 0 0 0 1l3.4 3.9a1 1 0 0 0 1.6 0l3.4-3.9a1 1 0 0 0 0-1z"></path><path d="M12 22h-.8a2 2 0 0 1-2-2.2l.6-4.4a2 2 0 0 1 2-1.8h.4a2 2 0 0 1 2 1.8l.6 4.4a2 2 0 0 1-2 2.2z"></path><path d="M2 15h.8a2 2 0 0 1 2 2.2l-.6 4.4a2 2 0 0 1-2 1.8h-.4a2 2 0 0 1-2-1.8l-.6-4.4a2 2 0 0 1 2-2.2z"></path><path d="M22 15h-.8a2 2 0 0 0-2 2.2l.6 4.4a2 2 0 0 0 2 1.8h.4a2 2 0 0 0 2-1.8l.6-4.4a2 2 0 0 0-2-2.2z"></path></svg>
+                            Adicionar Ensaio de Segurança
+                        </button>
+                        <button id="btn-open-add-calibration-modal" class="flex items-center bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><path d="M12 2v20M5 12h14M17 19.86l-5-4.28-5 4.28V4.14l5-4.28 5 4.28v15.72z"></path></svg>
+                            Agendar Calibração
+                        </button>
+                        <button id="btn-open-add-vacation-modal" class="flex items-center bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><path d="M22 10.5h-5.5a2.5 2.5 0 0 0-5 0H6"></path><path d="M6 10.5V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7.5"></path><path d="M11.5 21a2.5 2.5 0 0 1-5 0V14h5v7Z"></path><path d="M17.5 21a2.5 2.5 0 0 0 5 0V14h-5v7Z"></path></svg>
+                            Agendar Férias
+                        </button>
+                        
+                        <div class="border-l h-8 border-gray-300"></div>
+                        
+                        <div class="relative" id="gantt-actions-menu">
+                            <button id="btn-toggle-gantt-actions" class="flex items-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition duration-300 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M12.22 2h-4.44a2 2 0 0 0-2 2v.79a2 2 0 0 1-1.11 1.79l-.88.58a2 2 0 0 0-1.11 1.79V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9.17a2 2 0 0 0-1.11-1.79l-.88-.58a2 2 0 0 1-1.11-1.79V4a2 2 0 0 0-2-2z"></path><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                                Gerir Linhas
+                            </button>
+                            <div id="gantt-actions-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20">
+                                <a href="#" id="btn-add-efficiency-row" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Adicionar Linha de Eficiência</a>
+                                <a href="#" id="btn-add-security-row" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Adicionar Linha de Segurança</a>
+                            </div>
+                        </div>
+
+                        <div id="schedule-actions-container" class="hidden flex items-center space-x-2 ml-4">
+                            <button id="btn-cancel-schedule" class="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white font-semibold rounded-lg shadow-md hover:bg-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                Cancelar
+                            </button>
+                            <button id="btn-save-schedule" class="flex items-center gap-2 px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Guardar Alterações
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-x-auto max-h-[80vh] overflow-y-visible relative">
+                
+                    <div class="w-[200px] flex-shrink-0 sticky left-0 z-20 bg-white">
+                        <div class="bg-gray-800 text-white font-bold p-2 text-sm h-[62px] border-b flex items-center justify-center sticky top-0 z-40">Recursos/Projetos</div>
+                        <div id="gantt-labels-container"></div>
+                    </div>
+                    
+                    <div class="absolute top-0 left-0 z-10 ml-[200px]">
+                        <div id="gantt-header-container" class="sticky top-0 z-30 bg-gray-50">
+                        </div>
+                        <div id="gantt-grid-container" class="relative">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="page-settings" class="page p-6 hidden">
+                <h1 class="text-3xl font-bold text-gray-800 mb-6">Configurações</h1>
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 max-w-2xl mx-auto space-y-8">
+                    
+                    <div class="space-y-2">
+                        <label for="setting-threshold" class="block text-sm font-medium text-gray-700">Limite para Alerta de Estoque</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" name="alertThreshold" id="setting-threshold" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" required />
+                            <button id="btn-save-threshold" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                        </div>
+                        <p class="mt-2 text-xs text-gray-500">Receber um alerta quando o número de ensaios possíveis for igual ou inferior a este valor.</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-lg font-medium text-gray-800">E-mails para Notificação</h3>
+                        
+                        <ul id="email-list" class="space-y-2 border border-gray-300 rounded-md p-4 max-h-48 overflow-y-auto text-black">
+                            </ul>
+
+                        <form id="form-add-email" class="flex items-center space-x-2 pt-4 border-t">
+                            <input type="email" name="newEmail" id="setting-new-email" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" placeholder="novo-email@exemplo.com" required />
+                            <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Cadastrar</button>
+                        </form>
+                    </div>
+                    <div class="space-y-4 pt-8 border-t">
+                        <h3 class="text-lg font-medium text-gray-800">Gerenciar Feriados e Recessos</h3>
+
+                        <ul id="holidays-list" class="space-y-2 border border-gray-300 rounded-md p-4 max-h-48 overflow-y-auto text-black">
+                            </ul>
+
+                        <form id="form-add-holiday" class="space-y-3 pt-4 border-t">
+                            <div>
+                                <label for="holiday-name" class="block text-sm font-medium text-gray-700">Nome do Feriado</label>
+                                <input type="text" name="holidayName" id="holiday-name" placeholder="Ex: Feriado Municipal" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" required />
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="holiday-start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                                    <input type="date" name="startDate" id="holiday-start-date" class="block w-full p-2 border rounded text-black" required />
+                                </div>
+                                <div>
+                                    <label for="holiday-end-date" class="block text-sm font-medium text-gray-700">Data de Fim</label>
+                                    <input type="date" name="endDate" id="holiday-end-date" class="block w-full p-2 border rounded text-black" required />
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg whitespace-nowrap">Adicionar Feriado</button>
+                        </form>
+                    </div>
+                    
+                    <div class="space-y-4 pt-8 border-t">
+                        <h3 class="text-lg font-medium text-gray-800">Gerenciar Usuários do Sistema</h3>
+                        <p class="text-sm text-gray-600">Controle quem tem acesso como administrador ou técnico. Outros usuários serão automaticamente visualizadores.</p>
+                        
+                        <ul id="system-users-list" class="space-y-2 border border-gray-300 rounded-md p-4 max-h-48 overflow-y-auto text-black">
+                            </ul>
+
+                        <form id="form-add-system-user" class="space-y-3 pt-4 border-t">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="user-username" class="block text-sm font-medium text-gray-700">Nome de Usuário (Windows)</label>
+                                    <input type="text" name="username" id="user-username" placeholder="Ex: joao123" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" required />
+                                </div>
+                                <div>
+                                    <label for="user-type" class="block text-sm font-medium text-gray-700">Tipo de Usuário</label>
+                                    <select name="userType" id="user-type" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" required>
+                                        <option value="">Selecione o tipo</option>
+                                        <option value="administrador">Administrador</option>
+                                        <option value="tecnico_eficiencia">Técnico Eficiência</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="user-display-name" class="block text-sm font-medium text-gray-700">Nome de Exibição</label>
+                                <input type="text" name="displayName" id="user-display-name" placeholder="Ex: João Silva" class="block w-full p-2 border border-gray-300 text-black rounded-md shadow-sm" required />
+                            </div>
+                            <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg whitespace-nowrap">Adicionar Usuário</button>
+                        </form>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+    
+    <div class="hidden">
+        <div id="add-reagent-modal-content">
+            <form id="form-add-reagent" class="space-y-4">
+                <input type="text" name="reagent" placeholder="Reagente (ex: Pó Base)" class="w-full p-2 border rounded text-black" required />
+                <input type="text" name="manufacturer" placeholder="Fornecedor (ex: Swissatest)" class="w-full p-2 border rounded text-black" required />
+                <input type="text" name="lot" placeholder="Lote" class="w-full p-2 border rounded text-black" required />
+                <input type="number" name="quantity" min="0" placeholder="Quantidade (g ou un)" class="w-full p-2 border rounded text-black" required />
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Validade</label>
+                    <input type="date" name="validity" class="w-full p-2 border rounded text-black" required />
+                </div>
+                <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Adicionar Insumo</button>
+            </form>
+        </div>
+        <div id="add-vacation-modal-content">
+            <form id="form-add-vacation" class="space-y-4">
+                <div>
+                    <label for="vacation-employee-name" class="block text-sm font-medium text-gray-700">Nome do Funcionário</label>
+                    <input type="text" name="employeeName" id="vacation-employee-name" placeholder="Digite o nome do colaborador" class="w-full p-2 border rounded text-black" required />
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="vacation-start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                        <input type="date" name="startDate" id="vacation-start-date" class="w-full p-2 border rounded text-black" required />
+                    </div>
+                    <div>
+                        <label for="vacation-end-date" class="block text-sm font-medium text-gray-700">Data de Término</label>
+                        <input type="date" name="endDate" id="vacation-end-date" class="w-full p-2 border rounded text-black" required />
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Agendar Férias</button>
+            </form>
+        </div>
+        
+        <div id="add-assay-modal-content">
+            <form id="form-add-assay" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="protocol" class="block text-sm font-medium text-gray-700">Protocolo</label>
+                <input type="text" name="protocol" id="protocol" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="assayManufacturer" class="block text-sm font-medium text-gray-700">Fabricante</label>
+                <input type="text" name="assayManufacturer" id="assayManufacturer" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="model" class="block text-sm font-medium text-gray-700">Modelo</label>
+                <input type="text" name="model" id="model" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="nominalLoad" class="block text-sm font-medium text-gray-700">Carga (kg)</label>
+                <input type="number" step="0.1" name="nominalLoad" id="nominalLoad" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="cycles" class="block text-sm font-medium text-gray-700">Ciclos</label>
+                <input type="number" name="cycles" id="cycles" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="tensao" class="block text-sm font-medium text-gray-700">Tensão</label>
+                <select name="tensao" id="tensao" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="">Selecione a Tensão</option>
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="startDate" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                <input type="date" name="startDate" id="startDate" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="endDate" class="block text-sm font-medium text-gray-700">Data de Término</label>
+                <input type="date" name="endDate" id="endDate" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="setup" class="block text-sm font-medium text-gray-700">Setup</label>
+                <select name="setup" id="setup" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </select>
+            </div>
+        </div>
+        
+        <div>
+            <h4 class="text-md font-medium text-gray-800 mb-2">Lotes Utilizados</h4>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label for="lotePoBase" class="block text-sm font-medium text-gray-700">Pó Base</label>
+                    <select name="lotePoBase" id="lotePoBase" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                </div>
+                <div>
+                    <label for="lotePerborato" class="block text-sm font-medium text-gray-700">Perborato</label>
+                    <select name="lotePerborato" id="lotePerborato" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                </div>
+                <div>
+                    <label for="loteTaed" class="block text-sm font-medium text-gray-700">TAED</label>
+                    <select name="loteTaed" id="loteTaed" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                </div>
+                <div>
+                    <label for="loteTiras" class="block text-sm font-medium text-gray-700">Tiras</label>
+                    <select name="loteTiras" id="loteTiras" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="reason" class="block text-sm font-medium text-gray-700">Motivo (Opcional)</label>
+                <input type="text" name="reason" id="reason" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="assay-type-select" class="block text-sm font-medium text-gray-700">Tipo de Ensaio</label>
+                <select name="type" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500" id="assay-type-select">
+                    <option value="homologation">Homologação</option>
+                    <option value="acp">AcP</option>
+                    <option value="secadora">Ensaio de Secadora</option>
+                    <option value="acreditado">Não Acreditado</option>
+                    <option value="acao-corretiva">Ação Corretiva</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="pt-4 flex justify-end">
+            <button type="submit" id="submit-assay-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                Registrar
+            </button>
+        </div>
+    </form>
+        </div>    
+
+        <div id="view-assay-modal-content">
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><strong class="text-gray-600">Protocolo:</strong> <span data-field="protocol"></span></div>
+                    <div><strong class="text-gray-600">Status:</strong> <span data-field="status"></span></div>
+                    <div><strong class="text-gray-600">Setup:</strong> <span data-field="setup"></span></div>
+                    <div><strong class="text-gray-600">Carga Nominal:</strong> <span data-field="nominalLoad"></span> kg</div>
+                    <div><strong class="text-gray-600">Fabricante:</strong> <span data-field="assayManufacturer"></span></div>
+                    <div><strong class="text-gray-600">Tensão:</strong> <span data-field="tensao"></span></div>
+                    <div><strong class="text-gray-600">Modelo:</strong> <span data-field="model"></span></div>
+                    <div><strong class="text-gray-600">Período:</strong> <span data-field="period"></span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="add-gantt-assay-modal-content">
+    <form id="form-add-gantt-assay" class="space-y-6">
+        <input type="hidden" name="id">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label for="gantt-orcamento" class="block text-sm font-medium text-gray-900">Orçamento</label>
+                <input type="text" id="gantt-orcamento" name="orcamento" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-protocolo" class="block text-sm font-medium text-gray-900">Protocolo</label>
+                <input type="text" id="gantt-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
+                <input type="text" id="gantt-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>
+                <input type="text" id="gantt-modelo" name="model" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-cargaNominal" class="block text-sm font-medium text-gray-900">Carga Nominal (kg)</label>
+                <input type="number" step="0.1" id="gantt-cargaNominal" name="nominalLoad" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-tensao" class="block text-sm font-medium text-gray-900">Tensão</label>
+                <select id="gantt-tensao" name="tensao" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+            <div>
+                <label for="gantt-terminal" class="block text-sm font-medium text-gray-900">Terminal</label>
+                <select id="gantt-terminal" name="setup" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                </select>
+            </div>
+            <div>
+                <label for="gantt-type" class="block text-sm font-medium text-gray-900">Tipo de Ensaio</label>
+                <select id="gantt-type" name="type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="homologation">Homologação</option>
+                    <option value="acp">AcP</option>
+                    <option value="secadora">Ensaio de Secadora</option>
+                    <option value="acreditado">Não Acreditado</option>
+                    <option value="acao-corretiva">Ação Corretiva</option>
+                </select>
+            </div>
+            <div>
+                <label for="gantt-startDate" class="block text-sm font-medium text-gray-900">Data de Início</label>
+                <input type="date" id="gantt-startDate" name="startDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-endDate" class="block text-sm font-medium text-gray-900">Data de Fim</label>
+                <input type="date" id="gantt-endDate" name="endDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-reportDate" class="block text-sm font-medium text-gray-900">Emissão de Relatório</label>
+                <input type="date" id="gantt-reportDate" name="reportDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div class="col-span-1 md:col-span-3 lg:col-span-1">
+                <label for="gantt-status" class="block text-sm font-medium text-gray-900">Status</label>
+                <select id="gantt-status" name="status" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="aguardando">Aguardando Amostra</option>
+                    <option value="labelo">Amostra no LABELO</option>
+                    <option value="andamento">Ensaios em Andamento</option>
+                    <option value="incompleto">Ensaio Incompleto</option>
+                    <option value="concluido">Ensaios concluído</option>
+                    <option value="relatorio">Relatório Emitido</option>
+                    <option value="pendente">Ensaio Pendente</option>
+                </select>
+            </div>
+            <div>
+                <label for="gantt-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
+                <input type="text" id="gantt-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">Agendar Ensaio</button>
+        </div>
+    </form>
+</div>
+<div id="view-gantt-assay-modal-content">
+    <div class="grid grid-cols-2 gap-4 text-sm text-gray-700">
+        <div>
+            <strong class="text-gray-900">Protocolo:</strong>
+            <span data-field="protocol"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Orçamento:</strong>
+            <span data-field="orcamento"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Fabricante:</strong>
+            <span data-field="assayManufacturer"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Modelo:</strong>
+            <span data-field="model"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Carga Nominal:</strong>
+            <span data-field="nominalLoad"></span> kg
+        </div>
+        <div>
+            <strong class="text-gray-900">Tensão:</strong>
+            <span data-field="tensao"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Período:</strong>
+            <span data-field="period"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Terminal:</strong>
+            <span data-field="setup"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Status:</strong>
+            <span data-field="status"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Tipo de Ensaio:</strong>
+            <span data-field="type"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Emissão de Relatório:</strong>
+            <span data-field="reportDate"></span>
+        </div>
+        <div class="col-span-2">
+            <strong class="text-gray-900">Observações:</strong>
+            <span data-field="observacoes"></span>
+        </div>
+    </div>
+    <div class="flex justify-end space-x-2 pt-4 border-t">
+        <button class="btn-edit-gantt-assay bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center" data-id="assay.id">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            Editar
+        </button>
+        <button class="btn-delete-gantt-assay bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center" data-id="assay.id">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            Excluir
+        </button>
+    </div>
+</div>
+
+<div id="edit-gantt-assay-modal-content">
+    <form id="form-edit-gantt-assay" class="space-y-6">
+        <input type="hidden" name="id">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="edit-gantt-protocolo" class="block text-sm font-medium text-gray-900">Protocolo</label>
+                <input type="text" id="edit-gantt-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-orcamento" class="block text-sm font-medium text-gray-900">Orçamento</label>
+                <input type="text" id="edit-gantt-orcamento" name="orcamento" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
+                <input type="text" id="edit-gantt-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>
+                <input type="text" id="edit-gantt-modelo" name="model" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-cargaNominal" class="block text-sm font-medium text-gray-900">Carga Nominal (kg)</label>
+                <input type="number" step="0.1" id="edit-gantt-cargaNominal" name="nominalLoad" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-tensao" class="block text-sm font-medium text-gray-900">Tensão</label>
+                <select id="edit-gantt-tensao" name="tensao" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+            <div>
+                <label for="edit-gantt-terminal" class="block text-sm font-medium text-gray-900">Terminal</label>
+                <select id="edit-gantt-terminal" name="setup" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                </select>
+            </div>
+            <div>
+                <label for="edit-gantt-type" class="block text-sm font-medium text-gray-900">Tipo de Ensaio</label>
+                <select id="edit-gantt-type" name="type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="homologation">Homologação</option>
+                    <option value="acp">AcP</option>
+                    <option value="secadora">Ensaio de Secadora</option>
+                    <option value="acreditado">Não Acreditado</option>
+                    <option value="acao-corretiva">Ação Corretiva</option>
+                </select>
+            </div>
+            <div>
+                <label for="edit-gantt-startDate" class="block text-sm font-medium text-gray-900">Data de Início</label>
+                <input type="date" id="edit-gantt-startDate" name="startDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-endDate" class="block text-sm font-medium text-gray-900">Data de Fim</label>
+                <input type="date" id="edit-gantt-endDate" name="endDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-reportDate" class="block text-sm font-medium text-gray-900">Emissão de Relatório</label>
+                <input type="date" id="edit-gantt-reportDate" name="reportDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-gantt-status" class="block text-sm font-medium text-gray-900">Status</label>
+                <select id="edit-gantt-status" name="status" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="aguardando">Aguardando Amostra</option>
+                    <option value="labelo">Amostra no LABELO</option>
+                    <option value="andamento">Ensaios em Andamento</option>
+                    <option value="incompleto">Ensaio Incompleto</option>
+                    <option value="concluido">Ensaios concluído</option>
+                    <option value="relatorio">Relatório Emitido</option>
+                    <option value="pendente">Ensaio Pendente</option>
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <label for="edit-gantt-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
+                <input type="text" id="edit-gantt-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end">
+            <button type="submit" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors">Salvar Alterações</button>
+        </div>
+    </form>
+</div>
+<div id="add-safety-assay-modal-content">
+    <form id="form-add-safety-assay" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label for="safety-protocolo" class="block text-sm font-medium text-gray-900">Protocolo</label>
+                <input type="text" id="safety-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-orcamento" class="block text-sm font-medium text-gray-900">Orçamento</label>
+                <input type="text" id="safety-orcamento" name="orcamento" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
+                <input type="text" id="safety-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>
+                <input type="text" id="safety-modelo" name="model" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-cargaNominal" class="block text-sm font-medium text-gray-900">Carga Nominal (kg)</label>
+                <input type="number" step="0.1" id="safety-cargaNominal" name="nominalLoad" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-tensao" class="block text-sm font-medium text-gray-900">Tensão</label>
+                <select id="safety-tensao" name="tensao" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+            <div>
+                <label for="safety-terminal" class="block text-sm font-medium text-gray-900">Terminal</label>
+                <select id="safety-terminal" name="setup" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                </select>
+            </div>
+            <div>
+                <label for="safety-type" class="block text-sm font-medium text-gray-900">Tipo de Ensaio</label>
+                <select id="safety-type" name="type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="homologation">Homologação</option>
+                    <option value="acp">AcP</option>
+                    <option value="secadora">Ensaio de Secadora</option>
+                    <option value="acreditado">Não Acreditado</option>
+                    <option value="acao-corretiva">Ação Corretiva</option>
+                </select>
+            </div>
+            <div>
+                <label for="safety-startDate" class="block text-sm font-medium text-gray-900">Data de Início</label>
+                <input type="date" id="safety-startDate" name="startDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-endDate" class="block text-sm font-medium text-gray-900">Data de Fim</label>
+                <input type="date" id="safety-endDate" name="endDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="safety-reportDate" class="block text-sm font-medium text-gray-900">Emissão de Relatório</label>
+                <input type="date" id="safety-reportDate" name="reportDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div class="col-span-1 md:col-span-3 lg:col-span-1">
+                <label for="safety-status" class="block text-sm font-medium text-gray-900">Status</label>
+                <select id="safety-status" name="status" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="aguardando">Aguardando Amostra</option>
+                    <option value="labelo">Amostra no LABELO</option>
+                    <option value="andamento">Ensaios em Andamento</option>
+                    <option value="incompleto">Ensaio Incompleto</option>
+                    <option value="concluido">Ensaios concluído</option>
+                    <option value="relatorio">Relatório Emitido</option>
+                    <option value="pendente">Ensaio Pendente</option>
+                </select>
+            </div>
+            <div>
+                <label for="safety-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
+                <input type="text" id="safety-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end">
+            <button type="submit" class="bg-gray-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-700 transition-colors">Agendar Ensaio</button>
+        </div>
+    </form>
+</div>
+        
+<div id="add-calibration-modal-content">
+    <form id="form-add-calibration" class="space-y-4">
+        <div>
+            <label for="calibrationType" class="block text-sm font-medium text-gray-700">Tipo de Calibração</label>
+            <select name="calibrationType" id="calibrationType" required class="w-full p-2 border rounded text-black">
+                <option value="">Selecione o tipo</option>
+                <option value="calibracao-energia">Calibração de Energia (Terminais)</option>
+                <option value="calibracao-pressao-temp">Calibração de Pressão e Temperatura (Laboratório)</option>
+            </select>
+        </div>
+        <div id="affected-terminals-field" class="hidden">
+            <label for="affectedTerminals" class="block text-sm font-medium text-gray-700">Terminais Afetados</label>
+            <select name="affectedTerminals" id="affectedTerminals" class="w-full p-2 border rounded text-black">
+                <option value="1-4">Terminais 1-4</option>
+                <option value="5-8">Terminais 5-8</option>
+            </select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label for="calibration-start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                <input type="date" name="startDate" id="calibration-start-date" class="w-full p-2 border rounded text-black" required />
+            </div>
+            <div>
+                <label for="calibration-end-date" class="block text-sm font-medium text-gray-700">Data de Término</label>
+                <input type="date" name="endDate" id="calibration-end-date" class="w-full p-2 border rounded text-black" required />
+            </div>
+        </div>
+        <button type="submit" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">Agendar Calibração</button>
+    </form>
+</div>
+
+<div id="view-calibration-modal-content" class="hidden">
+    <div class="space-y-4">
+        <div class="flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-900" data-field="protocol"></h3>
+            <div class="flex space-x-2">
+                <button class="btn-edit-gantt-calibration bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Editar
+                </button>
+                <button class="btn-delete-gantt-calibration bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Excluir
+                </button>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
+            <div><span class="font-semibold">Tipo:</span> <span data-field="type"></span></div>
+            <div><span class="font-semibold">Período:</span> <span data-field="period"></span></div>
+            <div><span class="font-semibold">Terminais Afetados:</span> <span data-field="affectedTerminals"></span></div>
+        </div>
+    </div>
+</div>
+
+<div id="edit-calibration-modal-content" class="hidden">
+    <form id="form-edit-calibration" class="space-y-4">
+        <input type="hidden" name="id">
+        <div>
+            <label for="edit-calibrationType" class="block text-sm font-medium text-gray-700">Tipo de Calibração</label>
+            <select name="calibrationType" id="edit-calibrationType" required class="w-full p-2 border rounded text-black">
+                <option value="calibracao-energia">Calibração de Energia (Terminais)</option>
+                <option value="calibracao-pressao-temp">Calibração de Pressão e Temperatura (Laboratório)</option>
+            </select>
+        </div>
+        <div id="edit-affected-terminals-field">
+            <label for="edit-affectedTerminals" class="block text-sm font-medium text-gray-700">Terminais Afetados</label>
+            <select name="affectedTerminals" id="edit-affectedTerminals" class="w-full p-2 border rounded text-black">
+                <option value="1-4">Terminais 1-4</option>
+                <option value="5-8">Terminais 5-8</option>
+            </select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label for="edit-calibration-start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                <input type="date" name="startDate" id="edit-calibration-start-date" class="w-full p-2 border rounded text-black" required />
+            </div>
+            <div>
+                <label for="edit-calibration-end-date" class="block text-sm font-medium text-gray-700">Data de Término</label>
+                <input type="date" name="endDate" id="edit-calibration-end-date" class="w-full p-2 border rounded text-black" required />
+            </div>
+        </div>
+        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Salvar Calibração</button>
+    </form>
+</div>
+<div id="add-row-modal-content" class="hidden">
+    <form id="form-add-row" class="space-y-4">
+        <input type="hidden" name="rowType"> <div>
+            <label for="row-name" class="block text-sm font-medium text-gray-700">Nome da Nova Linha</label>
+            <input type="text" name="rowName" id="row-name" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-black">
+        </div>
+        <div class="flex justify-end pt-4">
+            <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">
+                Adicionar Linha
+            </button>
+        </div>
+    </form>
+</div>
+<div id="confirmation-modal-content" class="hidden">
+    <div class="space-y-4">
+        <p id="confirmation-modal-message" class="text-gray-700">Tem a certeza de que deseja continuar?</p>
+        <div class="flex justify-end space-x-4 pt-4">
+            <button id="btn-confirm-cancel" class="px-4 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400">
+                Cancelar
+            </button>
+            <button id="btn-confirm-action" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">
+                Confirmar
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="bulk-delete-modal-content" class="hidden">
+    <form id="form-bulk-delete" class="space-y-6">
+        <div class="text-center mb-6">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Exclusão em Massa</h3>
+            <p class="text-sm text-gray-600">Selecione o período para exclusão de dados</p>
+        </div>
+        
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div class="flex items-start">
+                <svg class="h-5 w-5 text-red-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+                <div>
+                    <h4 class="text-sm font-medium text-red-800">Atenção: Ação Irreversível!</h4>
+                    <p class="text-sm text-red-700 mt-1">Todos os ensaios (cronograma e histórico), férias e calibrações que <strong>iniciaram</strong> no período selecionado serão permanentemente excluídos.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="bulk-delete-start-date" class="block text-sm font-medium text-gray-700 mb-2">Data de Início</label>
+                <input type="date" id="bulk-delete-start-date" name="startDate" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-black">
+            </div>
+            <div>
+                <label for="bulk-delete-end-date" class="block text-sm font-medium text-gray-700 mb-2">Data de Fim</label>
+                <input type="date" id="bulk-delete-end-date" name="endDate" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-black">
+            </div>
+        </div>
+        
+        <div id="bulk-delete-preview" class="bg-gray-50 p-4 rounded-lg" style="display: none;">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Itens que serão excluídos:</h4>
+            <div id="bulk-delete-summary" class="text-xs text-gray-600 space-y-1">
+                <!-- Será preenchido dinamicamente -->
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Confirmação de Segurança</h4>
+            <p class="text-xs text-gray-600 mb-3">Para confirmar a exclusão, digite "EXCLUIR" no campo abaixo:</p>
+            <input type="text" id="bulk-delete-confirmation" name="confirmation" placeholder="Digite EXCLUIR para confirmar" class="w-full p-2 border border-gray-300 rounded-lg text-black" required>
+        </div>
+        
+        <div class="flex justify-end space-x-4 pt-4">
+            <button type="button" id="btn-cancel-bulk-delete" class="px-6 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-colors">
+                Cancelar
+            </button>
+            <button type="button" id="btn-preview-bulk-delete" class="px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
+                Visualizar Itens
+            </button>
+            <button type="submit" class="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Excluir Dados
+            </button>
+        </div>
+    </form>
+</div>
+
+<div id="generate-pdf-report-modal-content">
+    <form id="form-generate-pdf-report" class="space-y-6">
+        <div class="text-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Gerar Relatório em PDF</h3>
+            <p class="text-sm text-gray-600">Selecione o período para geração do relatório</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="report-start-date" class="block text-sm font-medium text-gray-700 mb-2">Data de Início</label>
+                <input type="date" id="report-start-date" name="startDate" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black">
+            </div>
+            <div>
+                <label for="report-end-date" class="block text-sm font-medium text-gray-700 mb-2">Data de Fim</label>
+                <input type="date" id="report-end-date" name="endDate" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black">
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">O relatório incluirá:</h4>
+            <ul class="text-xs text-gray-600 space-y-1">
+                <li>• Cabeçalho com título, período e total de ensaios</li>
+                <li>• Tabela de ensaios por reagente e lote</li>
+                <li>• Top 5 fabricantes com maior consumo</li>
+                <li>• Consumo detalhado por fornecedor</li>
+                <li>• Gráficos de ciclos e consumo por fabricante</li>
+                <li>• Gráfico de ensaios por mês</li>
+            </ul>
+        </div>
+        
+        <div class="flex justify-end space-x-4 pt-4">
+            <button type="button" id="btn-cancel-pdf-report" class="px-6 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-colors">
+                Cancelar
+            </button>
+            <button type="submit" class="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                Gerar Relatório
+            </button>
+        </div>
+    </form>
+</div>
+       
+    <script src="{{scriptUri}}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const accordionHeaders = document.querySelectorAll('.accordion-header');
+
+            accordionHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const content = header.nextElementSibling;
+                    const icon = header.querySelector('.accordion-icon');
+
+                    // Fecha todos os outros itens da sanfona
+                    document.querySelectorAll('.accordion-content').forEach(otherContent => {
+                        if (otherContent !== content) {
+                            otherContent.style.maxHeight = '0';
+                            otherContent.previousElementSibling.classList.remove('expanded');
+                            otherContent.previousElementSibling.querySelector('.accordion-icon').classList.remove('rotated');
+                        }
+                    });
+
+                    // Alterna o estado do item clicado
+                    const isExpanded = header.classList.toggle('expanded');
+                    if (isExpanded) {
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                        icon.classList.add('rotated');
+                    } else {
+                        content.style.maxHeight = '0';
+                        icon.classList.remove('rotated');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
