@@ -895,3 +895,11 @@ aside:hover .nav-link span {
         padding-bottom: 1rem;
     }
 }
+.gantt-hover-highlight {
+    background-color: rgba(59, 130, 246, 0.1) !important; /* Azul semi-transparente */
+    transition: background-color 0.1s ease-in-out;
+}
+
+#notification-badge {
+    line-height: 1;
+}

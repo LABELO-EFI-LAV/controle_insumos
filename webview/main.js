@@ -522,6 +522,14 @@ const notificationSystem = {
         // Reposiciona os toasts restantes
         notificationSystem.repositionToasts();
     },
+    clearHistory: () => {
+        try {
+            localStorage.removeItem('labcontrol-notification-history');
+            console.log('Histórico de notificações limpo.');
+        } catch (e) {
+            console.warn('Erro ao limpar histórico de notificações:', e);
+        }
+    },
     
     /**
      * Reposiciona todos os toasts ativos
@@ -632,7 +640,7 @@ const notificationSystem = {
         if (possibleAssays <= threshold) {
             notificationSystem.send(
                 'Alerta de Estoque Baixo Detectado',
-                `🔍 VERIFICAÇÃO REALIZADA: O sistema analisou automaticamente o estoque atual de todos os reagentes.\n\n📊 RESULTADO: Com base no inventário disponível, apenas ${possibleAssays} ensaios podem ser realizados.\n\n⚠️ AÇÃO NECESSÁRIA: Este número está abaixo do limite configurado (${threshold} ensaios). É recomendado iniciar o processo de compra de novos insumos para garantir a continuidade das operações do laboratório.\n\n📧 Use o botão abaixo para enviar um e-mail de alerta para o responsável pelas compras.`,
+                `📊 RESULTADO: Com base no inventário disponível, apenas ${possibleAssays} ensaios podem ser realizados.\n⚠️ AÇÃO NECESSÁRIA: Este número está abaixo do limite configurado (${threshold} ensaios). É recomendado iniciar o processo de compra de novos insumos para garantir a continuidade das operações do laboratório.\n📧 Use o botão abaixo para enviar um e-mail de alerta para o responsável pelas compras.`,
                 'warning',
                 {
                     persistent: true,
@@ -676,7 +684,7 @@ const notificationSystem = {
             const daysText = warningDays === 1 ? 'dia' : 'dias';
             notificationSystem.send(
                 'Reagentes Próximos ao Vencimento',
-                `🔍 VERIFICAÇÃO REALIZADA: O sistema verificou automaticamente as datas de validade de todos os reagentes no inventário.\n\n📅 RESULTADO: Foram identificados ${expiringItems.length} item(ns) que vencem em menos de ${warningDays} ${daysText}:\n\n${itemsList}\n\n`,
+                `📅 RESULTADO: Foram identificados ${expiringItems.length} item(ns) que vencem em menos de ${warningDays} ${daysText}:\n\n${itemsList}`,
                 'warning'
             );
         }
@@ -706,24 +714,11 @@ const notificationSystem = {
                 const daysUntilExpiry = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
                 return `${equipment.tag} - ${equipment.equipment} (${daysUntilExpiry} dias)`;
             }).join('\n');
-            
-            const subject = encodeURIComponent("Alerta de Calibração de Equipamentos");
-            const body = encodeURIComponent(`Equipamentos que precisam de calibração em breve:\n\n${equipmentsList}\n\nÉ necessário agendar as calibrações.\n\nAtenciosamente,\nEquipe EFI-LAV.`);
-            
+                        
             notificationSystem.send(
                 'Equipamentos Próximos da Calibração',
-                `🔧 VERIFICAÇÃO REALIZADA: O sistema verificou automaticamente as datas de calibração de todos os equipamentos.\n\n📅 RESULTADO: Foram identificados ${equipmentsNeedingCalibration.length} equipamento(s) que precisam de calibração em menos de ${warningDays} dias:\n\n${equipmentsList}.`,
+                `📅 RESULTADO: Foram identificados ${equipmentsNeedingCalibration.length} equipamento(s) que precisam de calibração em menos de ${warningDays} dias:\n${equipmentsList}\n.`,
                 'warning',
-                {
-                    persistent: true,
-                    actionButton: {
-                        text: 'Enviar E-mail',
-                        action: () => {
-                            const emailsForOutlook = state.settings.notificationEmail.replace(/,/g, ';');
-                            window.open(`mailto:${emailsForOutlook}?subject=${subject}&body=${body}`);
-                        }
-                    }
-                }
             );
         }
     },
@@ -742,7 +737,7 @@ const notificationSystem = {
             notificationSystem.checkStockAlerts();
             notificationSystem.checkValidityAlerts();
             notificationSystem.checkCalibrationAlerts();
-        }, 20000);
+        }, 7500);
     }
  };
 
@@ -1872,6 +1867,52 @@ const utils = {
             }
         }
         return false;
+    }
+};
+const uiHelpers = {
+
+    updateNotificationBadge: () => {
+        const badge = document.getElementById('notification-badge');
+        if (!badge) return;
+
+        if (state.unreadNotifications > 0) {
+            badge.textContent = state.unreadNotifications > 9 ? '9+' : state.unreadNotifications;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    },
+
+    renderNotificationPanel: () => {
+        const list = document.getElementById('notification-list');
+        if (!list) return;
+        
+        const history = notificationSystem.getHistory();
+        if (history.length === 0) {
+            list.innerHTML = '<li class="p-4 text-sm text-gray-500 text-center">Nenhuma notificação recente.</li>';
+            return;
+        }
+
+        list.innerHTML = history.map(notif => {
+            const icons = { info: '📋', success: '✅', warning: '⚠️', error: '❌' };
+            const icon = icons[notif.type] || '🔔';
+            
+            // MODIFICAÇÃO AQUI: Remove .substring() e adiciona .replace()
+            const formattedMessage = notif.message.replace(/\n/g, '<br>');
+
+            return `
+                <li class="border-b p-4 hover:bg-gray-50">
+                    <div class="flex items-start space-x-4">
+                        <span class="text-2xl mt-1">${icon}</span>
+                        <div>
+                            <p class="font-semibold text-sm text-gray-800">${notif.title}</p>
+                            <p class="text-sm text-gray-600 leading-relaxed">${formattedMessage}</p>
+                            <p class="text-sm text-gray-400 mt-1">${new Date(notif.timestamp).toLocaleString('pt-BR')}</p>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('');
     }
 };
 
@@ -7535,11 +7576,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
         state.hasUnsavedChanges = false;
         ui.toggleScheduleActions(false);
-        notificationSystem.send(
-            'Alterações do Cronograma Salvas',
-            `✅ OPERAÇÃO CONCLUÍDA: Todas as alterações do cronograma foram salvas com sucesso.`,
-            'success'
-        );
+        notificationSystem.send();
     });
     DOM.btnCancelSchedule?.addEventListener('click', () => {
         state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays));
@@ -7978,11 +8015,7 @@ assaysFilters.forEach(id => {
         state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
         state.hasUnsavedChanges = false;
         ui.toggleScheduleActions(false);
-        notificationSystem.send(
-            'Alterações do Cronograma Salvas',
-            `✅ OPERAÇÃO CONCLUÍDA: Todas as alterações do cronograma foram salvas com sucesso.`,
-            'success'
-        );
+        notificationSystem.send();
     });
     DOM.btnCancelSchedule?.addEventListener('click', () => {
         state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays));
@@ -8454,6 +8487,30 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
         }
+    });
+    const bell = document.getElementById('notification-bell');
+    const panel = document.getElementById('notification-panel');
+    const clearBtn = document.getElementById('clear-notifications-btn');
+    bell?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) {
+            uiHelpers.renderNotificationPanel();
+            state.unreadNotifications = 0;
+            uiHelpers.updateNotificationBadge();
+        }
+    });
+
+    // Fecha o painel se clicar fora dele
+    document.addEventListener('click', (e) => {
+        if (panel && !panel.classList.contains('hidden') && !bell.contains(e.target) && !panel.contains(e.target)) {
+            panel.classList.add('hidden');
+        }
+    });
+    clearBtn?.addEventListener('click', () => {
+        notificationSystem.clearHistory(); // Limpa os dados
+        uiHelpers.renderNotificationPanel(); // Re-renderiza o painel (que agora estará vazio)
+        utils.showToast("Notificações limpas com sucesso.");
     });
 
     // Início da aplicação
