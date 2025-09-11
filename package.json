@@ -1,0 +1,64 @@
+{
+  "name": "controle-de-insumos",
+  "publisher": "LABELO-EFI-LAV",
+  "displayName": "Controle de Insumos",
+  "description": "Uma extensão para gestão do setor de Eficiência Energética em máquinas de lavar",
+  "version": "1.1.13",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LABELO-EFI-LAV/controle_insumos.git"
+  },
+  "icon": "images/icon.png",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:controle-de-insumos.abrir"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "controle-de-insumos.abrir",
+        "title": "Abrir Controle de Insumos"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "webpack": "webpack",
+    "webpack-dev": "webpack --mode development",
+    "webpack-prod": "webpack --mode production"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.9",
+    "@types/pdfkit": "^0.17.2",
+    "@types/vscode": "^1.102.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "copy-webpack-plugin": "^13.0.0",
+    "eslint": "^9.25.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.7",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "pdfkit": "^0.17.1"
+  }
+}

@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "es2020",
+        "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+        "outDir": "out",
+        "lib": [
+            "es2020"
+        ],
+        "sourceMap": true,
+        "rootDir": "src",
+        "strict": true,
+        "moduleResolution": "node" // Garanta que esta linha exista!
+    },
+    "include": [
+        "src"
+    ]
+}
