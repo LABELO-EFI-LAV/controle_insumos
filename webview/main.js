@@ -7575,18 +7575,7 @@ document.addEventListener('DOMContentLoaded', () => {
             utils.showToast("A senha deve ter pelo menos 4 caracteres.", true);
         }
     });
-    document.getElementById('prev-gantt-btn')?.addEventListener('click', () => {
-        state.ganttStart.setDate(state.ganttStart.getDate() - 28);
-        state.ganttEnd.setDate(state.ganttEnd.getDate() - 28);
-        renderers.ganttInitialRenderDone = false;
-        renderers.renderGanttChart();
-    });
-    document.getElementById('next-gantt-btn')?.addEventListener('click', () => {
-        state.ganttStart.setDate(state.ganttStart.getDate() + 28);
-        state.ganttEnd.setDate(state.ganttEnd.getDate() + 28);
-        renderers.ganttInitialRenderDone = false;
-        renderers.renderGanttChart();
-    });
+    
     document.getElementById('btn-open-add-vacation-modal')?.addEventListener('click', () => {
         utils.openModal('Agendar Férias', document.getElementById('add-vacation-modal-content')?.innerHTML, () => {
             document.getElementById('form-add-vacation')?.addEventListener('submit', dataHandlers.handleAddVacation);
@@ -8022,19 +8011,6 @@ assaysFilters.forEach(id => {
             renderers.switchPage(pageId);
         }
     }));
-    
-    document.getElementById('prev-gantt-btn')?.addEventListener('click', () => {
-        state.ganttStart.setDate(state.ganttStart.getDate() - 28);
-        state.ganttEnd.setDate(state.ganttEnd.getDate() - 28);
-        renderers.renderGanttChart();
-    });
-    
-    document.getElementById('next-gantt-btn')?.addEventListener('click', () => {
-        state.ganttStart.setDate(state.ganttStart.getDate() + 28);
-        state.ganttEnd.setDate(state.ganttEnd.getDate() + 28);
-        renderers.renderGanttChart();
-    });
-
     // Listeners para abrir modais
     document.getElementById('btn-open-add-gantt-assay-modal')?.addEventListener('click', () => modalHandlers.openAddGanttAssayModal());
     document.getElementById('btn-open-add-safety-assay-modal')?.addEventListener('click', () => modalHandlers.openAddSafetyAssayModal());
@@ -8462,7 +8438,7 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         }
     });
      document.getElementById('zoom-in-gantt-btn')?.addEventListener('click', () => {
-        const maxZoom = 75; // Largura máxima da coluna
+        const maxZoom = 35; // Largura máxima da coluna
         if (state.ganttZoomLevel < maxZoom) {
             state.ganttZoomLevel += 5; // Aumenta a largura em 5px
             renderers.renderGanttChart();
@@ -8472,7 +8448,7 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
     });
 
     document.getElementById('zoom-out-gantt-btn')?.addEventListener('click', () => {
-        const minZoom = 15; // Largura mínima da coluna
+        const minZoom = 10; // Largura mínima da coluna
         if (state.ganttZoomLevel > minZoom) {
             state.ganttZoomLevel -= 5; // Diminui a largura em 5px
             renderers.renderGanttChart();
