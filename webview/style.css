@@ -84,7 +84,8 @@ body { font-family: 'Inter', sans-serif; }
         
         /* Estilo durante o arrasto */
         .gantt-event.dragging {
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          opacity: 0.8;
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2) !important;
           transition: none !important;
           transform: none !important;
           margin: 0 !important;
@@ -102,6 +103,7 @@ body { font-family: 'Inter', sans-serif; }
         /* Cursor padrão para gráfico fixo */
         .gantt-event {
           cursor: default;
+          transition: background-color 0.3s ease, transform 0.3s ease;
         }
         .gantt-grid-container {
         position: relative; 
