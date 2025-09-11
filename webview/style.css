@@ -87,11 +87,6 @@ body { font-family: 'Inter', sans-serif; }
           opacity: 0.8;
           box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2) !important;
           transition: none !important;
-          transform: none !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          border: 0 !important;
-          box-sizing: border-box !important;
         }
 
         /* Prevenir seleção de texto durante o arrasto */

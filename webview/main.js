@@ -5074,7 +5074,77 @@ handleUpdateCalibration: (e) => {
     renderers.renderAll();
     utils.showToast(`Status do ensaio atualizado para '${ASSAY_STATUS_MAP[newStatus] || newStatus}' e adicionado ao histórico!`);
 },
+/**
+     * Duplica uma tarefa no cronograma (ensaio de eficiência ou segurança).
+     * @param {number} assayId - O ID da tarefa a ser duplicada.
+     */
+    handleDuplicateGanttItem: (assayId) => {
+        undoManager.saveState(); // Salva o estado para permitir o "Desfazer"
 
+        let originalAssay = null;
+        let isSafetyAssay = false;
+
+        // 1. Encontra a tarefa original em ambas as listas (eficiência e segurança)
+        originalAssay = state.scheduledAssays.find(a => a.id === assayId);
+        if (!originalAssay) {
+            originalAssay = state.safetyScheduledAssays.find(a => a.id === assayId);
+            if (originalAssay) {
+                isSafetyAssay = true;
+            }
+        }
+
+        // Se não encontrou a tarefa, exibe um erro e para a execução
+        if (!originalAssay) {
+            utils.showToast("Erro: Tarefa original não encontrada para duplicação.", true);
+            return;
+        }
+        
+        // Férias não devem ser duplicadas
+        if (originalAssay.type === 'férias') {
+            utils.showToast("Não é possível duplicar um período de férias.", "warning");
+            return;
+        }
+
+        // 2. Cria uma cópia profunda do objeto da tarefa
+        const duplicatedAssay = JSON.parse(JSON.stringify(originalAssay));
+
+        // 3. Modifica a cópia com novos dados
+        duplicatedAssay.id = Date.now(); // Gera um novo ID único
+        duplicatedAssay.protocol = `${originalAssay.protocol} (Cópia)`; // Adiciona "(Cópia)" ao nome
+
+        // 4. Calcula as novas datas para a tarefa duplicada
+        const originalStartDate = utils.parseDate(originalAssay.startDate);
+        const originalEndDate = utils.parseDate(originalAssay.endDate);
+        
+        // A nova tarefa começará no dia seguinte ao término da original
+        const newStartDate = new Date(originalEndDate);
+        newStartDate.setDate(originalEndDate.getDate() + 1);
+
+        // Calcula a duração da tarefa original em dias
+        const duration = (originalEndDate - originalStartDate) / (1000 * 60 * 60 * 24);
+        
+        const newEndDate = new Date(newStartDate);
+        newEndDate.setDate(newStartDate.getDate() + duration);
+
+        // Formata as novas datas para o formato YYYY-MM-DD
+        duplicatedAssay.startDate = newStartDate.toISOString().split('T')[0];
+        duplicatedAssay.endDate = newEndDate.toISOString().split('T')[0];
+
+        // 5. Adiciona a tarefa duplicada à lista correta no estado
+        if (isSafetyAssay) {
+            state.safetyScheduledAssays.push(duplicatedAssay);
+        } else {
+            state.scheduledAssays.push(duplicatedAssay);
+        }
+
+        // 6. Atualiza a interface do usuário
+        state.hasUnsavedChanges = true; // Marca que há alterações não salvas
+        ui.toggleScheduleActions(true); // Mostra os botões de "Salvar" e "Cancelar"
+        renderers.renderGanttChart(); // Redesenha o gráfico de Gantt com a nova tarefa
+
+        // 7. Notifica o usuário sobre o sucesso da operação
+        utils.showToast("Tarefa duplicada com sucesso! Lembre-se de salvar as alterações.");
+    },
     /**
      * NOVA FUNÇÃO: Lida com o salvamento de um relatório e altera o status.
      * @param {Event} e - Evento de submissão do formulário.
@@ -6220,6 +6290,18 @@ openEditCalibrationModal: (calibrationId) => {
                 addReportButton.addEventListener('click', (e) => {
                     e.stopPropagation();
                     modalHandlers.openReportModalGantt(assayId);
+                });
+            }
+            const duplicateButton = activeModal.querySelector('.btn-duplicate-gantt-assay');
+            if (duplicateButton) {
+                duplicateButton.addEventListener('click', () => {
+                    const assayId = parseInt(duplicateButton.dataset.id, 10);
+                    if (!isNaN(assayId)) {
+                        // Chama a mesma função de antes!
+                        dataHandlers.handleDuplicateGanttItem(assayId);
+                        // Fecha o modal de detalhes após a duplicação
+                        utils.closeModal();
+                    }
                 });
             }
 
@@ -8514,6 +8596,23 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         notificationSystem.clearHistory(); // Limpa os dados
         uiHelpers.renderNotificationPanel(); // Re-renderiza o painel (que agora estará vazio)
         utils.showToast("Notificações limpas com sucesso.");
+    });
+    DOM.ganttGridContainer?.addEventListener('contextmenu', (e) => {
+        // 1. Impede que o menu padrão do navegador (Copiar, Colar, etc.) apareça.
+        e.preventDefault();
+
+        // 2. Encontra o elemento da tarefa (ensaio) que foi clicado.
+        const targetAssayElement = e.target.closest('.gantt-event');
+
+        // 3. Se o clique foi realmente em uma tarefa, continua.
+        if (targetAssayElement) {
+            const assayId = parseInt(targetAssayElement.dataset.assayId, 10);
+
+            // 4. Verifica se o ID da tarefa é válido e chama a função de duplicação.
+            if (!isNaN(assayId)) {
+                dataHandlers.handleDuplicateGanttItem(assayId);
+            }
+        }
     });
 
     // Início da aplicação
