@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -214,6 +215,15 @@
                         </a>
                     </li>
                     <li class="mb-2">
+                        <a href="#" id="nav-forecast" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3">
+                                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                                <polyline points="16 7 22 7 22 13"></polyline>
+                            </svg>
+                            <span>Previsão de Consumo</span>
+                        </a>
+                    </li>
+                    <li class="mb-2">
                         <a href="#" id="nav-assays" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2Z"/><path d="M13 5h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M9 7V2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v5"/><path d="M13 14v-3"/></svg>
                             <span>Ensaios</span>
@@ -384,6 +394,43 @@
                     </table>
                 </div>
             </div>
+            <div id="page-forecast" class="page hidden p-4 md:p-6 bg-gray-50">
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mb-6">📊 Previsão de Consumo de Insumos</h1>
+                <div class="mb-6 bg-white p-4 rounded-xl shadow-lg border border-gray-200">
+                    <label class="block text-base font-medium text-gray-800 mb-2">Selecione o Tipo de Projeção:</label>
+                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                        <button id="btn-forecast-schedule" class="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow transition-transform transform hover:scale-105">Baseada no Cronograma Futuro (Curto Prazo)</button>
+                        <button id="btn-forecast-history" class="flex-1 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-lg shadow transition-transform transform hover:scale-105">Baseada no Histórico do Último Ano (Longo Prazo)</button>
+                    </div>
+                </div>
+                <div class="responsive-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Pó Base</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="chart-poBase"></canvas>
+                        </div>
+                    </div>
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Perborato</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="chart-perborato"></canvas>
+                        </div>
+                    </div>
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">TAED</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="chart-taed"></canvas>
+                        </div>
+                    </div>
+                    <div class="responsive-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="font-bold text-base md:text-lg text-gray-700 mb-3 md:mb-4">Tiras de sujidade</h3>
+                        <div class="chart-container responsive-chart h-60 md:h-80">
+                            <canvas id="chart-tiras"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="page-assays" class="page p-6 hidden">
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
@@ -846,6 +893,13 @@
                 <input type="text" id="gantt-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
             </div>
             <div>
+                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Fornecedor (Pó Base & TAED)</label>
+                <select id="gantt-main-supplier" name="mainSupplier" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="Swissatest">Swissatest</option>
+                    <option value="MHC">MHC</option>
+                </select>
+            </div>
+            <div>
                 <label for="gantt-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
                 <input type="text" id="gantt-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
             </div>
@@ -992,6 +1046,14 @@
             <div>
                 <label for="edit-gantt-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
                 <input type="text" id="edit-gantt-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Fornecedor (Pó Base & TAED)</label>
+                <select id="gantt-main-supplier" name="mainSupplier" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="" disabled selected>Selecione...</option>
+                    <option value="Swissatest">Swissatest</option>
+                    <option value="MHC">MHC</option>
+                </select>
             </div>
             <div>
                 <label for="edit-gantt-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>

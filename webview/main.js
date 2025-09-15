@@ -740,7 +740,11 @@ const notificationSystem = {
         }, 7500);
     }
  };
-
+const SUPPLIER_COLORS = {
+    'Swissatest': '#3b82f6', // Azul
+    'MHC': '#db2777',        // Rosa
+    'Default': '#6b7280'     // Cinza para fallback
+};
 // --- SISTEMA DE LOGS DE AUDITORIA ---
 /**
  * Sistema de auditoria para rastreamento de alterações e ações dos usuários
@@ -4200,6 +4204,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
             select.appendChild(option);
         });
     },
+    
 
     /** Popula os filtros de fabricante com os dados disponíveis. */
     populateManufacturerFilter: () => {
@@ -4222,6 +4227,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
             select.value = currentValue;
         });
     },
+
 
     /** Popula os seletores de lote nos modais de ensaio. */
     populateAssayModalLotes: (reagentsUsed = {}) => {
@@ -4318,7 +4324,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
             }
         }
     },
-
+    
     /** Verifica o nível de estoque e exibe um alerta se necessário. */
     checkStockLevel: () => {
         const possibleAssays = calculations.calculatePossibleAssays();
@@ -4421,6 +4427,413 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
         } else if (pageId === 'page-calibrations') {
             renderers.renderCalibrationsTable();
         }
+    }
+};
+function getBusinessDays(start, end) {
+    const days = [];
+    const current = new Date(start);
+
+    while (current <= end) {
+        const day = current.getDay(); // 0 = domingo, 6 = sábado
+        if (day !== 0 && day !== 6) {
+            days.push(new Date(current));
+        }
+        current.setDate(current.getDate() + 1);
+    }
+    return days;
+}
+const forecastSystem = {
+    charts: {},
+
+    prepareData() {
+        // 1. Calcula o estoque inicial, agrupado por "Reagente-Fornecedor"
+        const initialStock = {};
+        state.inventory.forEach(item => {
+            const key = `${item.reagent}-${item.manufacturer}`;
+            initialStock[key] = (initialStock[key] || 0) + item.quantity;
+        });
+
+        // 2. Mapeia o consumo diário total para cada dia nos próximos 3 meses
+        const dailyConsumptions = new Map();
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const limitDate = new Date();
+        limitDate.setMonth(limitDate.getMonth() + 3);
+
+        // Filtra ensaios agendados no período
+        state.scheduledAssays
+            .filter(a => {
+                const d = new Date(a.startDate);
+                return d >= today && d <= limitDate;
+            })
+            .forEach(assay => {
+                const startDate = new Date(assay.startDate + 'T00:00:00');
+                const endDate = new Date(assay.endDate + 'T00:00:00');
+                const nominalLoad = parseFloat(assay.nominalLoad) || 0;
+
+                const assayConsumptionMap = {
+                poBase: assay.plannedSuppliers?.poBase || 'Swissatest', // Usa o valor salvo ou um padrão
+                perborato: 'MHC', // Fixo
+                taed: assay.plannedSuppliers?.taed || 'Swissatest', // Usa o valor salvo ou um padrão
+                tiras: 'Swissatest' // Fixo
+            };
+
+                const dailyConsumption = calculations.calculateConsumption(nominalLoad, 1);
+                const businessDays = getBusinessDays(startDate, endDate);
+
+                // Acumula o consumo para cada dia útil usando o mapa de consumo dinâmico
+                businessDays.forEach(date => {
+                    const dateKey = date.toISOString().split('T')[0];
+                    if (!dailyConsumptions.has(dateKey)) {
+                        dailyConsumptions.set(dateKey, {});
+                    }
+                    const dayMap = dailyConsumptions.get(dateKey);
+
+                     Object.keys(assayConsumptionMap).forEach(reagentKey => { //
+                    const reagentName = REAGENT_NAMES[reagentKey]; //
+                    const manufacturer = assayConsumptionMap[reagentKey]; //
+                    const consumptionKey = `${reagentName}-${manufacturer}`; //
+                    const amount = dailyConsumption[reagentKey]; //
+
+                    dayMap[consumptionKey] = (dayMap[consumptionKey] || 0) + amount; //
+                });
+                });
+            });
+
+        // 3. Gera a timeline de projeção do estoque (nenhuma alteração nesta parte)
+        const sortedDates = [...dailyConsumptions.keys()].sort();
+        const labels = ['Hoje'];
+        const timelineData = {};
+        Object.keys(initialStock).forEach(key => {
+            timelineData[key] = [initialStock[key]];
+        });
+
+        let currentStock = { ...initialStock };
+
+        sortedDates.forEach(dateKey => {
+            labels.push(new Date(dateKey + 'T00:00:00').toLocaleDateString('pt-BR'));
+            const consumptionForTheDay = dailyConsumptions.get(dateKey);
+
+            Object.keys(consumptionForTheDay).forEach(consumptionKey => {
+                currentStock[consumptionKey] = (currentStock[consumptionKey] || 0) - consumptionForTheDay[consumptionKey];
+            });
+
+            Object.keys(initialStock).forEach(key => {
+                timelineData[key].push(Math.max(0, currentStock[key] || 0));
+            });
+        });
+
+        // 4. Reestrutura a timeline para o formato do gráfico (nenhuma alteração nesta parte)
+        const finalTimeline = {};
+        Object.keys(timelineData).forEach(key => {
+            // Lógica robusta para separar reagente de fornecedor
+            const separatorIndex = key.lastIndexOf('-');
+            if (separatorIndex === -1) return; // Ignora chaves malformadas
+            
+            const reagent = key.substring(0, separatorIndex);
+            const manufacturer = key.substring(separatorIndex + 1);
+            
+            if (!finalTimeline[reagent]) {
+                finalTimeline[reagent] = {};
+            }
+            finalTimeline[reagent][manufacturer] = timelineData[key];
+        });
+
+        return { labels, timeline: finalTimeline };
+    },
+
+    renderChart(canvasId, reagentName, reagentData, labels) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        if (this.charts[canvasId]) {
+            this.charts[canvasId].destroy();
+        }
+
+        // Gera os datasets (linhas) para cada fornecedor usando a paleta de cores padrão
+        const datasets = Object.entries(reagentData).map(([manufacturer, values]) => {
+            const color = SUPPLIER_COLORS[manufacturer] || SUPPLIER_COLORS['Default'];
+            return {
+                label: manufacturer,
+                data: values,
+                borderColor: color,
+                backgroundColor: color,
+                fill: false,
+                tension: 0.2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            };
+        });
+
+        const ctx = canvas.getContext("2d");
+        this.charts[canvasId] = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    },
+                    datalabels: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: "Data"
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: "Estoque Disponível"
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    },
+
+    renderAll() {
+        const { labels, timeline } = this.prepareData();
+        const reagentToCanvasMap = {
+            'Pó Base': 'chart-poBase',
+            'Perborato': 'chart-perborato',
+            'TAED': 'chart-taed',
+            'Tiras de sujidade': 'chart-tiras'
+        };
+
+        for (const reagentName in timeline) {
+            const canvasId = reagentToCanvasMap[reagentName];
+            if (canvasId) {
+                this.renderChart(canvasId, reagentName, timeline[reagentName], labels);
+            }
+        }
+    }
+};
+/**
+ * VERSÃO FINAL COM CONSUMO MENSAL POR FORNECEDOR
+ * Projeta o consumo mensal para os próximos 6 meses, baseado no histórico
+ * do último ano, agrupado por fornecedor.
+ */
+const historicalForecastSystem = {
+    /**
+     * Ponto de entrada principal. Orquestra o cálculo e a renderização.
+     */
+    render: function() {
+        const historicalConsumption = this.calculateHistoricalConsumptionBySupplier();
+
+        if (!historicalConsumption) {
+            utils.showToast("Não há dados históricos suficientes para gerar uma previsão por fornecedor.", true);
+            return;
+        }
+
+        const chartReadyData = this.prepareChartData(historicalConsumption);
+        
+        Object.keys(chartReadyData).forEach(reagentName => {
+            const chartInfo = chartReadyData[reagentName];
+            this.renderConsumptionChart(chartInfo.canvasId, chartInfo.data);
+        });
+
+        this.updateUI('history');
+    },
+
+    /**
+     * NOVA FUNÇÃO DEDICADA: Renderiza um gráfico de barras empilhadas para o consumo.
+     */
+    renderConsumptionChart: function(canvasId, chartData) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        if (forecastSystem.charts[canvasId]) {
+            forecastSystem.charts[canvasId].destroy();
+        }
+
+        const ctx = canvas.getContext("2d");
+        forecastSystem.charts[canvasId] = new Chart(ctx, {
+            type: 'bar', // MUDANÇA: Gráfico de barras
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'bottom' },
+                    title: { display: true, text: 'Consumo Mensal Projetado' },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    x: {
+                        stacked: true, // Empilha as barras no eixo X
+                        title: { display: true, text: "Mês da Projeção" }
+                    },
+                    y: {
+                        stacked: true, // Empilha as barras no eixo Y
+                        title: { display: true, text: "Consumo Projetado (g ou un)" },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    },
+
+    /**
+     * CORRIGIDO: Calcula o consumo mensal do ano anterior, agora agrupado por reagente E fornecedor.
+     */
+    calculateHistoricalConsumptionBySupplier: function() {
+        // 1. Cria um mapa de Lote -> Fornecedor para consulta rápida
+        const lotToSupplierMap = new Map();
+        state.inventory.forEach(item => lotToSupplierMap.set(item.lot, item.manufacturer));
+
+        // 2. Define o período histórico (últimos 6 meses completos do ano anterior)
+        const today = new Date();
+        const historicalStartDate = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+        const historicalEndDate = new Date(today.getFullYear() - 1, today.getMonth() + 6, 0);
+
+        const historicalAssays = state.historicalAssays.filter(assay => {
+            const assayDate = new Date(assay.startDate + 'T00:00:00');
+            return assayDate >= historicalStartDate && assayDate <= historicalEndDate;
+        });
+
+        if (historicalAssays.length === 0) return null;
+        
+        const monthlyConsumption = {}; // Ex: { "2024-10": { "Pó Base": { "Swissatest": 5000 } } }
+
+        // 3. Itera sobre os ensaios históricos para agregar o consumo
+        historicalAssays.forEach(assay => {
+            const assayDate = new Date(assay.startDate + 'T00:00:00');
+            const monthKey = `${assayDate.getFullYear()}-${String(assayDate.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlyConsumption[monthKey]) monthlyConsumption[monthKey] = {};
+
+            if (assay.lots && typeof assay.lots === 'object') {
+                Object.keys(assay.lots).forEach(reagentKey => {
+                    const lotsArray = assay.lots[reagentKey];
+                    if (Array.isArray(lotsArray)) {
+                        lotsArray.forEach(lotEntry => {
+                            const supplier = lotToSupplierMap.get(lotEntry.lot) || 'Desconhecido';
+                            const consumption = calculations.calculateConsumption(assay.nominalLoad, lotEntry.cycles);
+                            const reagentName = REAGENT_NAMES[reagentKey];
+
+                            if (reagentName) {
+                                // Inicializa as estruturas aninhadas se não existirem
+                                if (!monthlyConsumption[monthKey][reagentName]) monthlyConsumption[monthKey][reagentName] = {};
+                                if (!monthlyConsumption[monthKey][reagentName][supplier]) monthlyConsumption[monthKey][reagentName][supplier] = 0;
+                                
+                                // Soma o consumo
+                                monthlyConsumption[monthKey][reagentName][supplier] += consumption[reagentKey];
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        return monthlyConsumption;
+    },
+    
+    /**
+     * CORRIGIDO: Prepara os dados para os gráficos de barras empilhadas de consumo.
+     */
+    prepareChartData: function(historicalConsumption) {
+        const today = new Date();
+        const labels = [];
+        for (let i = 0; i < 6; i++) {
+            const futureMonth = new Date(today.getFullYear(), today.getMonth() + i, 1);
+            labels.push(futureMonth.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }));
+        }
+
+        const allReagents = ['Pó Base', 'Perborato', 'TAED', 'Tiras de sujidade'];
+        const allSuppliers = [...new Set(state.inventory.map(i => i.manufacturer))];
+        const result = {};
+
+        const reagentToCanvasMap = {
+            'Pó Base': 'chart-poBase',
+            'Perborato': 'chart-perborato',
+            'TAED': 'chart-taed',
+            'Tiras de sujidade': 'chart-tiras'
+        };
+
+        allReagents.forEach(reagentName => {
+            const datasets = [];
+            allSuppliers.forEach(supplier => {
+                const data = [];
+                for (let i = 0; i < 6; i++) {
+                    const futureMonth = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                    const historicalMonthKey = `${futureMonth.getFullYear() - 1}-${String(futureMonth.getMonth() + 1).padStart(2, '0')}`;
+                    
+                    // CORREÇÃO: Busca o valor de consumo. Se não existir, é 0.
+                    const consumptionValue = historicalConsumption[historicalMonthKey]?.[reagentName]?.[supplier] || 0;
+                    data.push(consumptionValue);
+                }
+
+                // Só adiciona o dataset se houver algum consumo para este fornecedor
+                if (data.some(value => value > 0)) {
+                    datasets.push({
+                        label: supplier,
+                        data: data,
+                        backgroundColor: SUPPLIER_COLORS[supplier] || SUPPLIER_COLORS['Default'],
+                    });
+                }
+            });
+
+            result[reagentName] = {
+                canvasId: reagentToCanvasMap[reagentName],
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                }
+            };
+        });
+        
+        return result;
+    },
+
+    updateUI: function(mode) {
+        const btnSchedule = document.getElementById('btn-forecast-schedule');
+        const btnHistory = document.getElementById('btn-forecast-history');
+        if (!btnSchedule || !btnHistory) return;
+
+        if (mode === 'history') {
+            btnHistory.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnHistory.classList.replace('text-gray-800', 'text-white');
+            btnSchedule.classList.replace('bg-blue-600', 'bg-gray-200');
+            btnSchedule.classList.replace('text-white', 'text-gray-800');
+        } else {
+            btnSchedule.classList.replace('bg-gray-200', 'bg-blue-600');
+            btnSchedule.classList.replace('text-gray-800', 'text-white');
+            btnHistory.classList.replace('bg-blue-600', 'bg-gray-200');
+            btnHistory.classList.replace('text-white', 'text-gray-800');
+        }
+    },
+    
+    init: function() {
+        document.getElementById('btn-forecast-schedule')?.addEventListener('click', () => {
+            forecastSystem.renderAll();
+            this.updateUI('schedule');
+        });
+        document.getElementById('btn-forecast-history')?.addEventListener('click', () => {
+            this.render();
+        });
     }
 };
 
@@ -5188,6 +5601,7 @@ handleUpdateCalibration: (e) => {
         deductFromStock(lots.perborato, 'Perborato', consumption.perborato);
         deductFromStock(lots.taed, 'TAED', consumption.taed);
         deductFromStock(lots.tiras, 'Tiras de sujidade', consumption.tiras);
+        
         const newAssay = {
             id: Date.now(),
             protocol: form.protocol.value,
@@ -5204,7 +5618,11 @@ handleUpdateCalibration: (e) => {
             lots: lots,
             status: 'Concluido',
             setup: parseInt(form.setup.value),
-            tensao: form.tensao.value
+            tensao: form.tensao.value,
+            plannedSuppliers: {
+            poBase: mainSupplierInput.value,
+            taed: mainSupplierInput.value
+        }
         };
         state.historicalAssays.push(newAssay);
         dataHandlers.saveData();
@@ -5306,6 +5724,7 @@ handleUpdateCalibration: (e) => {
         const form = e.target;
         const startDateInput = form.querySelector('[name="startDate"]');
         const orcamentoInput = form.querySelector('[name="orcamento"]');
+        const mainSupplierInput = form.querySelector('[name="mainSupplier"]');
         const assayManufacturerInput = form.querySelector('[name="assayManufacturer"]');
         const endDateInput = form.querySelector('[name="endDate"]');
         const modelInput = form.querySelector('[name="model"]');
@@ -5344,6 +5763,10 @@ handleUpdateCalibration: (e) => {
             type: typeInput.value,
             observacoes: observacoesInput?.value || '',
             cycles: parseInt(cyclesInput?.value) || 0,
+            plannedSuppliers: {
+                poBase: mainSupplierInput.value,
+                taed: mainSupplierInput.value
+            }
         };
         state.scheduledAssays.push(newAssay);
         state.hasUnsavedChanges = true;
@@ -5515,7 +5938,11 @@ handleUpdateCalibration: (e) => {
             reason: form.reason.value,
             lots: newLots,
             setup: parseInt(form.setup.value) || 0,
-            tensao: form.tensao.value
+            tensao: form.tensao.value,
+            plannedSuppliers: {
+                poBase: mainSupplierInput.value,
+                taed: mainSupplierInput.value
+            }
         };
         try {
             dataHandlers.saveData();
@@ -5588,14 +6015,9 @@ handleUpdateCalibration: (e) => {
     }
 
     const newSetupValue = form.setup.value;
-    // ---> INÍCIO DA CORREÇÃO <---
-    // Converte o setup para número se for um dígito, senão mantém como texto.
-    // Isto resolve o bug de "1" (texto) vs 1 (número).
     const newSetup = /^[0-9]+$/.test(newSetupValue) ? parseInt(newSetupValue, 10) : newSetupValue;
-    // ---> FIM DA CORREÇÃO <---
-
+    const mainSupplierInput = form.querySelector('[name="mainSupplier"]');
     const newIsSafety = state.safetyCategories.some(cat => cat.id === newSetup);
-    
     const updatedData = {
         protocol: form.protocol.value,
         orcamento: form.orcamento?.value || 'N/A',
@@ -5611,6 +6033,10 @@ handleUpdateCalibration: (e) => {
         reportDate: form.reportDate.value,
         observacoes: form.observacoes?.value || '',
         cycles: parseInt(form.cycles?.value) || 0,
+        plannedSuppliers: {
+            poBase: mainSupplierInput.value,
+            taed: mainSupplierInput.value
+        }
     };
 
     if (isSafetyAssay !== newIsSafety) {
@@ -5812,14 +6238,18 @@ handleUpdateCalibration: (e) => {
  */
 const modalHandlers = {
     openAddGanttAssayModal: () => {
-        utils.openModal('Adicionar Tarefa ao Cronograma', document.getElementById('add-gantt-assay-modal-content')?.innerHTML, () => {
-            const form = document.getElementById('form-add-gantt-assay');
-            if(form) {
-                renderers.populateTerminalSelects(form); // <-- ADICIONAR AQUI
-                form.addEventListener('submit', dataHandlers.handleAddGanttAssay);
-            }
-        });
-    },
+    utils.openModal('Adicionar Tarefa ao Cronograma', document.getElementById('add-gantt-assay-modal-content')?.innerHTML, () => {
+        const form = document.getElementById('form-add-gantt-assay');
+        if (form) {
+            renderers.populateTerminalSelects(form);
+
+            // --- LÓGICA DE SELEÇÃO AUTOMÁTICA REMOVIDA DAQUI ---
+
+            form.addEventListener('submit', dataHandlers.handleAddGanttAssay);
+        }
+    });
+},
+
     /**
      * Abre o modal de adicionar ensaio de segurança.
      */
@@ -6678,61 +7108,58 @@ openEditCalibrationModal: (calibrationId) => {
      * @param {number} assayId - O ID da tarefa a ser editada.
      */
     openEditGanttAssayModal: (assayId) => {
-    let assayToEdit = state.scheduledAssays.find(a => a.id === assayId);
-    if (!assayToEdit) {
-        assayToEdit = state.safetyScheduledAssays.find(a => a.id === assayId);
-    }
-    if (!assayToEdit) {
-        utils.showToast("Erro: Tarefa do cronograma não encontrada.", true);
-        return;
-    }
-    state.selectedAssayId = assayId;
-    const modalContentTemplate = document.getElementById('add-gantt-assay-modal-content');
-    if (!modalContentTemplate) return;
-
-    utils.openModal('Editar Ensaio', modalContentTemplate.innerHTML, () => {
-        const form = document.getElementById('form-add-gantt-assay');
-        if (!form) return;
-
-        // --- INÍCIO DA CORREÇÃO ---
-        // 1. Verifica qual tipo de ensaio está a ser editado.
-        const isSafetyAssay = assayToEdit.type === 'seguranca-eletrica';
-
-        // 2. Popula o menu <select> com a lista correta (terminais ou técnicos).
-        if (isSafetyAssay) {
-            renderers.populateSafetySelects(form);
-        } else {
-            renderers.populateTerminalSelects(form);
+        let assayToEdit = state.scheduledAssays.find(a => a.id === assayId);
+        if (!assayToEdit) {
+            assayToEdit = state.safetyScheduledAssays.find(a => a.id === assayId);
         }
-        // --- FIM DA CORREÇÃO ---
-
-        // 3. Agora que o menu está populado, preenche todos os campos do formulário.
-        form.querySelector('[name="protocol"]').value = assayToEdit.protocol;
-        form.querySelector('[name="orcamento"]').value = assayToEdit.orcamento;
-        form.querySelector('[name="assayManufacturer"]').value = assayToEdit.assayManufacturer;
-        form.querySelector('[name="model"]').value = assayToEdit.model;
-        form.querySelector('[name="nominalLoad"]').value = assayToEdit.nominalLoad;
-        form.querySelector('[name="tensao"]').value = assayToEdit.tensao;
-        form.querySelector('[name="startDate"]').value = assayToEdit.startDate;
-        form.querySelector('[name="endDate"]').value = assayToEdit.endDate;
-        form.querySelector('[name="setup"]').value = assayToEdit.setup; // Esta linha agora vai funcionar
-        form.querySelector('[name="status"]').value = assayToEdit.status;
-        form.querySelector('[name="type"]').value = assayToEdit.type;
-        form.querySelector('[name="reportDate"]').value = assayToEdit.reportDate;
-        form.querySelector('[name="id"]').value = assayToEdit.id;
-        form.querySelector('[name="observacoes"]').value = assayToEdit.observacoes || '';
-        
-        const submitButton = form.querySelector('button[type="submit"]');
-        if (submitButton) {
-            submitButton.textContent = 'Salvar Alterações';
-            submitButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            submitButton.classList.add('bg-green-600', 'hover:bg-green-700');
+        if (!assayToEdit) {
+            utils.showToast("Erro: Tarefa do cronograma não encontrada.", true);
+            return;
         }
-        
-        form.removeEventListener('submit', dataHandlers.handleAddGanttAssay);
-        form.addEventListener('submit', dataHandlers.handleUpdateGanttAssay);
-    });
-},
+        state.selectedAssayId = assayId;
+        const modalContentTemplate = document.getElementById('add-gantt-assay-modal-content');
+        if (!modalContentTemplate) return;
+
+        utils.openModal('Editar Ensaio', modalContentTemplate.innerHTML, () => {
+            const form = document.getElementById('form-add-gantt-assay');
+            if (!form) return;
+
+            const isSafetyAssay = assayToEdit.type === 'seguranca-eletrica';
+
+            if (isSafetyAssay) {
+                renderers.populateSafetySelects(form);
+            } else {
+                renderers.populateTerminalSelects(form);
+            }
+            
+            // Preenche o resto do formulário
+            form.querySelector('[name="protocol"]').value = assayToEdit.protocol;
+            form.querySelector('[name="orcamento"]').value = assayToEdit.orcamento;
+            form.querySelector('[name="mainSupplier"]').value = assayToEdit.plannedSuppliers?.poBase;
+            form.querySelector('[name="assayManufacturer"]').value = assayToEdit.assayManufacturer;
+            form.querySelector('[name="model"]').value = assayToEdit.model;
+            form.querySelector('[name="nominalLoad"]').value = assayToEdit.nominalLoad;
+            form.querySelector('[name="tensao"]').value = assayToEdit.tensao;
+            form.querySelector('[name="startDate"]').value = assayToEdit.startDate;
+            form.querySelector('[name="endDate"]').value = assayToEdit.endDate;
+            form.querySelector('[name="setup"]').value = assayToEdit.setup;
+            form.querySelector('[name="status"]').value = assayToEdit.status;
+            form.querySelector('[name="type"]').value = assayToEdit.type;
+            form.querySelector('[name="reportDate"]').value = assayToEdit.reportDate;
+            form.querySelector('[name="id"]').value = assayToEdit.id;
+            form.querySelector('[name="observacoes"]').value = assayToEdit.observacoes || '';
+            
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.textContent = 'Salvar Alterações';
+                submitButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                submitButton.classList.add('bg-green-600', 'hover:bg-green-700');
+            }
+            
+            form.removeEventListener('submit', dataHandlers.handleAddGanttAssay);
+            form.addEventListener('submit', dataHandlers.handleUpdateGanttAssay);
+        });
+    },
 
     /**
      * Abre o modal de edição de férias.
@@ -7463,6 +7890,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializa sistema de notificações
     notificationSystem.init();
     notificationSystem.startAutoChecks();
+
+    historicalForecastSystem.init();
     
     const stockAlertBanner = document.getElementById('stock-alert-banner');
     const closeAlertButton = document.getElementById('close-alert-button');
@@ -8543,6 +8972,11 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         uiHelpers.renderNotificationPanel(); // Re-renderiza o painel (que agora estará vazio)
         utils.showToast("Notificações limpas com sucesso.");
     });
+    document.getElementById("nav-forecast").addEventListener("click", () => {
+    document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+    document.getElementById("page-forecast").classList.remove("hidden");
+    forecastSystem.renderAll();
+});
 
     // Início da aplicação
     authSystem.init();

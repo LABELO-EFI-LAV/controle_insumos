@@ -4,6 +4,7 @@ import * as path from 'path';
 import { SourceTextModule } from 'vm';
 const PDFKit = require('pdfkit');
 const PDFDocument = PDFKit.default || PDFKit;
+const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 
 // ========================================================================
 // START: Added Utility Functions
@@ -280,6 +281,7 @@ const calculateConsumption = (nominalLoad: number, cycles: number): Consumption 
         tiras: tiras,
     };
 };
+
 
 // --- FIM DAS FUNÇÕES DE CÁLCULO ---
 /**
