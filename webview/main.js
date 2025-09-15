@@ -2691,7 +2691,7 @@ const renderers = {
             <table class="min-w-full bg-white">
                 <thead class="bg-gray-800 text-white sticky top-0 z-10">
                     <tr>
-                        <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Protocolo</th>
+                        <th class="fixedtext-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Protocolo</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Orçamento</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Fabricante</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Modelo</th>
@@ -2741,7 +2741,7 @@ const renderers = {
                 }
                 return assay.lots[reagentName]; // Para compatibilidade com dados antigos
             };
-
+            
             const hasReport = !!assay.report && assay.report.trim() !== '' && assay.report.trim().toLowerCase() !== 'pendente';
             const reportButtonHTML = hasReport ?
                 `<button class="btn-edit-report bg-gray-500 hover:bg-gray-600 text-white font-bold py-1 px-2 rounded text-xs whitespace-nowrap" data-id="${assay.id}" title="Editar Relatório">Editar Relatório</button>` :
@@ -4943,7 +4943,25 @@ handleUpdateCalibration: (e) => {
             utils.showToast("Erro: Ensaio não encontrado no cronograma.", true);
         }
     },
-    
+    /**
+     * NOVA FUNÇÃO: Inicia um ensaio, alterando seu status para "Em Andamento".
+     * @param {number} assayId - O ID do ensaio a ser iniciado.
+     */
+    handleHereAssay: (assayId) => {
+        const allScheduled = [...state.scheduledAssays, ...state.safetyScheduledAssays];
+        const assay = allScheduled.find(a => a.id === assayId);
+        if (!assay) {
+            utils.showToast("Erro: Ensaio não encontrado no cronograma.", true);
+            return;
+        }
+        assay.status = 'labelo';
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+        renderers.ganttInitialRenderDone = false;
+        renderers.renderGanttChart();
+        utils.showToast("Amostra no LABELO! Guarde as alterações para confirmar.");
+        utils.closeModal();
+    },
     /**
      * NOVA FUNÇÃO: Inicia um ensaio, alterando seu status para "Em Andamento".
      * @param {number} assayId - O ID do ensaio a ser iniciado.
@@ -6120,6 +6138,14 @@ openEditCalibrationModal: (calibrationId) => {
                 </button>
             `;
         }
+        else if (status === 'aguardando') {
+            dynamicButtonsHTML += `
+                <button class="btn-here-assay bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded-lg flex items-center" data-id="${assay.id}" data-action="start-assay">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Amostra no Labelo
+                </button>
+            `;
+        }
         // Requisito: Botão 'Concluir ensaio' e 'Ensaio Incompleto' para status 'Ensaios em Andamento'
         else if (status === 'andamento') {
             dynamicButtonsHTML += `
@@ -6142,7 +6168,7 @@ openEditCalibrationModal: (calibrationId) => {
                 </button>
             `;
         }
-
+        
 
         if (assay.type === 'férias') {
             modalContentHTML = `
@@ -6201,6 +6227,13 @@ openEditCalibrationModal: (calibrationId) => {
             if (startButton) {
                 startButton.addEventListener('click', () => {
                     dataHandlers.handleStartAssay(assayId);
+                    utils.closeModal();
+                });
+            }
+            const hereButton = activeModal.querySelector('.btn-here-assay');
+            if (hereButton) {
+                hereButton.addEventListener('click', () => {
+                    dataHandlers.handleHereAssay(assayId);
                     utils.closeModal();
                 });
             }
@@ -6846,10 +6879,6 @@ openEditCalibrationModal: (calibrationId) => {
                         </div>
                     </div>
                 ` : ''}
-
-                <div class="flex justify-end pt-4 border-t">
-                    <button type="button" class="btn-close-modal bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">Fechar</button>
-                </div>
             </div>
         `;
 
@@ -7945,6 +7974,8 @@ assaysFilters.forEach(id => {
         modalHandlers.openEditAssayModal(parseInt(button.dataset.id));
     } else if (button.classList.contains('btn-start-assay')) {
         dataHandlers.handleStartAssay(parseInt(button.dataset.id));
+    } else if (button.classList.contains('btn-here-assay')) {
+        dataHandlers.handleHereAssay(parseInt(button.dataset.id));
     } else if (button.classList.contains('btn-finish-assay')) {
         modalHandlers.openFinishAssayModal(parseInt(button.dataset.id), button.dataset.status);
     } else if (button.classList.contains('btn-remove-lote')) {
