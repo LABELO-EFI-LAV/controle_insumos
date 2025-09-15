@@ -3,7 +3,7 @@
   "publisher": "LABELO-EFI-LAV",
   "displayName": "Controle de Insumos",
   "description": "Uma extensão para gestão do setor de Eficiência Energética em máquinas de lavar",
-  "version": "1.1.18",
+  "version": "1.1.19",
   "repository": {
     "type": "git",
     "url": "https://github.com/LABELO-EFI-LAV/controle_insumos.git"
