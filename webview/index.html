@@ -735,11 +735,25 @@
     <div class="hidden">
         <div id="add-reagent-modal-content">
             <form id="form-add-reagent" class="space-y-4">
-                <input type="text" name="reagent" placeholder="Reagente (ex: Pó Base)" class="w-full p-2 border rounded text-black" required />
-                <input type="text" name="manufacturer" placeholder="Fornecedor (ex: Swissatest)" class="w-full p-2 border rounded text-black" required />
-                <input type="text" name="lot" placeholder="Lote" class="w-full p-2 border rounded text-black" required />
-                <input type="number" name="quantity" min="0" placeholder="Quantidade (g ou un)" class="w-full p-2 border rounded text-black" required />
-                <div>
+
+                    <select name="reagent" class="w-full p-2 border rounded text-black" required>
+                        <option value="" disabled selected>Selecione um Reagente</option>
+                        <option value="Pó Base">Pó Base</option>
+                        <option value="Perborato">Perborato</option>
+                        <option value="TAED">TAED</option>
+                        <option value="Tiras de sujidade">Tiras de sujidade</option>
+                    </select>
+
+                    <select name="manufacturer" class="w-full p-2 border rounded text-black" required>
+                        <option value="" disabled selected>Selecione um Fornecedor</option>
+                        <option value="Swissatest">Swissatest</option>
+                        <option value="MHC">MHC</option>
+                    </select>
+
+                    <input type="text" name="lot" placeholder="Lote" class="w-full p-2 border rounded text-black" required />
+                    <input type="number" name="quantity" min="0" placeholder="Quantidade (g ou un)" class="w-full p-2 border rounded text-black" required />
+                    
+                    <div>
                     <label class="block text-sm font-medium text-gray-700">Validade</label>
                     <input type="date" name="validity" class="w-full p-2 border rounded text-black" required />
                 </div>
@@ -893,7 +907,7 @@
                 <input type="text" id="gantt-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
             </div>
             <div>
-                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Fornecedor (Pó Base & TAED)</label>
+                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Detergente</label>
                 <select id="gantt-main-supplier" name="mainSupplier" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
                     <option value="Swissatest">Swissatest</option>
                     <option value="MHC">MHC</option>
@@ -1048,7 +1062,7 @@
                 <input type="text" id="edit-gantt-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
             </div>
             <div>
-                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Fornecedor (Pó Base & TAED)</label>
+                <label for="gantt-main-supplier" class="block text-sm font-medium text-gray-900">Detergente</label>
                 <select id="gantt-main-supplier" name="mainSupplier" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
                     <option value="" disabled selected>Selecione...</option>
                     <option value="Swissatest">Swissatest</option>
