@@ -4643,71 +4643,96 @@ const forecastSystem = {
 
     // Função não modificada
     renderChart(canvasId, reagentName, reagentData, labels) {
-        // ... (código existente sem alterações)
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
 
-        if (this.charts[canvasId]) {
-            this.charts[canvasId].destroy();
-        }
+    // Configurar canvas para alta resolução
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
-        const datasets = Object.entries(reagentData).map(([manufacturer, values]) => {
-            const color = SUPPLIER_COLORS[manufacturer] || SUPPLIER_COLORS['Default'];
-            return {
-                label: manufacturer,
-                data: values,
-                borderColor: color,
-                backgroundColor: color,
-                fill: false,
-                tension: 0.2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            };
-        });
+    canvas.style.width = rect.width + "px";
+    canvas.style.height = rect.height + "px";
 
-        const ctx = canvas.getContext("2d");
-        this.charts[canvasId] = new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: labels,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom'
-                    },
-                    datalabels: {
-                        display: false
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)}`
-                        }
+    // Definir tamanho real do canvas baseado no DPR
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    // Escalar o contexto para compensar o DPR
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+
+    // Destroi gráfico antigo, se existir
+    if (this.charts[canvasId]) {
+        this.charts[canvasId].destroy();
+    }
+
+    const datasets = Object.entries(reagentData).map(([manufacturer, values]) => {
+        const color = SUPPLIER_COLORS[manufacturer] || SUPPLIER_COLORS["Default"];
+        return {
+            label: manufacturer,
+            data: values,
+            borderColor: color,
+            backgroundColor: color,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 4,
+            pointHoverRadius: 6
+        };
+    });
+
+    // Criar gráfico
+    this.charts[canvasId] = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            devicePixelRatio: dpr,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "bottom",
+                    labels: {
+                        font: { size: 13, weight: "600" },
+                        color: "#111"
                     }
                 },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: "Data"
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: "Estoque Disponível"
-                        },
-                        beginAtZero: true
+                datalabels: {
+                    display: false
+                },
+                tooltip: {
+                    mode: "index",
+                    intersect: false,
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)}`
                     }
                 }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Data"
+                    },
+                    ticks: {
+                        autoSkip: true,
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: "Estoque Disponível"
+                    },
+                    beginAtZero: true
+                }
             }
-        });
+        }
+    });
     },
 
     // FUNÇÃO MODIFICADA: Adiciona a chamada para renderizar as datas de fim.
@@ -4762,42 +4787,73 @@ const historicalForecastSystem = {
      * NOVA FUNÇÃO DEDICADA: Renderiza um gráfico de barras empilhadas para o consumo.
      */
     renderConsumptionChart: function(canvasId, chartData) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
 
-        if (forecastSystem.charts[canvasId]) {
-            forecastSystem.charts[canvasId].destroy();
-        }
+    // Configurar canvas para alta resolução
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(window.devicePixelRatio || 1, 2);
 
-        const ctx = canvas.getContext("2d");
-        forecastSystem.charts[canvasId] = new Chart(ctx, {
-            type: 'bar', // MUDANÇA: Gráfico de barras
-            data: chartData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: true, position: 'bottom' },
-                    title: { display: true, text: 'Consumo Mensal Projetado' },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    datalabels: { display: false }
-                },
-                scales: {
-                    x: {
-                        stacked: true, // Empilha as barras no eixo X
-                        title: { display: true, text: "Mês da Projeção" }
-                    },
-                    y: {
-                        stacked: true, // Empilha as barras no eixo Y
-                        title: { display: true, text: "Consumo Projetado (g ou un)" },
-                        beginAtZero: true
+    canvas.style.width = rect.width + "px";
+    canvas.style.height = rect.height + "px";
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+
+    // Destruir gráfico antigo se já existir
+    if (forecastSystem.charts[canvasId]) {
+        forecastSystem.charts[canvasId].destroy();
+    }
+
+    forecastSystem.charts[canvasId] = new Chart(ctx, {
+        type: "bar",
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            devicePixelRatio: dpr,
+            plugins: {
+                legend: { 
+                    display: true, 
+                    position: "bottom",
+                    labels: {
+                        font: { size: 13, weight: "600" },
+                        color: "#111"
                     }
+                },
+                title: { 
+                    display: true, 
+                    text: "Consumo Mensal Projetado",
+                    font: { size: 15, weight: "700" },
+                    color: "#111"
+                },
+                tooltip: {
+                    mode: "index",
+                    intersect: false,
+                },
+                datalabels: { display: false }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    title: { display: true, text: "Mês da Projeção" },
+                    ticks: {
+                        autoSkip: true,
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    stacked: true,
+                    title: { display: true, text: "Consumo Projetado (g ou un)" },
+                    beginAtZero: true
                 }
             }
-        });
+        }
+    });
     },
 
     /**

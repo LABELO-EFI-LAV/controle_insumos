@@ -608,6 +608,7 @@ aside:hover .nav-link span {
     max-height: calc(100% - 20px);
     display: block;
     box-sizing: border-box;
+    image-rendering: crisp-edges;
 }
 
 /* Ajustes para mobile */
@@ -647,6 +648,7 @@ aside:hover .nav-link span {
     .chart-container canvas {
         width: 100% !important;
         max-width: 100%;
+        image-rendering: crisp-edges;
     }
 }
 
@@ -660,6 +662,7 @@ aside:hover .nav-link span {
     .chart-container canvas {
         width: 100% !important;
         max-width: 100%;
+        image-rendering: crisp-edges;
     }
 }
 
