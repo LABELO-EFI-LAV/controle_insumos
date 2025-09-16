@@ -4995,7 +4995,81 @@ const historicalForecastSystem = {
         });
     }
 };
+const ganttMiddleClickHandler = (e) => {
+    // Confirma que foi o botão do meio (scroll) que foi pressionado
+    if (e.button !== 1) {
+        return;
+    }
 
+    // Previne comportamentos padrão do navegador, como o auto-scroll
+    e.preventDefault();
+
+    const target = e.target.closest('.gantt-event');
+    if (!target) {
+        return; // O clique não foi em uma tarefa
+    }
+
+    const assayId = parseInt(target.dataset.assayId, 10);
+    if (isNaN(assayId)) {
+        return;
+    }
+
+    // Encontra o ensaio e sua localização (em qual array e em qual índice)
+    let assay = null;
+    let sourceArray = null;
+    let assayIndex = -1;
+    let isSafetyAssay = false;
+
+    // Procura primeiro nos ensaios de eficiência
+    assayIndex = state.scheduledAssays.findIndex(a => a.id === assayId);
+    if (assayIndex !== -1) {
+        assay = state.scheduledAssays[assayIndex];
+        sourceArray = state.scheduledAssays;
+    } else {
+        // Se não encontrou, procura nos ensaios de segurança
+        assayIndex = state.safetyScheduledAssays.findIndex(a => a.id === assayId);
+        if (assayIndex !== -1) {
+            assay = state.safetyScheduledAssays[assayIndex];
+            sourceArray = state.safetyScheduledAssays;
+            isSafetyAssay = true;
+        }
+    }
+
+    if (!assay) {
+        utils.showToast("Erro: Tarefa não encontrada.", true);
+        return;
+    }
+
+    // Validações para não mover itens que não devem ser movidos
+    if (assay.type === 'férias') {
+        utils.showToast("Não é possível mover 'Férias' para pendentes.", true);
+        return;
+    }
+    if (assay.status === 'pendente') {
+        utils.showToast("Esta tarefa já está em Pendentes.", true);
+        return;
+    }
+
+    // Salva o estado atual para permitir a funcionalidade de "Desfazer" (Ctrl+Z)
+    undoManager.saveState();
+
+    // Modifica os dados do ensaio para refletir o novo estado "Pendente"
+    assay.status = 'pendente';
+    assay.setup = null; // Ensaios pendentes não têm um terminal/responsável atribuído
+
+    // Se o ensaio era de segurança, ele precisa ser movido para a lista de ensaios de eficiência,
+    // pois a linha "Pendentes" é alimentada por essa lista.
+    if (isSafetyAssay) {
+        const [movedAssay] = sourceArray.splice(assayIndex, 1);
+        state.scheduledAssays.push(movedAssay);
+    }
+
+    // Atualiza a interface do usuário
+    state.hasUnsavedChanges = true;
+    ui.toggleScheduleActions(true);
+    renderers.renderGanttChart();
+    utils.showToast(`Tarefa '${assay.protocol}' movida para Pendentes. Salve as alterações.`);
+};
 /**
  * Funções para manipulação de dados, incluindo interações com a extensão VS Code.
  */
@@ -8073,6 +8147,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.ChartDataLabels) {
         Chart.register(ChartDataLabels);
     }
+    DOM.ganttGridContainer?.addEventListener('mousedown', ganttMiddleClickHandler);
+
     // Eventos de drag and drop para o Gantt (apenas para administrador)
     // Os event listeners serão adicionados após o login se o usuário tiver permissão
     // Listener para mensagens da extensão VS Code
