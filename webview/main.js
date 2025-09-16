@@ -2507,32 +2507,39 @@ const calculations = {
      * @returns {number} O número de ensaios possíveis.
      */
     calculatePossibleAssays: () => {
-        const consumptionForOneAssay = calculations.calculateConsumption(13, 12);
-        const getStock = (manufacturer, reagent) => {
-            return state.inventory
-                .filter(i => i.manufacturer === manufacturer && i.reagent === reagent)
-                .reduce((sum, i) => sum + i.quantity, 0);
-        };
-        const poBaseSwissatest = getStock('Swissatest', 'Pó Base');
-        const taedSwissatest = getStock('Swissatest', 'TAED');
-        const tirasSwissatest = getStock('Swissatest', 'Tiras de sujidade');
-        const perboratoMHC = getStock('MHC', 'Perborato');
-        if (consumptionForOneAssay.poBase === 0 || consumptionForOneAssay.taed === 0 ||
-            consumptionForOneAssay.tiras === 0 || consumptionForOneAssay.perborato === 0) {
-            return 0;
-        }
-        const possibleFromPoBase = poBaseSwissatest / consumptionForOneAssay.poBase;
-        const possibleFromTaed = taedSwissatest / consumptionForOneAssay.taed;
-        const possibleFromTiras = tirasSwissatest / consumptionForOneAssay.tiras;
-        const possibleFromPerborato = perboratoMHC / consumptionForOneAssay.perborato;
-        const possibleAssays = Math.floor(Math.min(
-            possibleFromPoBase,
-            possibleFromTaed,
-            possibleFromTiras,
-            possibleFromPerborato
-        ));
-        return isFinite(possibleAssays) ? possibleAssays : 0;
+    const consumptionForOneAssay = calculations.calculateConsumption(13, 12);
+    const getStock = (manufacturer, reagent) => {
+        return state.inventory
+            .filter(i => i.manufacturer === manufacturer && i.reagent === reagent)
+            .reduce((sum, i) => sum + i.quantity, 0);
+    };
+
+    const poBaseSwissatest = getStock('Swissatest', 'Pó Base');
+    const taedSwissatest = getStock('Swissatest', 'TAED');
+    const tirasSwissatest = getStock('Swissatest', 'Tiras de sujidade');
+    const perboratoMHC = getStock('MHC', 'Perborato');
+
+    const possibilities = [
+        { reagent: 'Pó Base', count: consumptionForOneAssay.poBase > 0 ? poBaseSwissatest / consumptionForOneAssay.poBase : Infinity },
+        { reagent: 'TAED', count: consumptionForOneAssay.taed > 0 ? taedSwissatest / consumptionForOneAssay.taed : Infinity },
+        { reagent: 'Tiras de sujidade', count: consumptionForOneAssay.tiras > 0 ? tirasSwissatest / consumptionForOneAssay.tiras : Infinity },
+        { reagent: 'Perborato', count: consumptionForOneAssay.perborato > 0 ? perboratoMHC / consumptionForOneAssay.perborato : Infinity }
+    ];
+
+    if (possibilities.length === 0) {
+        return { count: 0, limitingReagent: 'Nenhum' };
     }
+
+    // Encontra o reagente com o menor número de ensaios possíveis
+    const limitingFactor = possibilities.reduce((min, p) => p.count < min.count ? p : min, possibilities[0]);
+
+    const finalCount = Math.floor(limitingFactor.count);
+
+    return {
+        count: isFinite(finalCount) ? finalCount : 0,
+        limitingReagent: isFinite(finalCount) && finalCount > 0 ? limitingFactor.reagent : 'Nenhum'
+    };
+}
 };
 
 /**
@@ -3332,132 +3339,84 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
         }
     },
     
-    /** Renderiza o painel (dashboard) com todos os cards e gráficos. */
-    renderDashboard: () => {
-        const cardsContainer = document.getElementById('dashboard-cards');
-        if (!cardsContainer) return;
-        
-        cardsContainer.innerHTML = '';
-        const suppliers = ['MHC', 'Swissatest'];
-        const totalAssays = state.historicalAssays.length;
-        const possibleAssays = calculations.calculatePossibleAssays();
-        const todayAssays = dashboardUtils.getTodayAssays();
-        const upcomingAssays = dashboardUtils.getUpcomingAssays(10);
 
+/** Renderiza o painel (dashboard) com todos os cards e gráficos. */
+renderDashboard: () => {
+    const cardsContainer = document.getElementById('dashboard-cards');
+    if (!cardsContainer) return;
+    
+    cardsContainer.innerHTML = '';
+    const suppliers = ['MHC', 'Swissatest'];
+    const totalAssays = state.historicalAssays.length;
+    
+    // CORREÇÃO APLICADA AQUI:
+    // 1. A chamada da função agora retorna um objeto.
+    const possibleAssaysResult = calculations.calculatePossibleAssays();
+    // 2. Extraímos o número de ensaios e o nome do reagente.
+    const possibleAssays = possibleAssaysResult.count;
+    // 3. Criamos a variável com o texto a ser exibido ANTES de usá-la.
+    const limitingReagentText = possibleAssays > 0 ? `<p class="text-xs font-medium text-gray-500 mt-2">Reagente: ${possibleAssaysResult.limitingReagent}</p>` : '';
+
+    const todayAssays = dashboardUtils.getTodayAssays();
+    const upcomingAssays = dashboardUtils.getUpcomingAssays(10);
+
+    // Atualiza a classe para um layout de 2 colunas para os cards superiores
+    cardsContainer.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6';
+    
+    // Criar array para armazenar todo o HTML
+    let allCardsHTML = '';
+    
+    // Cards de fornecedores
+    suppliers.forEach(supplier => {
+        let itemsHTML = '';
+        const supplierItems = state.inventory.filter(item => item.manufacturer === supplier);
         
-        // Atualiza a classe para um layout de 2 colunas para os cards superiores
-        cardsContainer.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6';
+        if (supplierItems.length === 0) {
+            itemsHTML = '<li class="text-sm text-gray-500">Nenhum item em estoque.</li>';
+        } else {
+            supplierItems.forEach(item => {
+                const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
+                itemsHTML += `
+                    <li class="text-sm text-gray-600 flex justify-between">
+                        <span class="truncate">${item.reagent} (${item.lot})</span>
+                        <span class="font-semibold whitespace-nowrap">${item.quantity.toLocaleString('pt-BR')} ${unit}</span>
+                    </li>
+                `;
+            });
+        }
         
-        // Criar array para armazenar todo o HTML
-        let allCardsHTML = '';
-        
-        // Cards de fornecedores
-        suppliers.forEach(supplier => {
-            let itemsHTML = '';
-            const supplierItems = state.inventory.filter(item => item.manufacturer === supplier);
-            
-            if (supplierItems.length === 0) {
-                itemsHTML = '<li class="text-sm text-gray-500">Nenhum item em estoque.</li>';
-            } else {
-                supplierItems.forEach(item => {
-                    const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
-                    itemsHTML += `
-                        <li class="text-sm text-gray-600 flex justify-between">
-                            <span class="truncate">${item.reagent} (${item.lot})</span>
-                            <span class="font-semibold whitespace-nowrap">${item.quantity.toLocaleString('pt-BR')} ${unit}</span>
-                        </li>
-                    `;
-                });
-            }
-            
-            allCardsHTML += `
-                <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
-                    <h3 class="font-bold text-base md:text-lg text-gray-700 mb-2">${supplier}</h3>
-                    <ul class="max-h-40 overflow-y-auto">${itemsHTML}</ul>
-                </div>
-            `;
-        });
-        
-        // Cards de totais
         allCardsHTML += `
-            <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col justify-center items-center">
-                <h3 class="font-bold text-base md:text-lg text-gray-700">Total de Ensaios</h3>
-                <p class="text-3xl md:text-4xl font-extrabold text-blue-600 mt-2">${totalAssays}</p>
-            </div>
-            <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col justify-center items-center">
-                <h3 class="font-bold text-base md:text-lg text-gray-700 text-center">Ensaios Possíveis</h3>
-                <p class="text-3xl md:text-4xl font-extrabold text-green-600 mt-2">${possibleAssays}</p>
+            <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+                <h3 class="font-bold text-base md:text-lg text-gray-700 mb-2">${supplier}</h3>
+                <ul class="max-h-40 overflow-y-auto">${itemsHTML}</ul>
             </div>
         `;
-        
-        // Card: Ensaios em andamento hoje
-        const todayAssaysHTML = todayAssays.length > 0 ?
-        todayAssays.map(assay => `
-            <div class="${getStatusCardBackground(assay.status, assay.type)} p-3 rounded-lg mb-2 border-l-4 ${getStatusBorderColor(assay.status)}">
-                <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">${assay.protocol}</h4>
-                        <p class="text-xs text-gray-600">${getTerminalName(assay.setup)}</p>
-                        <p class="text-xs text-gray-500">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
-                    </div>
-                    <span class="text-xs px-2 py-1 rounded-full ${getStatusBadgeClass(assay.status, assay.type)}">
-                        ${ASSAY_STATUS_MAP[assay.status.toLowerCase()] || assay.status}
-                    </span>
-                </div>
-                <div class="mt-2 flex justify-between items-center text-xs">
-                    <span class="text-gray-600">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
-                    <button class="btn-view-details text-blue-500 hover:text-blue-700" data-assay-id="${assay.id}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="16" x2="12" y2="12"></line>
-                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('') :
-        '<p class="text-gray-500 text-sm text-center py-4">Nenhum ensaio em andamento hoje</p>';
-
+    });
+    
+    // Cards de totais
     allCardsHTML += `
-        <div class="dashboard-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="font-bold text-base md:text-lg text-gray-700">Ensaios Hoje</h3>
-                <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">${todayAssays.length}</span>
-            </div>
-            <div class="max-h-60 overflow-y-auto">
-                ${todayAssaysHTML}
-            </div>
+        <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col justify-center items-center">
+            <h3 class="font-bold text-base md:text-lg text-gray-700">Total de Ensaios</h3>
+            <p class="text-3xl md:text-4xl font-extrabold text-blue-600 mt-2">${totalAssays}</p>
+        </div>
+        <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col justify-center items-center">
+            <h3 class="font-bold text-base md:text-lg text-gray-700 text-center">Ensaios Possíveis</h3>
+            <p class="text-3xl md:text-4xl font-extrabold text-green-600 mt-2">${possibleAssays}</p>
+            ${limitingReagentText}
         </div>
     `;
-        
-    // Card: Próximos Ensaios (3 dias)
-    let upcomingAssaysHTML = '';
-
-    if (upcomingAssays.length > 0) {
-        upcomingAssays.slice(0, 8).forEach(assay => {
-            const formattedDate = assay.parsedDate.toLocaleDateString('pt-BR', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-            });
-            
-            // Obter a classe CSS baseada no status (usando a mesma lógica do Gantt)
-            const statusClass = getStatusBadgeClass(assay.status, assay.type);
-            const borderColor = getStatusBorderColor(assay.status);
-            const cardBackground = getStatusCardBackground(assay.status, assay.type);
-
-
-    upcomingAssaysHTML += `
-        <div class="${cardBackground} p-3 rounded-lg mb-2 border-l-4 ${borderColor}">
+    
+    // Card: Ensaios em andamento hoje
+    const todayAssaysHTML = todayAssays.length > 0 ?
+    todayAssays.map(assay => `
+        <div class="${getStatusCardBackground(assay.status, assay.type)} p-3 rounded-lg mb-2 border-l-4 ${getStatusBorderColor(assay.status)}">
             <div class="flex justify-between items-start">
                 <div class="flex-1">
-                    <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">
-                        ${assay.protocol}
-                    </h4>
+                    <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">${assay.protocol}</h4>
                     <p class="text-xs text-gray-600">${getTerminalName(assay.setup)}</p>
-                    <p class="text-xs text-gray-500 truncate">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
+                    <p class="text-xs text-gray-500">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
                 </div>
-                <span class="text-xs px-2 py-1 rounded-full ${statusClass}">
+                <span class="text-xs px-2 py-1 rounded-full ${getStatusBadgeClass(assay.status, assay.type)}">
                     ${ASSAY_STATUS_MAP[assay.status.toLowerCase()] || assay.status}
                 </span>
             </div>
@@ -3472,67 +3431,124 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                 </button>
             </div>
         </div>
-    `;
-        });
-        
-        if (upcomingAssays.length > 8) {
-            upcomingAssaysHTML += `<p class="text-xs text-gray-500 text-center mt-2">+${upcomingAssays.length - 8} mais programados</p>`;
-        }
-    } else {
-        upcomingAssaysHTML = '<p class="text-gray-500 text-sm text-center py-4">Nenhum ensaio programado</p>';
-    }
-        
-    allCardsHTML += `
-        <div class="dashboard-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="font-bold text-base md:text-lg text-gray-700">Próximos Ensaios</h3>
-                <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">${upcomingAssays.length}</span>
-            </div>
-            <div class="max-h-60 overflow-y-auto">
-                ${upcomingAssaysHTML}
-            </div>
+    `).join('') :
+    '<p class="text-gray-500 text-sm text-center py-4">Nenhum ensaio em andamento hoje</p>';
+
+allCardsHTML += `
+    <div class="dashboard-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-base md:text-lg text-gray-700">Ensaios Hoje</h3>
+            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">${todayAssays.length}</span>
         </div>
-    `;
-        
-    // Adicionar todo o HTML de uma vez
-    cardsContainer.innerHTML = allCardsHTML;
-        
-    // Adicionar event listeners
-    document.querySelectorAll('.btn-view-details').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const assayId = parseInt(e.currentTarget.dataset.assayId);
-            if (!isNaN(assayId)) {
-                modalHandlers.openViewGanttAssayModal(assayId);
-            }
+        <div class="max-h-60 overflow-y-auto">
+            ${todayAssaysHTML}
+        </div>
+    </div>
+`;
+    
+// Card: Próximos Ensaios (3 dias)
+let upcomingAssaysHTML = '';
+
+if (upcomingAssays.length > 0) {
+    upcomingAssays.slice(0, 8).forEach(assay => {
+        const formattedDate = assay.parsedDate.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
         });
+        
+        // Obter a classe CSS baseada no status (usando a mesma lógica do Gantt)
+        const statusClass = getStatusBadgeClass(assay.status, assay.type);
+        const borderColor = getStatusBorderColor(assay.status);
+        const cardBackground = getStatusCardBackground(assay.status, assay.type);
+
+
+upcomingAssaysHTML += `
+    <div class="${cardBackground} p-3 rounded-lg mb-2 border-l-4 ${borderColor}">
+        <div class="flex justify-between items-start">
+            <div class="flex-1">
+                <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">
+                    ${assay.protocol}
+                </h4>
+                <p class="text-xs text-gray-600">${getTerminalName(assay.setup)}</p>
+                <p class="text-xs text-gray-500 truncate">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded-full ${statusClass}">
+                ${ASSAY_STATUS_MAP[assay.status.toLowerCase()] || assay.status}
+            </span>
+        </div>
+        <div class="mt-2 flex justify-between items-center text-xs">
+            <span class="text-gray-600">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
+            <button class="btn-view-details text-blue-500 hover:text-blue-700" data-assay-id="${assay.id}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+`;
     });
-        
-    renderers.renderCharts();
-        
-    setTimeout(() => {
-    const chartContainers = document.querySelectorAll('.chart-container');
-    chartContainers.forEach(container => {
-        const isMobile = window.innerWidth < 768;
-        container.style.height = isMobile ? '250px' : '320px';
-        container.style.width = '100%';
-        container.style.padding = isMobile ? '5px' : '10px';
-        container.style.boxSizing = 'border-box';
-        
-        const canvas = container.querySelector('canvas');
-        if (canvas) {
-            // Resetar e redimensionar o canvas
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
-            
-            // Redimensionar o gráfico Chart.js se existir
-            const canvasId = canvas.id;
-            if (state.charts[canvasId]) {
-                state.charts[canvasId].resize();
-            }
+    
+    if (upcomingAssays.length > 8) {
+        upcomingAssaysHTML += `<p class="text-xs text-gray-500 text-center mt-2">+${upcomingAssays.length - 8} mais programados</p>`;
+    }
+} else {
+    upcomingAssaysHTML = '<p class="text-gray-500 text-sm text-center py-4">Nenhum ensaio programado</p>';
+}
+    
+allCardsHTML += `
+    <div class="dashboard-card bg-white p-4 md:p-6 rounded-xl shadow-lg border border-gray-200">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-base md:text-lg text-gray-700">Próximos Ensaios</h3>
+            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">${upcomingAssays.length}</span>
+        </div>
+        <div class="max-h-60 overflow-y-auto">
+            ${upcomingAssaysHTML}
+        </div>
+    </div>
+`;
+    
+// Adicionar todo o HTML de uma vez
+cardsContainer.innerHTML = allCardsHTML;
+    
+// Adicionar event listeners
+document.querySelectorAll('.btn-view-details').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const assayId = parseInt(e.currentTarget.dataset.assayId);
+        if (!isNaN(assayId)) {
+            modalHandlers.openViewGanttAssayModal(assayId);
         }
     });
+});
+    
+renderers.renderCharts();
+    
+setTimeout(() => {
+const chartContainers = document.querySelectorAll('.chart-container');
+chartContainers.forEach(container => {
+    const isMobile = window.innerWidth < 768;
+    container.style.height = isMobile ? '250px' : '320px';
+    container.style.width = '100%';
+    container.style.padding = isMobile ? '5px' : '10px';
+    container.style.boxSizing = 'border-box';
+    
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+        // Resetar e redimensionar o canvas
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        
+        // Redimensionar o gráfico Chart.js se existir
+        const canvasId = canvas.id;
+        if (state.charts[canvasId]) {
+            state.charts[canvasId].resize();
+        }
+    }
+});
 }, 100);
-    },
+},
 
     /** Prepara os dados para os gráficos. */
     prepareChartData: () => {

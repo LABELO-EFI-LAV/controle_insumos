@@ -110,7 +110,7 @@
     <div id="stock-alert-banner" class="hidden fixed top-0 left-0 right-0 bg-red-500 text-white p-4 text-center shadow-lg flex justify-center items-center z-50">
     
         <div class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -163,17 +163,8 @@
             
             <!-- Loading Animation -->
             <div class="mb-6 flex justify-center">
-                <svg class="h-24 w-24 text-blue-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 3H4C2.89543 3 2 3.89543 2 5V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V5C22 3.89543 21.1046 3 20 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <circle cx="12" cy="13" r="5" stroke="currentColor" stroke-width="1.5"/>
-                    <path d="M6 6.5H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    <circle cx="16" cy="6.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-                    <g class="animate-spin" style="transform-origin: 12px 13px;">
-                        <path d="M10 13C11 11 13 11 14 13S13 16 11 15" stroke="currentColor" stroke-width="1" fill="currentColor" fill-opacity="0.3" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M13.5 12C12.5 11.5 11 12 10.5 13" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
-                    </g>
-                </svg>
-            </div>
+                <img src="{{wmGifUri}}" alt="Carregando..." class="w-64 h-auto">
+                </div>
             
             <!-- Status Text -->
             <div class="space-y-2">
@@ -184,7 +175,7 @@
             <!-- Footer -->
             <div class="text-center mt-8 pt-6 border-t border-gray-200">
                 <p class="text-xs text-gray-500">Controle de Insumos para Laboratório</p>
-                <p class="text-xs text-gray-400 mt-1">Versão 1.1.19</p>
+                <p class="text-xs text-gray-400 mt-1">Versão {{version}}</p>
             </div>
         </div>
     </div>

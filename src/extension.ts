@@ -2091,16 +2091,26 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): s
 
     const iconPath = vscode.Uri.joinPath(extensionUri, 'images', 'icon.png');
     const iconUri = webview.asWebviewUri(iconPath);
+
+    const wmGifPath = vscode.Uri.joinPath(extensionUri, 'images', 'wm.gif');
+    const wmGifUri = webview.asWebviewUri(wmGifPath);
     
     const stylesUri = webview.asWebviewUri(stylesPath);
     const scriptUri = webview.asWebviewUri(scriptPath);
+
+    const packageJsonPath = vscode.Uri.joinPath(extensionUri, 'package.json');
+    const packageJsonContent = fs.readFileSync(packageJsonPath.fsPath, 'utf8');
+    const packageJson = JSON.parse(packageJsonContent);
+    const version = packageJson.version;
 
     let htmlContent = fs.readFileSync(htmlPath.fsPath, 'utf8');
 
     htmlContent = htmlContent
         .replace('{{stylesUri}}', stylesUri.toString())
         .replace('{{scriptUri}}', scriptUri.toString())
-        .replace('{{iconUri}}', iconUri.toString());
+        .replace('{{iconUri}}', iconUri.toString())
+        .replace('{{version}}', version.toString())
+        .replace('{{wmGifUri}}', wmGifUri.toString());
 
     return htmlContent;
 }
