@@ -1652,6 +1652,7 @@ const state = {
     currentUser: null,
     isLoggedIn: false,
     ganttZoomLevel: 25,
+    ganttRowHeighLevel: 80,
     ganttInitialRenderDone: false,
 };
 
@@ -2884,8 +2885,8 @@ const renderers = {
         DOM.ganttHeaderContainer.innerHTML = '';
         DOM.ganttGridContainer.innerHTML = '';
 
-        const fixedRowHeight = 80;
-        const subRowHeight = 80; // Altura padrão
+        const fixedRowHeight = state.ganttRowHeightLevel || 80;
+        const subRowHeight = state.ganttRowHeightLevel || 80; // Altura padrão
         const subRowMargin = 4;
         const ganttColumnWidth = state.ganttZoomLevel || 25;;
         DRAG_CONFIG.CELL_WIDTH = ganttColumnWidth;
@@ -8947,9 +8948,10 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         }
     });
      document.getElementById('zoom-in-gantt-btn')?.addEventListener('click', () => {
-        const maxZoom = 35; // Largura máxima da coluna
+        const maxZoom = 45; // Largura máxima da coluna
         if (state.ganttZoomLevel < maxZoom) {
             state.ganttZoomLevel += 5; // Aumenta a largura em 5px
+            state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
             
@@ -8957,9 +8959,10 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
     });
 
     document.getElementById('zoom-out-gantt-btn')?.addEventListener('click', () => {
-        const minZoom = 10; // Largura mínima da coluna
+        const minZoom = 15; // Largura mínima da coluna
         if (state.ganttZoomLevel > minZoom) {
             state.ganttZoomLevel -= 5; // Diminui a largura em 5px
+            state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
         }
