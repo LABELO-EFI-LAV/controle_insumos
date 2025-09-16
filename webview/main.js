@@ -4470,7 +4470,6 @@ const forecastSystem = {
             initialStock[key] = (initialStock[key] || 0) + item.quantity;
         });
 
-        // 2. Mapeia o consumo diário total para cada dia nos próximos 3 meses
         const dailyConsumptions = new Map();
         
         const today = new Date();
@@ -4478,7 +4477,6 @@ const forecastSystem = {
         const limitDate = new Date();
         limitDate.setMonth(limitDate.getMonth() + 3);
 
-        // Filtra ensaios agendados no período
         state.scheduledAssays
             .filter(a => {
                 const d = new Date(a.startDate);
@@ -4490,16 +4488,15 @@ const forecastSystem = {
                 const nominalLoad = parseFloat(assay.nominalLoad) || 0;
 
                 const assayConsumptionMap = {
-                poBase: assay.plannedSuppliers?.poBase || 'Swissatest', // Usa o valor salvo ou um padrão
-                perborato: 'MHC', // Fixo
-                taed: assay.plannedSuppliers?.taed || 'Swissatest', // Usa o valor salvo ou um padrão
-                tiras: 'Swissatest' // Fixo
-            };
+                    poBase: assay.plannedSuppliers?.poBase || 'Swissatest',
+                    perborato: 'MHC',
+                    taed: assay.plannedSuppliers?.taed || 'Swissatest',
+                    tiras: 'Swissatest'
+                };
 
                 const dailyConsumption = calculations.calculateConsumption(nominalLoad, 1);
                 const businessDays = getBusinessDays(startDate, endDate);
 
-                // Acumula o consumo para cada dia útil usando o mapa de consumo dinâmico
                 businessDays.forEach(date => {
                     const dateKey = date.toISOString().split('T')[0];
                     if (!dailyConsumptions.has(dateKey)) {
@@ -4507,18 +4504,16 @@ const forecastSystem = {
                     }
                     const dayMap = dailyConsumptions.get(dateKey);
 
-                     Object.keys(assayConsumptionMap).forEach(reagentKey => { //
-                    const reagentName = REAGENT_NAMES[reagentKey]; //
-                    const manufacturer = assayConsumptionMap[reagentKey]; //
-                    const consumptionKey = `${reagentName}-${manufacturer}`; //
-                    const amount = dailyConsumption[reagentKey]; //
-
-                    dayMap[consumptionKey] = (dayMap[consumptionKey] || 0) + amount; //
-                });
+                    Object.keys(assayConsumptionMap).forEach(reagentKey => {
+                        const reagentName = REAGENT_NAMES[reagentKey];
+                        const manufacturer = assayConsumptionMap[reagentKey];
+                        const consumptionKey = `${reagentName}-${manufacturer}`;
+                        const amount = dailyConsumption[reagentKey];
+                        dayMap[consumptionKey] = (dayMap[consumptionKey] || 0) + amount;
+                    });
                 });
             });
 
-        // 3. Gera a timeline de projeção do estoque (nenhuma alteração nesta parte)
         const sortedDates = [...dailyConsumptions.keys()].sort();
         const labels = ['Hoje'];
         const timelineData = {};
@@ -4541,12 +4536,10 @@ const forecastSystem = {
             });
         });
 
-        // 4. Reestrutura a timeline para o formato do gráfico (nenhuma alteração nesta parte)
         const finalTimeline = {};
         Object.keys(timelineData).forEach(key => {
-            // Lógica robusta para separar reagente de fornecedor
             const separatorIndex = key.lastIndexOf('-');
-            if (separatorIndex === -1) return; // Ignora chaves malformadas
+            if (separatorIndex === -1) return;
             
             const reagent = key.substring(0, separatorIndex);
             const manufacturer = key.substring(separatorIndex + 1);
@@ -4557,10 +4550,100 @@ const forecastSystem = {
             finalTimeline[reagent][manufacturer] = timelineData[key];
         });
 
-        return { labels, timeline: finalTimeline };
+        return { labels, timeline: finalTimeline, initialStock, dailyConsumptions };
     },
 
+    // NOVA FUNÇÃO: Calcula a média de consumo diário com base no histórico.
+    calculateHistoricalDailyAverage(reagentName, supplier) {
+        const today = new Date();
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(today.getDate() - 90);
+
+        const relevantAssays = state.historicalAssays.filter(assay => {
+            const assayDate = new Date(assay.startDate);
+            return assayDate >= ninetyDaysAgo && assayDate <= today;
+        });
+
+        if (relevantAssays.length === 0) return 0;
+
+        const totalConsumption = relevantAssays.reduce((total, assay) => {
+            if (assay.lots && typeof assay.lots === 'object') {
+                const reagentKey = Object.keys(REAGENT_NAMES).find(key => REAGENT_NAMES[key] === reagentName);
+                if (assay.lots[reagentKey] && Array.isArray(assay.lots[reagentKey])) {
+                    const lotInfo = assay.lots[reagentKey].find(l => {
+                        const lotItem = state.inventory.find(inv => inv.lot === l.lot);
+                        return lotItem && lotItem.manufacturer === supplier;
+                    });
+                    if (lotInfo) {
+                        const consumption = calculations.calculateConsumption(assay.nominalLoad, lotInfo.cycles);
+                        return total + consumption[reagentKey];
+                    }
+                }
+            }
+            return total;
+        }, 0);
+
+        return totalConsumption / 90; // Média diária sobre o período de 90 dias
+    },
+
+    // NOVA FUNÇÃO: Lógica principal para encontrar a data de fim do estoque.
+    calculateReagentEndDate(reagentName, supplier, initialStock, dailyConsumptions) {
+        const stockKey = `${reagentName}-${supplier}`;
+        let currentStock = initialStock[stockKey] || 0;
+    
+        if (currentStock <= 0) return "Estoque já esgotado";
+    
+        const sortedDates = [...dailyConsumptions.keys()].sort();
+        let lastDate = new Date();
+    
+        // 1. Simulação baseada no cronograma
+        for (const dateKey of sortedDates) {
+            const consumptionOnDay = dailyConsumptions.get(dateKey)[stockKey] || 0;
+            currentStock -= consumptionOnDay;
+            lastDate = new Date(dateKey + 'T00:00:00');
+            if (currentStock <= 0) {
+                return `Aproximadamente em ${lastDate.toLocaleDateString('pt-BR')}`;
+            }
+        }
+    
+        // 2. Se o estoque não acabou, usa a média histórica como fallback
+        const averageDailyConsumption = this.calculateHistoricalDailyAverage(reagentName, supplier);
+    
+        if (averageDailyConsumption > 0) {
+            const daysRemaining = Math.floor(currentStock / averageDailyConsumption);
+            const endDate = new Date(lastDate);
+            endDate.setDate(lastDate.getDate() + daysRemaining);
+            return `Estimado para ${endDate.toLocaleDateString('pt-BR')}`;
+        }
+    
+        return "Não se esgota (sem consumo)";
+    },
+    
+    // NOVA FUNÇÃO: Renderiza as datas de fim nos cards.
+    renderEndDateForecasts() {
+        const { initialStock, dailyConsumptions } = this.prepareData();
+    
+        const reagentMap = {
+            'poBase': { name: 'Pó Base', supplier: 'Swissatest' },
+            'perborato': { name: 'Perborato', supplier: 'MHC' },
+            'taed': { name: 'TAED', supplier: 'Swissatest' },
+            'tiras': { name: 'Tiras de sujidade', supplier: 'Swissatest' }
+        };
+    
+        for (const key in reagentMap) {
+            const { name, supplier } = reagentMap[key];
+            const endDateText = this.calculateReagentEndDate(name, supplier, initialStock, dailyConsumptions);
+            
+            const element = document.getElementById(`end-date-${key}`);
+            if (element) {
+                element.innerHTML = `📅 Fim do estoque: <strong>${endDateText}</strong>`;
+            }
+        }
+    },
+
+    // Função não modificada
     renderChart(canvasId, reagentName, reagentData, labels) {
+        // ... (código existente sem alterações)
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
@@ -4568,7 +4651,6 @@ const forecastSystem = {
             this.charts[canvasId].destroy();
         }
 
-        // Gera os datasets (linhas) para cada fornecedor usando a paleta de cores padrão
         const datasets = Object.entries(reagentData).map(([manufacturer, values]) => {
             const color = SUPPLIER_COLORS[manufacturer] || SUPPLIER_COLORS['Default'];
             return {
@@ -4628,6 +4710,7 @@ const forecastSystem = {
         });
     },
 
+    // FUNÇÃO MODIFICADA: Adiciona a chamada para renderizar as datas de fim.
     renderAll() {
         const { labels, timeline } = this.prepareData();
         const reagentToCanvasMap = {
@@ -4643,6 +4726,9 @@ const forecastSystem = {
                 this.renderChart(canvasId, reagentName, timeline[reagentName], labels);
             }
         }
+        
+        // ADICIONADO AQUI:
+        this.renderEndDateForecasts();
     }
 };
 /**
