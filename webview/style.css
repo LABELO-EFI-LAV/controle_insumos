@@ -1,3 +1,8 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 body { font-family: 'Inter', sans-serif; }
         /* Estilos personalizados para animações e transições */
         @keyframes fadeIn {
@@ -906,4 +911,18 @@ aside:hover .nav-link span {
 #notification-badge {
     line-height: 1;
 }
+.gantt-event.dragging-source {
+  opacity: 0.3;
+  background-color: #dbeafe; /* Um azul claro para indicar o local de origem */
+}
 
+/* Estilo para o clone "fantasma" que é arrastado */
+#gantt-ghost-element {
+  position: fixed;
+  pointer-events: none; /* Impede que o fantasma intercepte eventos do mouse */
+  z-index: 1000;
+  margin: 0; /* Garante que não haja margens inesperadas */
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 6px 6px rgba(0, 0, 0, 0.23);
+  transition: none !important; /* Remove qualquer transição */
+  transform: none !important; /* Remove qualquer transformação */
+}

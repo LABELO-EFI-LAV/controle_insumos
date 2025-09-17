@@ -7746,143 +7746,82 @@ const dragHandlers = {
      * @param {Event} e - O evento de `pointerdown`.
      */
     handleDragStart: (e) => {
-        // Impede o drag em botões internos ou com o botão direito do mouse
         if (e.target.closest('.btn-view-details') || e.button !== 0) return;
 
-        const target = e.target.closest('.gantt-event');
-        if (!target) return;
+        const originalTarget = e.target.closest('.gantt-event');
+        if (!originalTarget) return;
 
-        const assayId = parseInt(target.dataset.assayId, 10);
-        const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
-        const assay = allAssays.find(a => a.id === assayId);
+        const assayId = parseInt(originalTarget.dataset.assayId, 10);
+        const assay = [...state.scheduledAssays, ...state.safetyScheduledAssays].find(a => a.id === assayId);
 
-        // Férias não podem ser arrastadas
         if (!assay || assay.type === 'férias') return;
 
-        // Previne o comportamento padrão (como seleção de texto)
         e.preventDefault();
 
-        // --- INÍCIO DA CORREÇÃO ---
+        // 1. Mede o elemento original
+        const targetRect = originalTarget.getBoundingClientRect();
 
-        // 1. Captura a posição e dimensões exatas do elemento na tela ANTES de qualquer alteração.
-        const targetRect = target.getBoundingClientRect();
+        // 2. CRIA O "FANTASMA": Clona o elemento original
+        const ghost = originalTarget.cloneNode(true);
+        ghost.id = 'gantt-ghost-element'; // Atribui um ID para fácil remoção
 
-        // 2. Define o estado de "arrastando" e armazena o estado inicial do ensaio.
-        state.isDragging = true;
-        state.dragTarget = target;
-        state.initialAssay = { ...assay };
-
-        // 3. CALCULA E ARMAZENA O OFFSET: A distância entre o clique do mouse e o canto superior esquerdo do elemento.
-        //    Esta é a parte crucial para evitar o "pulo".
-        state.dragOffset = {
-            x: e.clientX - targetRect.left,
-            y: e.clientY - targetRect.top
-        };
-
-        // 4. TRANSFORMA O ELEMENTO EM 'FIXED' SEM PULO:
-        //    Aplica todos os estilos de uma só vez para que o elemento se torne 'fixed',
-        //    mas o posiciona exatamente onde ele estava na tela, usando as coordenadas de targetRect.
-        Object.assign(target.style, {
-            position: 'fixed',
+        // 3. ESTILIZA E POSICIONA O FANTASMA: Usa as medidas do original para posicionar o clone perfeitamente sobre ele.
+        Object.assign(ghost.style, {
             left: `${targetRect.left}px`,
             top: `${targetRect.top}px`,
             width: `${targetRect.width}px`,
             height: `${targetRect.height}px`,
-            zIndex: '1000', // Aumenta o z-index para ficar acima de tudo
-            pointerEvents: 'none', // Impede que o próprio elemento interfira em eventos de 'drop'
-            margin: '0',
-            transform: 'none' // Reseta qualquer transformação que possa interferir no posicionamento
         });
+        document.body.appendChild(ghost); // Adiciona o fantasma ao corpo do documento
 
-        // --- FIM DA CORREÇÃO ---
+        // 4. ATUALIZA O ESTADO: Agora, o alvo do arraste é o fantasma.
+        state.isDragging = true;
+        state.dragTarget = ghost; // O alvo agora é o fantasma!
+        state.originalDragTarget = originalTarget; // Guardamos uma referência ao original
+        state.initialAssay = { ...assay };
+        state.dragOffset = {
+            x: e.clientX - targetRect.left,
+            y: e.clientY - targetRect.top
+        };
+        
+        // 5. "Esconde" o elemento original, marcando sua posição de origem
+        originalTarget.classList.add('dragging-source');
 
-        target.classList.add('dragging'); // Adiciona classe para efeitos visuais (ex: opacidade, sombra)
-        target.style.cursor = 'grabbing';
-        document.body.style.userSelect = 'none'; // Impede a seleção de texto na página
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'grabbing';
     },
 
-    /**
-     * Lida com o movimento de um item arrastado.
-     * @param {Event} e - O evento de `pointermove`.
-     */
     handleDrag: (e) => {
         if (!state.isDragging || !state.dragTarget) return;
-        
-        // POSICIONA O ELEMENTO CORRETAMENTE:
-        // Pega a posição atual do mouse e subtrai o offset inicial.
+        e.preventDefault();
+
+        // Move o fantasma de acordo com o mouse e o offset inicial
         const newX = e.clientX - state.dragOffset.x;
         const newY = e.clientY - state.dragOffset.y;
-
         state.dragTarget.style.left = `${newX}px`;
         state.dragTarget.style.top = `${newY}px`;
-        
-        e.preventDefault();
     },
 
-    /**
-     * Finaliza o processo de arrastar e soltar.
-     * @param {Event} e - O evento de `pointerup`.
-     */
     handleDragEnd: (e) => {
-        if (!state.isDragging || !state.dragTarget || !state.initialAssay) {
+        if (!state.isDragging || !state.dragTarget) {
             dragHandlers.resetDragState();
             return;
         }
+        e.preventDefault();
 
-        // Esconde temporariamente o elemento arrastado para detectar o que está por baixo do cursor
-        state.dragTarget.style.visibility = 'hidden';
-        const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
-        state.dragTarget.style.visibility = 'visible';
-
-        const dropTarget = elementUnderCursor ? elementUnderCursor.closest('.gantt-event') : null;
-
-        // Lógica para TROCAR de lugar com outra tarefa
-        if (dropTarget && dropTarget !== state.dragTarget) {
-            const draggedAssayId = state.initialAssay.id;
-            const targetAssayId = parseInt(dropTarget.dataset.assayId, 10);
-
-            const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
-            const draggedAssay = allAssays.find(a => a.id === draggedAssayId);
-            const targetAssay = allAssays.find(a => a.id === targetAssayId);
-
-            if (draggedAssay && targetAssay && targetAssay.type !== 'férias') {
-                undoManager.saveState(); 
-
-                const tempStartDate = draggedAssay.startDate;
-                const tempEndDate = draggedAssay.endDate;
-                const tempSetup = draggedAssay.setup;
-
-                draggedAssay.startDate = targetAssay.startDate;
-                draggedAssay.endDate = targetAssay.endDate;
-                draggedAssay.setup = targetAssay.setup;
-
-                targetAssay.startDate = tempStartDate;
-                targetAssay.endDate = tempEndDate;
-                targetAssay.setup = tempSetup;
-                
-                utils.showToast(`Posição trocada com o ensaio: ${targetAssay.protocol}`);
-
-                state.hasUnsavedChanges = true;
-                ui.toggleScheduleActions(true);
-                renderers.renderGanttChart();
-                dragHandlers.resetDragState();
-                return;
-            }
-        }
-        
-        // Lógica para MOVER para um novo local no grid
-        const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
+        // Usa a posição final do FANTASMA para os cálculos
         const finalRect = state.dragTarget.getBoundingClientRect();
+
+        // A lógica de cálculo da nova posição continua a mesma
+        const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
         const scrollLeft = DOM.ganttGridContainer.parentElement.scrollLeft;
-        
         const relativeLeft = (finalRect.left - containerRect.left) + scrollLeft;
-        
         const startDayIndex = Math.round(relativeLeft / DRAG_CONFIG.CELL_WIDTH);
-        
+
+        // ... (o restante da lógica de cálculo de data e de linha permanece igual)
         const firstDate = utils.parseDate(new Date(state.ganttStart).toISOString().split('T')[0]);
         const newStartDate = new Date(firstDate);
         newStartDate.setDate(newStartDate.getDate() + startDayIndex);
-        
         const originalStart = utils.parseDate(state.initialAssay.startDate);
         const originalEnd = utils.parseDate(state.initialAssay.endDate);
         const durationInMillis = originalEnd.getTime() - originalStart.getTime();
@@ -7896,7 +7835,8 @@ const dragHandlers = {
                 newCategoryName = row.dataset.category;
             }
         });
-
+        
+        // ATUALIZA OS DADOS DO ENSAIO ORIGINAL (não do fantasma)
         const currentIsSafety = state.safetyCategories.some(cat => cat.id === state.initialAssay.setup);
         const assayIndex = (currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays).findIndex(a => a.id === state.initialAssay.id);
 
@@ -7915,7 +7855,6 @@ const dragHandlers = {
             if (newCategoryName) {
                 const destCategory = state.efficiencyCategories.find(c => c.name === newCategoryName) || 
                                      state.safetyCategories.find(c => c.name === newCategoryName);
-
                 if (destCategory) { 
                     newSetup = destCategory.id;
                     newIsSafety = state.safetyCategories.some(c => c.id === newSetup);
@@ -7943,34 +7882,33 @@ const dragHandlers = {
 
             state.hasUnsavedChanges = true;
             ui.toggleScheduleActions(true);
-            renderers.renderGanttChart();
-        } else {
-            renderers.renderGanttChart(); // Renderiza de volta à posição original se algo der errado
         }
-
+        
+        // O reset vai remover o fantasma, e o re-render vai mostrar o item original na nova posição
         dragHandlers.resetDragState();
-        e.preventDefault();
+        renderers.renderGanttChart();
     },
 
-    /** Reseta o estado do drag and drop. */
     resetDragState: () => {
-        if (state.dragTarget) {
-            state.dragTarget.classList.remove('dragging');
-            // Remove os estilos inline aplicados durante o arraste para que ele volte ao normal
-            state.dragTarget.style.position = '';
-            state.dragTarget.style.left = '';
-            state.dragTarget.style.top = '';
-            state.dragTarget.style.width = '';
-            state.dragTarget.style.height = '';
-            state.dragTarget.style.zIndex = '';
-            state.dragTarget.style.cursor = '';
-            state.dragTarget.style.pointerEvents = '';
-            state.dragTarget.style.margin = '';
-            state.dragTarget.style.transform = '';
+        // Remove o fantasma do DOM
+        const ghost = document.getElementById('gantt-ghost-element');
+        if (ghost) {
+            ghost.remove();
         }
+
+        // Limpa a classe do elemento original
+        if (state.originalDragTarget) {
+            state.originalDragTarget.classList.remove('dragging-source');
+        }
+
+        // Reseta o cursor e a seleção de texto
         document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        
+        // Limpa o estado
         state.isDragging = false;
         state.dragTarget = null;
+        state.originalDragTarget = null;
         state.initialAssay = null;
         state.dragOffset = { x: 0, y: 0 };
     }
