@@ -2627,7 +2627,12 @@ const dashboardUtils = {
             // Filtra apenas ensaios com datas válidas e dentro do período
             if (!assay.isValidDate) return false;
             
-            return assay.parsedDate >= today && assay.parsedDate <= endDate;
+            // CONDIÇÕES ORIGINAIS E NOVAS COMBINADAS
+            const isWithinDateRange = assay.parsedDate >= today && assay.parsedDate <= endDate;
+            const isNotPending = assay.status.toLowerCase() !== 'pendente';
+            const isAssignedToTerminal = assay.setup != null; // Garante que o ensaio tem um terminal definido
+
+            return isWithinDateRange && isNotPending && isAssignedToTerminal;
         })
         .sort((a, b) => a.parsedDate - b.parsedDate);
 
@@ -5091,7 +5096,8 @@ const dataHandlers = {
             calibrationEquipments: state.calibrationEquipments,
             settings: state.settings,
             efficiencyCategories: state.efficiencyCategories,
-            safetyCategories: state.safetyCategories
+            safetyCategories: state.safetyCategories,
+            systemUsers: state.systemUsers
         };
         try {
             JSON.stringify(dataToSave);
@@ -7740,51 +7746,60 @@ const dragHandlers = {
      * @param {Event} e - O evento de `pointerdown`.
      */
     handleDragStart: (e) => {
-    // Impede o drag em botões internos ou com o botão direito do mouse
-    if (e.target.closest('.btn-view-details') || e.button !== 0) return;
+        // Impede o drag em botões internos ou com o botão direito do mouse
+        if (e.target.closest('.btn-view-details') || e.button !== 0) return;
 
-    const target = e.target.closest('.gantt-event');
-    if (!target) return;
+        const target = e.target.closest('.gantt-event');
+        if (!target) return;
 
-    const assayId = parseInt(target.dataset.assayId, 10);
-    const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
-    const assay = allAssays.find(a => a.id === assayId);
+        const assayId = parseInt(target.dataset.assayId, 10);
+        const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
+        const assay = allAssays.find(a => a.id === assayId);
 
-    // Férias não podem ser arrastadas
-    if (!assay || assay.type === 'férias') return;
+        // Férias não podem ser arrastadas
+        if (!assay || assay.type === 'férias') return;
 
-    // Previne o comportamento padrão (como seleção de texto)
-    e.preventDefault();
+        // Previne o comportamento padrão (como seleção de texto)
+        e.preventDefault();
 
-    // 1. Captura a posição exata do elemento ANTES de qualquer alteração
-    const targetRect = target.getBoundingClientRect();
+        // --- INÍCIO DA CORREÇÃO ---
 
-    // 2. Define o estado de "arrastando"
-    state.isDragging = true;
-    state.dragTarget = target;
-    state.initialAssay = { ...assay };
-    state.dragOffset = {
-        x: e.clientX - targetRect.left,
-        y: e.clientY - targetRect.top
-    };
+        // 1. Captura a posição e dimensões exatas do elemento na tela ANTES de qualquer alteração.
+        const targetRect = target.getBoundingClientRect();
 
-    // 3. Aplica todos os estilos necessários de uma só vez para a transição suave
-    Object.assign(target.style, {
-        position: 'fixed',
-        left: `${targetRect.left}px`,
-        top: `${targetRect.top}px`,
-        width: `${targetRect.width}px`,
-        height: `${targetRect.height}px`,
-        zIndex: '15',
-        pointerEvents: 'none', // Impede que o elemento interfira com a detecção de onde ele foi solto
-        margin: '0',
-        transform: 'none' // Reseta qualquer transformação CSS que possa interferir
-    });
+        // 2. Define o estado de "arrastando" e armazena o estado inicial do ensaio.
+        state.isDragging = true;
+        state.dragTarget = target;
+        state.initialAssay = { ...assay };
 
-    target.classList.add('dragging'); // Adiciona classe para efeitos visuais (ex: opacidade, sombra)
-    target.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none'; // Impede a seleção de texto na página
-},
+        // 3. CALCULA E ARMAZENA O OFFSET: A distância entre o clique do mouse e o canto superior esquerdo do elemento.
+        //    Esta é a parte crucial para evitar o "pulo".
+        state.dragOffset = {
+            x: e.clientX - targetRect.left,
+            y: e.clientY - targetRect.top
+        };
+
+        // 4. TRANSFORMA O ELEMENTO EM 'FIXED' SEM PULO:
+        //    Aplica todos os estilos de uma só vez para que o elemento se torne 'fixed',
+        //    mas o posiciona exatamente onde ele estava na tela, usando as coordenadas de targetRect.
+        Object.assign(target.style, {
+            position: 'fixed',
+            left: `${targetRect.left}px`,
+            top: `${targetRect.top}px`,
+            width: `${targetRect.width}px`,
+            height: `${targetRect.height}px`,
+            zIndex: '1000', // Aumenta o z-index para ficar acima de tudo
+            pointerEvents: 'none', // Impede que o próprio elemento interfira em eventos de 'drop'
+            margin: '0',
+            transform: 'none' // Reseta qualquer transformação que possa interferir no posicionamento
+        });
+
+        // --- FIM DA CORREÇÃO ---
+
+        target.classList.add('dragging'); // Adiciona classe para efeitos visuais (ex: opacidade, sombra)
+        target.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none'; // Impede a seleção de texto na página
+    },
 
     /**
      * Lida com o movimento de um item arrastado.
@@ -7792,10 +7807,15 @@ const dragHandlers = {
      */
     handleDrag: (e) => {
         if (!state.isDragging || !state.dragTarget) return;
+        
+        // POSICIONA O ELEMENTO CORRETAMENTE:
+        // Pega a posição atual do mouse e subtrai o offset inicial.
         const newX = e.clientX - state.dragOffset.x;
         const newY = e.clientY - state.dragOffset.y;
+
         state.dragTarget.style.left = `${newX}px`;
         state.dragTarget.style.top = `${newY}px`;
+        
         e.preventDefault();
     },
 
@@ -7804,144 +7824,149 @@ const dragHandlers = {
      * @param {Event} e - O evento de `pointerup`.
      */
     handleDragEnd: (e) => {
-    if (!state.isDragging || !state.dragTarget || !state.initialAssay) {
-        dragHandlers.resetDragState();
-        return;
-    }
+        if (!state.isDragging || !state.dragTarget || !state.initialAssay) {
+            dragHandlers.resetDragState();
+            return;
+        }
 
-    // Lógica para detetar troca de containers (já implementada)
-    state.dragTarget.style.display = 'none';
-    const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
-    state.dragTarget.style.display = '';
-    const dropTarget = elementUnderCursor ? elementUnderCursor.closest('.gantt-event') : null;
+        // Esconde temporariamente o elemento arrastado para detectar o que está por baixo do cursor
+        state.dragTarget.style.visibility = 'hidden';
+        const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
+        state.dragTarget.style.visibility = 'visible';
 
+        const dropTarget = elementUnderCursor ? elementUnderCursor.closest('.gantt-event') : null;
 
-    // 2. Verifica se o alvo é um outro container válido
-    if (dropTarget && dropTarget !== state.dragTarget) {
-        const draggedAssayId = state.initialAssay.id;
-        const targetAssayId = parseInt(dropTarget.dataset.assayId, 10);
+        // Lógica para TROCAR de lugar com outra tarefa
+        if (dropTarget && dropTarget !== state.dragTarget) {
+            const draggedAssayId = state.initialAssay.id;
+            const targetAssayId = parseInt(dropTarget.dataset.assayId, 10);
 
-        const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
-        const draggedAssay = allAssays.find(a => a.id === draggedAssayId);
-        const targetAssay = allAssays.find(a => a.id === targetAssayId);
+            const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays];
+            const draggedAssay = allAssays.find(a => a.id === draggedAssayId);
+            const targetAssay = allAssays.find(a => a.id === targetAssayId);
 
-        // 3. Se ambos os ensaios forem encontrados, troca as suas datas
-        if (draggedAssay && targetAssay) {
-            undoManager.saveState(); // Salva o estado antes da troca
+            if (draggedAssay && targetAssay && targetAssay.type !== 'férias') {
+                undoManager.saveState(); 
 
-            // Armazena as datas do container que foi arrastado
-            const tempStartDate = draggedAssay.startDate;
-            const tempEndDate = draggedAssay.endDate;
+                const tempStartDate = draggedAssay.startDate;
+                const tempEndDate = draggedAssay.endDate;
+                const tempSetup = draggedAssay.setup;
 
-            // Atribui as datas do alvo ao container arrastado
-            draggedAssay.startDate = targetAssay.startDate;
-            draggedAssay.endDate = targetAssay.endDate;
+                draggedAssay.startDate = targetAssay.startDate;
+                draggedAssay.endDate = targetAssay.endDate;
+                draggedAssay.setup = targetAssay.setup;
 
-            // Atribui as datas originais do container arrastado ao alvo
-            targetAssay.startDate = tempStartDate;
-            targetAssay.endDate = tempEndDate;
+                targetAssay.startDate = tempStartDate;
+                targetAssay.endDate = tempEndDate;
+                targetAssay.setup = tempSetup;
+                
+                utils.showToast(`Posição trocada com o ensaio: ${targetAssay.protocol}`);
+
+                state.hasUnsavedChanges = true;
+                ui.toggleScheduleActions(true);
+                renderers.renderGanttChart();
+                dragHandlers.resetDragState();
+                return;
+            }
+        }
+        
+        // Lógica para MOVER para um novo local no grid
+        const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
+        const finalRect = state.dragTarget.getBoundingClientRect();
+        const scrollLeft = DOM.ganttGridContainer.parentElement.scrollLeft;
+        
+        const relativeLeft = (finalRect.left - containerRect.left) + scrollLeft;
+        
+        const startDayIndex = Math.round(relativeLeft / DRAG_CONFIG.CELL_WIDTH);
+        
+        const firstDate = utils.parseDate(new Date(state.ganttStart).toISOString().split('T')[0]);
+        const newStartDate = new Date(firstDate);
+        newStartDate.setDate(newStartDate.getDate() + startDayIndex);
+        
+        const originalStart = utils.parseDate(state.initialAssay.startDate);
+        const originalEnd = utils.parseDate(state.initialAssay.endDate);
+        const durationInMillis = originalEnd.getTime() - originalStart.getTime();
+        const newEndDate = new Date(newStartDate.getTime() + durationInMillis);
+
+        let newCategoryName = null;
+        const allRows = DOM.ganttGridContainer.querySelectorAll('.gantt-row-container');
+        allRows.forEach(row => {
+            const rowRect = row.getBoundingClientRect();
+            if (finalRect.top + (finalRect.height / 2) >= rowRect.top && finalRect.top + (finalRect.height / 2) < rowRect.bottom) {
+                newCategoryName = row.dataset.category;
+            }
+        });
+
+        const currentIsSafety = state.safetyCategories.some(cat => cat.id === state.initialAssay.setup);
+        const assayIndex = (currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays).findIndex(a => a.id === state.initialAssay.id);
+
+        if (assayIndex !== -1) {
+            undoManager.saveState();
             
-            utils.showToast(`Posição trocada com o ensaio: ${targetAssay.protocol}`);
+            const targetArray = currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays;
+            const updatedAssay = { ...targetArray[assayIndex] };
+            updatedAssay.startDate = newStartDate.toISOString().split('T')[0];
+            updatedAssay.endDate = newEndDate.toISOString().split('T')[0];
+
+            let newSetup = updatedAssay.setup;
+            let newIsSafety = currentIsSafety;
+            let categoryChanged = false;
+
+            if (newCategoryName) {
+                const destCategory = state.efficiencyCategories.find(c => c.name === newCategoryName) || 
+                                     state.safetyCategories.find(c => c.name === newCategoryName);
+
+                if (destCategory) { 
+                    newSetup = destCategory.id;
+                    newIsSafety = state.safetyCategories.some(c => c.id === newSetup);
+                    if (updatedAssay.status === 'pendente') updatedAssay.status = 'aguardando';
+                } else if (newCategoryName === 'Pendentes') {
+                    newSetup = null; 
+                    newIsSafety = false;
+                    updatedAssay.status = 'pendente';
+                }
+            }
+            
+            updatedAssay.setup = newSetup;
+            categoryChanged = currentIsSafety !== newIsSafety;
+
+            if (categoryChanged) {
+                targetArray.splice(assayIndex, 1);
+                if (newIsSafety) {
+                    state.safetyScheduledAssays.push(updatedAssay);
+                } else {
+                    state.scheduledAssays.push(updatedAssay);
+                }
+            } else {
+                targetArray[assayIndex] = updatedAssay;
+            }
 
             state.hasUnsavedChanges = true;
             ui.toggleScheduleActions(true);
             renderers.renderGanttChart();
-            dragHandlers.resetDragState();
-            return; // Termina a função aqui, pois a troca foi concluída
-        }
-    }
-    const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
-    const finalRect = state.dragTarget.getBoundingClientRect();
-    const scrollLeft = DOM.ganttGridContainer.parentElement.scrollLeft;
-    const relativeLeft = (finalRect.left - containerRect.left) + scrollLeft;
-    const startDayIndex = Math.round(relativeLeft / DRAG_CONFIG.CELL_WIDTH);
-    const firstDate = utils.parseDate(new Date(state.ganttStart).toISOString().split('T')[0]);
-    const newStartDate = new Date(firstDate);
-    newStartDate.setDate(newStartDate.getDate() + startDayIndex);
-    const originalStart = utils.parseDate(state.initialAssay.startDate);
-    const originalEnd = utils.parseDate(state.initialAssay.endDate);
-    const durationInMillis = originalEnd.getTime() - originalStart.getTime();
-    const newEndDate = new Date(newStartDate.getTime() + durationInMillis);
-
-    let newCategoryName = null;
-    const allRows = DOM.ganttGridContainer.querySelectorAll('.gantt-row-container');
-    allRows.forEach(row => {
-        const rowRect = row.getBoundingClientRect();
-        if (finalRect.top + (finalRect.height / 2) >= rowRect.top && finalRect.top + (finalRect.height / 2) < rowRect.bottom) {
-            newCategoryName = row.dataset.category;
-        }
-    });
-
-    const currentIsSafety = state.safetyCategories.some(cat => cat.id === state.initialAssay.setup);
-    const assayIndex = (currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays).findIndex(a => a.id === state.initialAssay.id);
-
-    if (assayIndex !== -1) {
-        undoManager.saveState();
-        
-        const targetArray = currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays;
-        const updatedAssay = { ...targetArray[assayIndex] };
-        updatedAssay.startDate = newStartDate.toISOString().split('T')[0];
-        updatedAssay.endDate = newEndDate.toISOString().split('T')[0];
-
-        let newSetup = updatedAssay.setup;
-        let newIsSafety = currentIsSafety;
-        let categoryChanged = false;
-
-        // --- INÍCIO DA CORREÇÃO: Lógica Dinâmica para Encontrar o Destino ---
-        if (newCategoryName) {
-            const destCategory = state.efficiencyCategories.find(c => c.name === newCategoryName) || 
-                                 state.safetyCategories.find(c => c.name === newCategoryName);
-
-            if (destCategory) { // Se encontrou uma categoria dinâmica válida (eficiência ou segurança)
-                newSetup = destCategory.id;
-                newIsSafety = state.safetyCategories.some(c => c.id === newSetup);
-                if (updatedAssay.status === 'pendente') updatedAssay.status = 'aguardando';
-            } else if (newCategoryName === 'Pendentes') { // Caso especial para a linha de Pendentes
-                newSetup = null; // Pendentes não têm setup
-                newIsSafety = false; // Pendentes são sempre de eficiência
-                updatedAssay.status = 'pendente';
-            }
-        }
-        // --- FIM DA CORREÇÃO ---
-
-        updatedAssay.setup = newSetup;
-        categoryChanged = currentIsSafety !== newIsSafety;
-
-        // Move o ensaio entre as arrays se o tipo de categoria (segurança/eficiência) mudou
-        if (categoryChanged) {
-            targetArray.splice(assayIndex, 1);
-            if (newIsSafety) {
-                state.safetyScheduledAssays.push(updatedAssay);
-            } else {
-                state.scheduledAssays.push(updatedAssay);
-            }
         } else {
-            targetArray[assayIndex] = updatedAssay;
+            renderers.renderGanttChart(); // Renderiza de volta à posição original se algo der errado
         }
 
-        state.hasUnsavedChanges = true;
-        ui.toggleScheduleActions(true);
-        renderers.renderGanttChart();
-    } else {
-        renderers.renderGanttChart();
-    }
-
-    dragHandlers.resetDragState();
-    e.preventDefault();
-},
+        dragHandlers.resetDragState();
+        e.preventDefault();
+    },
 
     /** Reseta o estado do drag and drop. */
     resetDragState: () => {
         if (state.dragTarget) {
             state.dragTarget.classList.remove('dragging');
+            // Remove os estilos inline aplicados durante o arraste para que ele volte ao normal
             state.dragTarget.style.position = '';
-            state.dragTarget.style.width = '';
-            state.dragTarget.style.height = '';
             state.dragTarget.style.left = '';
             state.dragTarget.style.top = '';
+            state.dragTarget.style.width = '';
+            state.dragTarget.style.height = '';
             state.dragTarget.style.zIndex = '';
             state.dragTarget.style.cursor = '';
             state.dragTarget.style.pointerEvents = '';
+            state.dragTarget.style.margin = '';
+            state.dragTarget.style.transform = '';
         }
         document.body.style.userSelect = '';
         state.isDragging = false;

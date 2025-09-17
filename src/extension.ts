@@ -1906,47 +1906,7 @@ export function activate(context: vscode.ExtensionContext) {
                             error: 'Erro ao salvar usuários do sistema'
                         });
                     }
-                    break;
-                case 'saveSystemUsers':
-                    try {
-                        const dbPath = getDbPath();
-                        if (!dbPath) {
-                            panel.webview.postMessage({
-                                command: 'saveSystemUsersResult',
-                                success: false,
-                                error: 'Caminho do banco de dados não encontrado'
-                            });
-                            return;
-                        }
-                        
-                        // 1. Lê o conteúdo atual do banco de dados
-                        const dbContent = fs.readFileSync(dbPath, 'utf8');
-                        const database = JSON.parse(dbContent);
-                        
-                        // 2. Atualiza apenas a seção de usuários do sistema
-                        database.systemUsers = message.data.systemUsers;
-                        
-                        // 3. Salva o arquivo completo de volta no disco
-                        fs.writeFileSync(dbPath, JSON.stringify(database, null, 2), 'utf8');
-                        
-                        // 4. Envia uma mensagem de sucesso de volta para o webview
-                        panel.webview.postMessage({
-                            command: 'saveSystemUsersResult',
-                            success: true,
-                            message: 'Usuários do sistema salvos com sucesso!'
-                        });
-                        
-                        console.log('✅ Usuários do sistema salvos:', Object.keys(message.data.systemUsers));
-                    } catch (err) {
-                        handleError(err, 'ERRO AO SALVAR USUÁRIOS DO SISTEMA:');
-                        panel.webview.postMessage({
-                            command: 'saveSystemUsersResult',
-                            success: false,
-                            error: 'Erro ao salvar usuários do sistema'
-                        });
-                    }
-                    break;
-                        
+                    break;                        
                 case 'bulkDelete':
                     console.log('🔍 Processando comando bulkDelete no backend:', message.data);
                     try {
