@@ -1,22 +1,6 @@
 {
   "inventory": [
     {
-      "id": 1754506006837,
-      "reagent": "Perborato",
-      "manufacturer": "MHC",
-      "lot": "30018",
-      "quantity": 15.360000000002401,
-      "validity": "2026-11-11"
-    },
-    {
-      "id": 1754506021345,
-      "reagent": "Perborato",
-      "manufacturer": "MHC",
-      "lot": "30588",
-      "quantity": 9524.000000000002,
-      "validity": "2027-03-19"
-    },
-    {
       "id": 1754505954408,
       "reagent": "Pó Base",
       "manufacturer": "MHC",
@@ -29,7 +13,7 @@
       "reagent": "Pó Base",
       "manufacturer": "Swissatest",
       "lot": "102-503",
-      "quantity": 79072.13600000006,
+      "quantity": 61300,
       "validity": "2026-03-31"
     },
     {
@@ -37,7 +21,7 @@
       "reagent": "TAED",
       "manufacturer": "MHC",
       "lot": "30018",
-      "quantity": 2315.7599999999998,
+      "quantity": 2030,
       "validity": "2026-11-11"
     },
     {
@@ -53,7 +37,7 @@
       "reagent": "TAED",
       "manufacturer": "Swissatest",
       "lot": "2141012704-677",
-      "quantity": 1615.1439999999984,
+      "quantity": 2650,
       "validity": "2026-07-31"
     },
     {
@@ -61,16 +45,56 @@
       "reagent": "Tiras de sujidade",
       "manufacturer": "Swissatest",
       "lot": "359",
-      "quantity": 618,
-      "validity": "2025-08-31"
+      "quantity": 798,
+      "validity": "2025-09-30"
     },
     {
       "id": 1756378562518,
       "reagent": "Pó Base",
       "manufacturer": "MHC",
       "lot": "30018",
-      "quantity": 57437.840000000026,
+      "quantity": 45605,
       "validity": "2026-11-11"
+    },
+    {
+      "id": 1757966813444,
+      "reagent": "Perborato",
+      "manufacturer": "MHC",
+      "lot": "31303",
+      "quantity": 43855,
+      "validity": "2027-08-14"
+    },
+    {
+      "id": 1757967069377,
+      "reagent": "Pó Base",
+      "manufacturer": "Swissatest",
+      "lot": "132-812",
+      "quantity": 224330,
+      "validity": "2027-01-31"
+    },
+    {
+      "id": 1757967153834,
+      "reagent": "TAED",
+      "manufacturer": "MHC",
+      "lot": "31303",
+      "quantity": 6635,
+      "validity": "2027-08-14"
+    },
+    {
+      "id": 1757967217058,
+      "reagent": "Pó Base",
+      "manufacturer": "MHC",
+      "lot": "31303",
+      "quantity": 173250,
+      "validity": "2027-08-14"
+    },
+    {
+      "id": 1757967521296,
+      "reagent": "Tiras de sujidade",
+      "manufacturer": "Swissatest",
+      "lot": "361",
+      "quantity": 6690,
+      "validity": "2026-07-31"
     }
   ],
   "historicalAssays": [
@@ -3782,7 +3806,7 @@
       "startDate": "2025-08-11",
       "endDate": "2025-08-22",
       "setup": 2,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -3811,7 +3835,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0094/2025"
     },
     {
       "id": 1755622003198,
@@ -3824,7 +3848,7 @@
       "startDate": "2025-08-11",
       "endDate": "2025-08-22",
       "setup": 3,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -3853,7 +3877,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0096/2025"
     },
     {
       "id": 1755622355073,
@@ -3866,7 +3890,7 @@
       "startDate": "2025-08-14",
       "endDate": "2025-08-27",
       "setup": 5,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -3895,7 +3919,7 @@
           }
         ]
       },
-      "report": "Pendente",
+      "report": "LAV0093/2025",
       "observacoes": ""
     },
     {
@@ -3909,7 +3933,7 @@
       "startDate": "2025-08-13",
       "endDate": "2025-08-25",
       "setup": 7,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "observacoes": "",
       "cycles": 10,
@@ -3939,7 +3963,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0097/2025"
     },
     {
       "id": 1755622578139,
@@ -3952,7 +3976,7 @@
       "startDate": "2025-08-25",
       "endDate": "2025-08-29",
       "setup": 6,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "homologation",
       "observacoes": "",
       "cycles": 5,
@@ -3982,7 +4006,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0092/2025"
     },
     {
       "id": 1755622239949,
@@ -4050,6 +4074,269 @@
         "perborato": [
           {
             "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
+    },
+    {
+      "id": 1755622758133,
+      "protocol": "25085440",
+      "orcamento": "5611",
+      "assayManufacturer": "Samsung",
+      "model": "WD11A4453BW/AZ",
+      "nominalLoad": 11,
+      "tensao": "127V",
+      "startDate": "2025-08-29",
+      "endDate": "2025-09-11",
+      "setup": 3,
+      "status": "relatorio",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "LAV0098/2025"
+    },
+    {
+      "id": 1755622685678,
+      "protocol": "25075184",
+      "orcamento": "5611",
+      "assayManufacturer": "Samsung",
+      "model": "WD13T504DBW/AZ",
+      "nominalLoad": 13,
+      "tensao": "127V",
+      "startDate": "2025-08-29",
+      "endDate": "2025-09-11",
+      "setup": 2,
+      "status": "concluido",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
+    },
+    {
+      "id": 1755622640282,
+      "protocol": "25085370",
+      "orcamento": "5611",
+      "assayManufacturer": "Samsung",
+      "model": "WH17DBH570GVAZ",
+      "nominalLoad": 17,
+      "tensao": "127V",
+      "startDate": "2025-09-01",
+      "endDate": "2025-09-15",
+      "setup": 1,
+      "status": "concluido",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
+    },
+    {
+      "id": 1755622913876,
+      "protocol": "25075186",
+      "orcamento": "5611",
+      "assayManufacturer": "Samsung",
+      "model": "WD11T504DBXFAZ",
+      "nominalLoad": 11,
+      "tensao": "220V",
+      "startDate": "2025-09-01",
+      "endDate": "2025-09-15",
+      "setup": 7,
+      "status": "relatorio",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "LAV0099/2025"
+    },
+    {
+      "id": 1755623115290,
+      "protocol": "25085752",
+      "orcamento": "5977",
+      "assayManufacturer": "Midea",
+      "model": "Avant 10,5kg",
+      "nominalLoad": 10.5,
+      "tensao": "220V",
+      "startDate": "2025-09-01",
+      "endDate": "2025-09-15",
+      "setup": 8,
+      "status": "concluido",
+      "type": "homologation",
+      "observacoes": "",
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
+    },
+    {
+      "id": 1755622837081,
+      "protocol": "25085750",
+      "orcamento": "5977",
+      "assayManufacturer": "Midea",
+      "model": "Avant 10,5kg",
+      "nominalLoad": 10.5,
+      "tensao": "127V",
+      "startDate": "2025-09-02",
+      "endDate": "2025-09-15",
+      "setup": 4,
+      "status": "concluido",
+      "type": "homologation",
+      "observacoes": "",
+      "cycles": 10,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "31303",
             "cycles": 10
           }
         ],
@@ -6890,8 +7177,10 @@
       "endDate": "2025-07-04",
       "setup": 1,
       "status": "relatorio",
-      "type": "acp",
-      "observacoes": ""
+      "type": "secadora",
+      "observacoes": "",
+      "reportDate": "",
+      "cycles": 0
     },
     {
       "id": 1755612674518,
@@ -7881,7 +8170,7 @@
       "startDate": "2025-08-11",
       "endDate": "2025-08-22",
       "setup": 2,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -7910,7 +8199,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0094/2025"
     },
     {
       "id": 1755622003198,
@@ -7923,7 +8212,7 @@
       "startDate": "2025-08-11",
       "endDate": "2025-08-22",
       "setup": 3,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -7952,7 +8241,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0096/2025"
     },
     {
       "id": 1755622077098,
@@ -8050,7 +8339,7 @@
       "startDate": "2025-08-14",
       "endDate": "2025-08-27",
       "setup": 5,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "cycles": 10,
       "lots": {
@@ -8079,7 +8368,7 @@
           }
         ]
       },
-      "report": "Pendente",
+      "report": "LAV0093/2025",
       "observacoes": ""
     },
     {
@@ -8135,7 +8424,7 @@
       "startDate": "2025-08-25",
       "endDate": "2025-08-29",
       "setup": 6,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "homologation",
       "observacoes": "",
       "cycles": 5,
@@ -8165,7 +8454,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0092/2025"
     },
     {
       "id": 1755622640282,
@@ -8175,13 +8464,45 @@
       "model": "WH17DBH570GVAZ",
       "nominalLoad": 17,
       "tensao": "127V",
-      "startDate": "2025-09-01",
-      "endDate": "2025-09-16",
+      "startDate": "2025-08-29",
+      "endDate": "2025-09-11",
       "setup": 1,
-      "status": "andamento",
+      "status": "concluido",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente",
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1755622685678,
@@ -8191,13 +8512,40 @@
       "model": "WD13T504DBW/AZ",
       "nominalLoad": 13,
       "tensao": "127V",
-      "startDate": "2025-09-01",
-      "endDate": "2025-09-16",
+      "startDate": "2025-08-29",
+      "endDate": "2025-09-11",
       "setup": 2,
-      "status": "andamento",
+      "status": "concluido",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
     },
     {
       "id": 1755622758133,
@@ -8207,13 +8555,40 @@
       "model": "WD11A4453BW/AZ",
       "nominalLoad": 11,
       "tensao": "127V",
-      "startDate": "2025-09-01",
-      "endDate": "2025-09-16",
+      "startDate": "2025-08-29",
+      "endDate": "2025-09-11",
       "setup": 3,
-      "status": "andamento",
+      "status": "relatorio",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "LAV0098/2025"
     },
     {
       "id": 1755622837081,
@@ -8224,12 +8599,44 @@
       "nominalLoad": 10.5,
       "tensao": "127V",
       "startDate": "2025-09-02",
-      "endDate": "2025-09-17",
+      "endDate": "2025-09-15",
       "setup": 4,
-      "status": "andamento",
+      "status": "concluido",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 10,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "31303",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
     },
     {
       "id": 1755622913876,
@@ -8240,12 +8647,39 @@
       "nominalLoad": 11,
       "tensao": "220V",
       "startDate": "2025-09-01",
-      "endDate": "2025-09-16",
+      "endDate": "2025-09-15",
       "setup": 7,
-      "status": "andamento",
+      "status": "relatorio",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "LAV0099/2025"
     },
     {
       "id": 1755623046226,
@@ -8255,13 +8689,18 @@
       "model": "WA17CG6746BVBZ",
       "nominalLoad": 17,
       "tensao": "220V",
-      "startDate": "2025-10-09",
-      "endDate": "2025-10-17",
+      "startDate": "2025-10-06",
+      "endDate": "2025-10-13",
       "setup": 5,
       "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1755623115290,
@@ -8271,13 +8710,40 @@
       "model": "Avant 10,5kg",
       "nominalLoad": 10.5,
       "tensao": "220V",
-      "startDate": "2025-09-02",
-      "endDate": "2025-09-17",
+      "startDate": "2025-09-01",
+      "endDate": "2025-09-15",
       "setup": 8,
-      "status": "andamento",
+      "status": "concluido",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 10,
+      "lots": {
+        "poBase": [
+          {
+            "lot": "102-503",
+            "cycles": 10
+          }
+        ],
+        "perborato": [
+          {
+            "lot": "30588",
+            "cycles": 10
+          }
+        ],
+        "taed": [
+          {
+            "lot": "2141012704-677",
+            "cycles": 10
+          }
+        ],
+        "tiras": [
+          {
+            "lot": "359",
+            "cycles": 10
+          }
+        ]
+      },
+      "report": "Pendente"
     },
     {
       "id": 1755623165478,
@@ -8289,11 +8755,17 @@
       "tensao": "220V",
       "startDate": "2025-09-22",
       "endDate": "2025-10-07",
-      "setup": 8,
-      "status": "aguardando",
+      "setup": null,
+      "status": "pendente",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "2025-10-10",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "subRowIndex": 1
     },
     {
       "id": 1755623279166,
@@ -8301,7 +8773,7 @@
       "orcamento": "5611",
       "assayManufacturer": "Samsung",
       "model": "WD10M4453MW/AZ",
-      "nominalLoad": 10,
+      "nominalLoad": 10.1,
       "tensao": "127V",
       "startDate": "2025-09-18",
       "endDate": "2025-10-03",
@@ -8309,7 +8781,12 @@
       "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1755623315584,
@@ -8321,9 +8798,17 @@
       "tensao": "127V",
       "startDate": "2025-09-18",
       "endDate": "2025-10-03",
-      "setup": 2,
-      "status": "aguardando",
-      "type": "homologation"
+      "setup": null,
+      "status": "pendente",
+      "type": "homologation",
+      "reportDate": "2025-10-08",
+      "observacoes": "",
+      "cycles": 0,
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "subRowIndex": 0
     },
     {
       "id": 1755623398278,
@@ -8339,7 +8824,12 @@
       "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1755623899059,
@@ -8464,7 +8954,7 @@
       "startDate": "2025-08-13",
       "endDate": "2025-08-25",
       "setup": 7,
-      "status": "concluido",
+      "status": "relatorio",
       "type": "acp",
       "observacoes": "",
       "cycles": 10,
@@ -8494,7 +8984,7 @@
           }
         ]
       },
-      "report": "Pendente"
+      "report": "LAV0097/2025"
     },
     {
       "id": 1756386633592,
@@ -8547,13 +9037,18 @@
       "model": "Sem modelo",
       "nominalLoad": 16,
       "tensao": "220V",
-      "startDate": "2025-09-11",
-      "endDate": "2025-09-18",
+      "startDate": "2025-09-15",
+      "endDate": "2025-09-21",
       "setup": 6,
-      "status": "labelo",
+      "status": "andamento",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399005579,
@@ -8563,13 +9058,18 @@
       "model": "Sem Modelo",
       "nominalLoad": 15,
       "tensao": "220V",
-      "startDate": "2025-09-19",
-      "endDate": "2025-09-26",
+      "startDate": "2025-09-22",
+      "endDate": "2025-09-28",
       "setup": 6,
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399059773,
@@ -8585,7 +9085,12 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399115542,
@@ -8601,7 +9106,12 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399173021,
@@ -8613,15 +9123,21 @@
       "tensao": "220V",
       "startDate": "2025-09-22",
       "endDate": "2025-10-07",
-      "setup": 5,
-      "status": "aguardando",
+      "setup": null,
+      "status": "pendente",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "2025-10-10",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "subRowIndex": 2
     },
     {
       "id": 1756399546803,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096790-1",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WK17BS6A",
@@ -8629,15 +9145,20 @@
       "tensao": "220V",
       "startDate": "2025-10-16",
       "endDate": "2025-10-31",
-      "setup": 6,
-      "status": "aguardando",
+      "setup": 7,
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756399628190,
-      "protocol": "Sem Protocolo",
+      "protocol": "25086042",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WT16WV6",
@@ -8649,7 +9170,12 @@
       "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756399687292,
@@ -8665,7 +9191,12 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399758594,
@@ -8681,7 +9212,12 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399823834,
@@ -8697,7 +9233,12 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756399873919,
@@ -8713,27 +9254,37 @@
       "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756400333223,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096784",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "CV3012WC5A",
       "nominalLoad": 12,
       "tensao": "220V",
-      "startDate": "2025-10-09",
-      "endDate": "2025-10-24",
+      "startDate": "2025-09-18",
+      "endDate": "2025-10-03",
       "setup": 8,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756400410436,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096786",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "CV9014BC2",
@@ -8742,10 +9293,15 @@
       "startDate": "2025-10-07",
       "endDate": "2025-10-22",
       "setup": 3,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756400483309,
@@ -8757,43 +9313,59 @@
       "tensao": "127V",
       "startDate": "2025-10-06",
       "endDate": "2025-10-21",
-      "setup": 2,
-      "status": "aguardando",
+      "setup": null,
+      "status": "pendente",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "2025-10-24",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      },
+      "subRowIndex": 0
     },
     {
       "id": 1756400540440,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096783",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "CV3012MC5",
       "nominalLoad": 12,
       "tensao": "127V",
-      "startDate": "2025-10-06",
-      "endDate": "2025-10-21",
-      "setup": 1,
-      "status": "aguardando",
+      "startDate": "2025-10-01",
+      "endDate": "2025-10-16",
+      "setup": 2,
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756400954789,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096785-1",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "CV9014PC2A",
       "nominalLoad": 14,
       "tensao": "220V",
-      "startDate": "2025-10-20",
-      "endDate": "2025-11-04",
-      "setup": 7,
-      "status": "aguardando",
+      "startDate": "2025-10-06",
+      "endDate": "2025-10-21",
+      "setup": 8,
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756401032835,
@@ -8803,17 +9375,22 @@
       "model": "C311WDW",
       "nominalLoad": 11,
       "tensao": "127V",
-      "startDate": "2025-10-27",
-      "endDate": "2025-11-11",
-      "setup": 8,
+      "startDate": "2025-10-24",
+      "endDate": "2025-11-08",
+      "setup": 3,
       "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "2025-11-14",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756401120241,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096787-1",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WD18BV2S6B",
@@ -8822,74 +9399,91 @@
       "startDate": "2025-10-23",
       "endDate": "2025-11-07",
       "setup": 1,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756401154627,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096789",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WK14BS6",
       "nominalLoad": 14,
       "tensao": "127V",
-      "startDate": "2025-10-23",
-      "endDate": "2025-11-07",
-      "setup": 2,
-      "status": "aguardando",
+      "startDate": "2025-10-06",
+      "endDate": "2025-10-21",
+      "setup": 1,
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756401251738,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096367",
       "orcamento": "4679c",
       "assayManufacturer": "Itatiaia",
       "model": "Sem Modelo",
       "nominalLoad": 20.5,
       "tensao": "127V",
-      "startDate": "2025-09-03",
-      "endDate": "2025-09-10",
+      "startDate": "2025-09-05",
+      "endDate": "2025-09-12",
       "setup": 5,
-      "status": "aguardando",
+      "status": "andamento",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": ""
     },
     {
       "id": 1756401391250,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096366",
       "orcamento": "4679c",
       "assayManufacturer": "Itatiaia",
       "model": "Sem Modelo",
       "nominalLoad": 15,
       "tensao": "127V",
-      "startDate": "2025-09-03",
-      "endDate": "2025-09-10",
-      "setup": 6,
-      "status": "aguardando",
+      "startDate": "2025-09-22",
+      "endDate": "2025-09-29",
+      "setup": 2,
+      "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756401780762,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096366",
       "orcamento": "4679c",
       "assayManufacturer": "Itatiaia",
       "model": "Sem Modelo",
       "nominalLoad": 10,
       "tensao": "127V",
-      "startDate": "2025-09-11",
-      "endDate": "2025-09-18",
-      "setup": 5,
-      "status": "aguardando",
+      "startDate": "2025-09-05",
+      "endDate": "2025-09-12",
+      "setup": 6,
+      "status": "andamento",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": ""
     },
     {
       "id": 1756401842726,
@@ -8902,10 +9496,15 @@
       "startDate": "2025-09-19",
       "endDate": "2025-09-26",
       "setup": 7,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756401894939,
@@ -8918,10 +9517,15 @@
       "startDate": "2025-09-29",
       "endDate": "2025-10-06",
       "setup": 7,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756402010426,
@@ -8934,26 +9538,36 @@
       "startDate": "2025-10-07",
       "endDate": "2025-10-14",
       "setup": 7,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "homologation",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     },
     {
       "id": 1756402097808,
-      "protocol": "Sem Protocolo",
+      "protocol": "25096788",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "FV3011WG4A",
       "nominalLoad": 11,
       "tensao": "220V",
-      "startDate": "2025-10-20",
-      "endDate": "2025-11-04",
+      "startDate": "2025-10-15",
+      "endDate": "2025-10-30",
       "setup": 5,
-      "status": "aguardando",
+      "status": "labelo",
       "type": "acp",
       "observacoes": "",
-      "cycles": 0
+      "cycles": 0,
+      "reportDate": "",
+      "plannedSuppliers": {
+        "poBase": "Swissatest",
+        "taed": "Swissatest"
+      }
     },
     {
       "id": 1756748822237,
@@ -8968,6 +9582,124 @@
       "nominalLoad": null,
       "setup": null,
       "subRowIndex": 1
+    },
+    {
+      "id": 1757104439225,
+      "protocol": "25096560",
+      "orcamento": "6384",
+      "assayManufacturer": "Mueller",
+      "model": "Semi Plus",
+      "nominalLoad": 4.5,
+      "tensao": "220V",
+      "startDate": "2025-09-18",
+      "endDate": "2025-09-25",
+      "reportDate": "",
+      "setup": 5,
+      "status": "labelo",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 0,
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
+    },
+    {
+      "id": 1757104480155,
+      "protocol": "25096559",
+      "orcamento": "6384",
+      "assayManufacturer": "Mueller",
+      "model": "Semi 8kg",
+      "nominalLoad": 8,
+      "tensao": "220V",
+      "startDate": "2025-09-26",
+      "endDate": "2025-10-03",
+      "reportDate": "2025-11-12",
+      "setup": 5,
+      "status": "labelo",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 0,
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
+    },
+    {
+      "id": 1757104524933,
+      "protocol": "25096556",
+      "orcamento": "6384",
+      "assayManufacturer": "Mueller",
+      "model": "MLA15",
+      "nominalLoad": 15,
+      "tensao": "220V",
+      "startDate": "2025-10-20",
+      "endDate": "2025-10-27",
+      "reportDate": "",
+      "setup": 6,
+      "status": "labelo",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 0,
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
+    },
+    {
+      "id": 1757674688501,
+      "protocol": "Sem Protocolo",
+      "orcamento": "6206a",
+      "assayManufacturer": "Mueller",
+      "model": "Sem Modelo",
+      "nominalLoad": 10.5,
+      "tensao": "220V",
+      "startDate": "2025-10-27",
+      "endDate": "2025-11-03",
+      "reportDate": "2025-11-19",
+      "setup": 8,
+      "status": "aguardando",
+      "type": "secadora",
+      "observacoes": "",
+      "cycles": 0
+    },
+    {
+      "id": 1757674766369,
+      "protocol": "Sem Protocolo",
+      "orcamento": "6206a",
+      "assayManufacturer": "Mueller",
+      "model": "Sem Modelo",
+      "nominalLoad": 10.5,
+      "tensao": "127V",
+      "startDate": "2025-11-10",
+      "endDate": "2025-11-17",
+      "reportDate": "2025-11-19",
+      "setup": 1,
+      "status": "aguardando",
+      "type": "secadora",
+      "observacoes": "",
+      "cycles": 0
+    },
+    {
+      "id": 1757935144671,
+      "protocol": "Sem Protocolo",
+      "orcamento": "6566",
+      "assayManufacturer": "Panasonic",
+      "model": "NA-S26MK1LBZ",
+      "nominalLoad": 13,
+      "tensao": "127V",
+      "startDate": "2025-10-23",
+      "endDate": "2025-11-07",
+      "reportDate": "2025-11-14",
+      "setup": 2,
+      "status": "aguardando",
+      "type": "acp",
+      "observacoes": "",
+      "cycles": 0,
+      "plannedSuppliers": {
+        "poBase": "MHC",
+        "taed": "MHC"
+      }
     }
   ],
   "safetyScheduledAssays": [
@@ -10226,7 +10958,7 @@
     },
     {
       "id": 1756748484616,
-      "protocol": "XXXXXXXX",
+      "protocol": "25086042",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WT16WV6",
@@ -10244,7 +10976,7 @@
     },
     {
       "id": 1756748529818,
-      "protocol": "XXXXXXXX",
+      "protocol": "25096787-2",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WD18BV2S6B",
@@ -10254,7 +10986,7 @@
       "endDate": "2025-10-31",
       "reportDate": "",
       "setup": "A",
-      "status": "aguardando",
+      "status": "labelo",
       "type": "seguranca-eletrica",
       "observacoes": "",
       "cycles": 0,
@@ -10272,7 +11004,7 @@
       "endDate": "2025-10-24",
       "reportDate": "2025-10-24",
       "setup": "A",
-      "status": "aguardando",
+      "status": "labelo",
       "type": "seguranca-eletrica",
       "observacoes": "",
       "cycles": 0,
@@ -10280,7 +11012,7 @@
     },
     {
       "id": 1756748653805,
-      "protocol": "XXXXXXXX",
+      "protocol": "25096788-2",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "FV3011WG4A",
@@ -10290,7 +11022,7 @@
       "endDate": "2025-10-30",
       "reportDate": "",
       "setup": "B",
-      "status": "aguardando",
+      "status": "labelo",
       "type": "seguranca-eletrica",
       "observacoes": "",
       "cycles": 0,
@@ -10298,7 +11030,7 @@
     },
     {
       "id": 1756748738142,
-      "protocol": "XXXXXXXX",
+      "protocol": "25096790-2",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "WK17BS6A",
@@ -10308,7 +11040,7 @@
       "endDate": "2025-10-31",
       "reportDate": "",
       "setup": "B",
-      "status": "aguardando",
+      "status": "labelo",
       "type": "seguranca-eletrica",
       "observacoes": "",
       "cycles": 0,
@@ -10316,7 +11048,7 @@
     },
     {
       "id": 1756748774944,
-      "protocol": "XXXXXXXX",
+      "protocol": "25096785",
       "orcamento": "6121",
       "assayManufacturer": "LG",
       "model": "CV9014PC2A",
@@ -10326,6 +11058,42 @@
       "endDate": "2025-10-31",
       "reportDate": "",
       "setup": "C",
+      "status": "labelo",
+      "type": "seguranca-eletrica",
+      "observacoes": "",
+      "cycles": 0,
+      "subRowIndex": 0
+    },
+    {
+      "id": 1757935427352,
+      "protocol": "25086180",
+      "orcamento": "5876a",
+      "assayManufacturer": "TCL",
+      "model": "C311WSW1",
+      "nominalLoad": 11,
+      "tensao": "220V",
+      "startDate": "2025-11-10",
+      "endDate": "2025-12-05",
+      "reportDate": "",
+      "setup": "C",
+      "status": "labelo",
+      "type": "seguranca-eletrica",
+      "observacoes": "",
+      "cycles": 0,
+      "subRowIndex": 0
+    },
+    {
+      "id": 1757963633940,
+      "protocol": "Sem Protocolo",
+      "orcamento": "6566",
+      "assayManufacturer": "Panasonic",
+      "model": "NA-S26MK1LBZ",
+      "nominalLoad": 13,
+      "tensao": "127V",
+      "startDate": "2025-11-10",
+      "endDate": "2025-12-05",
+      "reportDate": "2025-12-05",
+      "setup": "A",
       "status": "aguardando",
       "type": "seguranca-eletrica",
       "observacoes": "",
@@ -10433,6 +11201,280 @@
       "affectedTerminals": "1-4"
     }
   ],
+  "calibrationEquipments": [
+    {
+      "id": 1757357822318,
+      "tag": "2986LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-01-17",
+      "observations": ""
+    },
+    {
+      "id": 1757357874169,
+      "tag": "2987LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-02-20",
+      "observations": ""
+    },
+    {
+      "id": 1757357913569,
+      "tag": "2988LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-04-16",
+      "observations": ""
+    },
+    {
+      "id": 1757357947974,
+      "tag": "2998LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2025-11-27",
+      "observations": ""
+    },
+    {
+      "id": 1757358000089,
+      "tag": "3011LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-07-04",
+      "observations": ""
+    },
+    {
+      "id": 1757358071989,
+      "tag": "3430LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-06-10",
+      "observations": ""
+    },
+    {
+      "id": 1757358191244,
+      "tag": "3014LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-08-26",
+      "observations": "",
+      "calibrationStatus": "operacional",
+      "lastCalibrationDate": "2025-09-11",
+      "calibrationNotes": ""
+    },
+    {
+      "id": 1757358490526,
+      "tag": "3013LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2025-10-01",
+      "observations": ""
+    },
+    {
+      "id": 1757358564219,
+      "tag": "3492LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-05-20",
+      "observations": ""
+    },
+    {
+      "id": 1757358678091,
+      "tag": "3012LAV",
+      "equipment": "Medidor de Vazão Eletromagnético",
+      "validity": "2026-08-05",
+      "observations": ""
+    },
+    {
+      "id": 1757358753931,
+      "tag": "3016DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-09-12",
+      "observations": "",
+      "calibrationStatus": "operacional",
+      "lastCalibrationDate": "2025-09-17",
+      "calibrationNotes": ""
+    },
+    {
+      "id": 1757358881238,
+      "tag": "3017DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-09-12",
+      "observations": "",
+      "calibrationStatus": "operacional",
+      "lastCalibrationDate": "2025-09-17",
+      "calibrationNotes": ""
+    },
+    {
+      "id": 1757358899284,
+      "tag": "3018DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-09-12",
+      "observations": "",
+      "calibrationStatus": "operacional",
+      "lastCalibrationDate": "2025-09-17",
+      "calibrationNotes": ""
+    },
+    {
+      "id": 1757358926454,
+      "tag": "3019DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-09-12",
+      "observations": "",
+      "calibrationStatus": "operacional",
+      "lastCalibrationDate": "2025-09-17",
+      "calibrationNotes": ""
+    },
+    {
+      "id": 1757359111836,
+      "tag": "3020DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": 1757359156488,
+      "tag": "3021DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": 1757359242090,
+      "tag": "3022DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": 1757359268083,
+      "tag": "3023DOM",
+      "equipment": "Medidor de Energia",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": 1757359408103,
+      "tag": "2949DOM",
+      "equipment": "Multimedidor Janitza",
+      "validity": "2025-09-27",
+      "observations": "",
+      "calibrationStatus": "em_calibracao",
+      "calibrationStartDate": "2025-09-12"
+    },
+    {
+      "id": 1757359438660,
+      "tag": "2935DOM",
+      "equipment": "Multimedidor Janitza",
+      "validity": "2025-09-27",
+      "observations": "",
+      "calibrationStatus": "em_calibracao",
+      "calibrationStartDate": "2025-09-12"
+    },
+    {
+      "id": 1757359476444,
+      "tag": "2936DOM",
+      "equipment": "Multimedidor Janitza",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": "1757359496774",
+      "tag": "3039DOM",
+      "equipment": "Multimedidor Janitza",
+      "validity": "2026-08-11",
+      "observations": ""
+    },
+    {
+      "id": 1757359853284,
+      "tag": "1810DOM",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2026-09-27",
+      "observations": ""
+    },
+    {
+      "id": 1757359878407,
+      "tag": "3377LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2027-05-13",
+      "observations": ""
+    },
+    {
+      "id": 1757359906584,
+      "tag": "3454LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2025-10-18",
+      "observations": ""
+    },
+    {
+      "id": 1757359931282,
+      "tag": "3457LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2025-10-18",
+      "observations": ""
+    },
+    {
+      "id": 1757359978942,
+      "tag": "3455LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2025-10-18",
+      "observations": ""
+    },
+    {
+      "id": 1757360011876,
+      "tag": "3456LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2025-10-21",
+      "observations": ""
+    },
+    {
+      "id": 1757360045847,
+      "tag": "3344DOM",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2027-04-28",
+      "observations": ""
+    },
+    {
+      "id": "1757360070241",
+      "tag": "3378LAV",
+      "equipment": "Cronômetro DIgital",
+      "validity": "2026-05-28",
+      "observations": ""
+    },
+    {
+      "id": 1757446657694,
+      "tag": "1205DOM",
+      "equipment": "Registrador de Dados Fluke",
+      "validity": "2025-09-13",
+      "observations": "",
+      "calibrationStatus": "em_calibracao",
+      "lastCalibrationDate": "2025-09-10",
+      "calibrationNotes": "",
+      "calibrationStartDate": "2025-09-12"
+    },
+    {
+      "id": 1757446698225,
+      "tag": "1206DOM",
+      "equipment": "Registrador de Dados Fluke",
+      "validity": "2025-09-13",
+      "observations": "",
+      "calibrationStatus": "em_calibracao",
+      "calibrationStartDate": "2025-09-12"
+    },
+    {
+      "id": 1757446715589,
+      "tag": "1207DOM",
+      "equipment": "Registrador de Dados Fluke",
+      "validity": "2025-09-13",
+      "observations": "",
+      "calibrationStatus": "em_calibracao",
+      "calibrationStartDate": "2025-09-12"
+    },
+    {
+      "id": 1758113165001,
+      "tag": "3521DOM",
+      "equipment": "Balança Digital",
+      "validity": "2025-10-10",
+      "observations": ""
+    },
+    {
+      "id": 1758113293375,
+      "tag": "2072LAV",
+      "equipment": "Balança Digital",
+      "validity": "2026-07-01",
+      "observations": ""
+    }
+  ],
   "settings": {
     "0": {
       "notificationEmail": "seu-email@exemplo.com",
@@ -10440,7 +11482,8 @@
     },
     "notificationEmail": "rodrigo.melo@pucrs.br,leandrow@pucrs.br,marcio.machado@pucrs.br",
     "alertThreshold": 24,
-    "schedulePassword": "lavadoras"
+    "calibrationAlertDays": 15,
+    "schedulePassword": "lav"
   },
   "efficiencyCategories": [
     {
@@ -10489,5 +11532,91 @@
       "id": "C",
       "name": "Leonardo Ebres"
     }
-  ]
+  ],
+  "systemUsers": {
+    "10081744": {
+      "username": "10081744",
+      "type": "administrador",
+      "displayName": "Leandro Weschenfelder",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": true,
+        "editSchedule": true,
+        "dragAndDrop": true,
+        "editCompletedAssays": true,
+        "addAssays": true
+      }
+    },
+    "10083230": {
+      "username": "10083230",
+      "type": "administrador",
+      "displayName": "Marcio Pinheiro",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": true,
+        "editSchedule": true,
+        "dragAndDrop": true,
+        "editCompletedAssays": true,
+        "addAssays": true
+      }
+    },
+    "10088141": {
+      "username": "10088141",
+      "type": "administrador",
+      "displayName": "Rodrigo Melo",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": true,
+        "editSchedule": true,
+        "dragAndDrop": true,
+        "editCompletedAssays": true,
+        "addAssays": true
+      }
+    },
+    "10088795": {
+      "username": "10088795",
+      "type": "tecnico_eficiencia",
+      "displayName": "Rodrigo Fleith",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": false,
+        "editSchedule": false,
+        "dragAndDrop": false,
+        "editCompletedAssays": false,
+        "addAssays": true
+      }
+    },
+    "10089789": {
+      "username": "10089789",
+      "type": "tecnico_eficiencia",
+      "displayName": "Robson Andrade",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": false,
+        "editSchedule": false,
+        "dragAndDrop": false,
+        "editCompletedAssays": false,
+        "addAssays": true
+      }
+    },
+    "80402974": {
+      "username": "80402974",
+      "type": "tecnico_eficiencia",
+      "displayName": "Vinicius Antonioli",
+      "permissions": {
+        "editHistory": true,
+        "addEditSupplies": true,
+        "accessSettings": false,
+        "editSchedule": false,
+        "dragAndDrop": false,
+        "editCompletedAssays": false,
+        "addAssays": true
+      }
+    }
+  }
 }

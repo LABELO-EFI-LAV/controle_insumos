@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SourceTextModule } from 'vm';
+import { DatabaseManager } from './DatabaseManager';
 const PDFKit = require('pdfkit');
 const PDFDocument = PDFKit.default || PDFKit;
 const { SimpleLinearRegression } = require('ml-regression-simple-linear');
@@ -17,13 +18,11 @@ const { SimpleLinearRegression } = require('ml-regression-simple-linear');
  */
 function safeObjectKeys(obj: any): string[] {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-        console.warn('safeObjectKeys: Objeto inválido recebido:', obj);
         return [];
     }
     try {
         return Object.keys(obj);
     } catch (error) {
-        console.warn('safeObjectKeys: Erro ao obter chaves do objeto:', error, 'Objeto:', obj);
         return [];
     }
 }
@@ -46,23 +45,25 @@ class BackupManager {
     private ensureBackupDirectory(): void {
         if (!fs.existsSync(this.backupDir)) {
             fs.mkdirSync(this.backupDir, { recursive: true });
-            console.log(`📁 Diretório de backup criado: ${this.backupDir}`);
+            // Diretório de backup criado
         }
     }
 
     /**
-     * Cria um backup do arquivo database.json
+     * Cria um backup do banco de dados (SQLite ou JSON)
      */
     
     createBackup(dbPath: string): boolean {
         try {
             if (!fs.existsSync(dbPath)) {
-                console.warn('⚠️ Arquivo database.json não encontrado para backup');
+                // Arquivo de banco de dados não encontrado para backup
                 return false;
             }
 
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const backupFileName = `database-backup-${timestamp}.json`;
+            const isJsonFile = dbPath.endsWith('.json');
+            const extension = isJsonFile ? '.json' : '.sqlite';
+            const backupFileName = `database-backup-${timestamp}${extension}`;
             const backupPath = path.join(this.backupDir, backupFileName);
 
             // Copia o arquivo
@@ -74,11 +75,12 @@ class BackupManager {
                 originalPath: dbPath,
                 backupDate: new Date().toISOString(),
                 fileSize: fs.statSync(dbPath).size,
-                version: this.getNextVersion()
+                version: this.getNextVersion(),
+                type: isJsonFile ? 'json' : 'sqlite'
             };
             fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
 
-            console.log(`✅ Backup criado: ${backupFileName}`);
+            // Backup criado com sucesso
             this.cleanOldBackups();
             return true;
         } catch (error) {
@@ -94,7 +96,7 @@ class BackupManager {
     private cleanOldBackups(): void {
         try {
             const backupFiles = fs.readdirSync(this.backupDir)
-                .filter(file => file.startsWith('database-backup-') && file.endsWith('.json'))
+                .filter(file => file.startsWith('database-backup-') && (file.endsWith('.json') || file.endsWith('.sqlite')))
                 .map(file => ({
                     name: file,
                     path: path.join(this.backupDir, file),
@@ -111,7 +113,7 @@ class BackupManager {
                     if (fs.existsSync(metaPath)) {
                         fs.unlinkSync(metaPath);
                     }
-                    console.log(`🗑️ Backup antigo removido: ${file.name}`);
+                    // Backup antigo removido
                 });
             }
         } catch (error) {
@@ -150,18 +152,19 @@ class BackupManager {
      * Lista todos os backups disponíveis
      */ 
     
-    listBackups(): Array<{name: string, date: string, size: number, version: number}> {
+    listBackups(): Array<{name: string, date: string, size: number, version: number, type: string}> {
         try {
             const backupFiles = fs.readdirSync(this.backupDir)
-                .filter(file => file.startsWith('database-backup-') && file.endsWith('.json'))
+                .filter(file => file.startsWith('database-backup-') && (file.endsWith('.json') || file.endsWith('.sqlite')))
                 .map(file => {
                     const filePath = path.join(this.backupDir, file);
                     const metaPath = `${filePath}.meta`;
                     
-                    let metadata = { backupDate: '', version: 0 };
+                    let metadata = { backupDate: '', version: 0, type: file.endsWith('.json') ? 'json' : 'sqlite' };
                     if (fs.existsSync(metaPath)) {
                         try {
-                            metadata = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+                            const metaContent = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+                            metadata = { ...metadata, ...metaContent };
                         } catch (e) {
                             // Usa dados padrão se metadados estiverem corrompidos
                         }
@@ -171,7 +174,8 @@ class BackupManager {
                         name: file,
                         date: metadata.backupDate || fs.statSync(filePath).mtime.toISOString(),
                         size: fs.statSync(filePath).size,
-                        version: metadata.version || 0
+                        version: metadata.version || 0,
+                        type: metadata.type
                     };
                 })
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -202,7 +206,7 @@ class BackupManager {
 
             // Restaura o backup
             fs.copyFileSync(backupPath, targetPath);
-            console.log(`✅ Backup restaurado: ${backupName}`);
+            // Backup restaurado com sucesso
             return true;
         } catch (error) {
             console.error('❌ Erro ao restaurar backup:', error);
@@ -227,7 +231,7 @@ class BackupManager {
             this.createBackup(dbPath);
         }, 6 * 60 * 60 * 1000);
 
-        console.log('🔄 Sistema de backup automático iniciado (a cada 6 horas)');
+        // Sistema de backup automático iniciado (a cada 6 horas)
     }
 
     /**
@@ -237,12 +241,13 @@ class BackupManager {
         if (this.backupInterval) {
             clearInterval(this.backupInterval);
             this.backupInterval = null;
-            console.log('⏹️ Sistema de backup automático parado');
+            // Sistema de backup automático parado
         }
     }
 }
 
 let backupManager: BackupManager | null = null;
+let databaseManager: DatabaseManager | null = null;
 let isCommandRegistered = false;
 
 // --- FUNÇÕES DE CÁLCULO OTIMIZADAS ---
@@ -271,7 +276,7 @@ interface Consumption {
  * @returns Um objeto do tipo Consumption.
  */
 const calculateConsumption = (nominalLoad: number, cycles: number): Consumption => {
-    console.log(`Calculando consumo para carga nominal ${nominalLoad} e ${cycles} ciclos`);
+    // Calculando consumo para carga nominal e ciclos
     const base = (16 * nominalLoad + 54) * cycles;
     const tiras = calculateTiras(nominalLoad) * cycles;
     return {
@@ -305,21 +310,18 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
         }
         
         if (!Array.isArray(assays)) {
-            console.warn('Array de ensaios inválido, usando array vazio');
+            // Array de ensaios inválido, usando array vazio
             reportData.assays = [];
         }
         
         if (!Array.isArray(inventory)) {
-            console.warn('Array de inventário inválido, usando array vazio');
+            // Array de inventário inválido, usando array vazio
             reportData.inventory = [];
         }
         
-        console.log('Gerando PDF com dados:', {
-            startDate,
-            endDate,
-            totalAssays: assays?.length || 0,
-            totalInventory: inventory?.length || 0
-        });
+        // Gerando PDF com dados
+        const totalAssays = assays?.length || 0;
+        const totalInventory = inventory?.length || 0;
         
         // Cria o documento PDF
         const doc = new PDFDocument({ margin: 50 });
@@ -335,9 +337,7 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
         const endFormatted = new Date(endDate).toLocaleDateString('pt-BR').replace(/\//g, '-');
         const pdfPath = path.join(workspaceRoot, `Relatorio_${startFormatted}_a_${endFormatted}.pdf`);
         
-        console.log('📁 Caminho do PDF:', pdfPath);
-        console.log('📂 Workspace root:', workspaceRoot);
-        console.log('📅 Datas formatadas:', { startFormatted, endFormatted });
+        // Configurando geração do PDF
         
         // Verifica se o diretório existe
         if (!fs.existsSync(workspaceRoot)) {
@@ -348,7 +348,7 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
         const stream = fs.createWriteStream(pdfPath);
         doc.pipe(stream);
         
-        console.log('📝 Stream de escrita criado para:', pdfPath);
+        // Stream de escrita criado
         
         // Filtra ensaios por período
         let filteredAssays = [];
@@ -358,7 +358,7 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
                 // Tenta diferentes propriedades de data que podem existir
                 const dateValue = assay.date || assay.startDate || assay.createdAt || assay.timestamp;
                 if (!dateValue) {
-                    console.warn('Ensaio sem data encontrado:', assay);
+                    // Ensaio sem data encontrado
                     return false;
                 }
                 
@@ -369,19 +369,19 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
                     
                     // Verifica se as datas são válidas
                     if (isNaN(assayDate.getTime()) || isNaN(start.getTime()) || isNaN(end.getTime())) {
-                        console.warn('Data inválida encontrada:', { dateValue, startDate, endDate });
+                        // Data inválida encontrada
                         return false;
                     }
                     
                     return assayDate >= start && assayDate <= end;
                 } catch (error) {
-                    console.warn('Erro ao processar data do ensaio:', error, assay);
+                    // Erro ao processar data do ensaio
                     return false;
                 }
             });
         }
         
-        console.log(`Ensaios filtrados: ${filteredAssays.length} de ${assays?.length || 0} total`);
+        // Ensaios filtrados por período
         
         // Gera o cabeçalho
         await generatePdfHeader(doc, startDate, endDate, filteredAssays.length, extensionPath);
@@ -396,28 +396,24 @@ async function generatePdfReport(reportData: any, extensionPath: string): Promis
         // Aguarda a conclusão da escrita
         return new Promise((resolve, reject) => {
             stream.on('finish', () => {
-                console.log('✅ Stream finalizado');
+                // Stream finalizado
                 // Verifica se o arquivo foi realmente criado
                 if (fs.existsSync(pdfPath)) {
                     const stats = fs.statSync(pdfPath);
-                    console.log('📊 Arquivo criado:', {
-                        path: pdfPath,
-                        size: stats.size,
-                        created: stats.birthtime
-                    });
+                    // Arquivo PDF criado com sucesso
                     resolve(pdfPath);
                 } else {
                     reject(new Error(`Arquivo PDF não foi criado: ${pdfPath}`));
                 }
             });
             stream.on('error', (error) => {
-                console.error('❌ Erro no stream:', error);
+                // Erro no stream
                 reject(error);
             });
         });
         
     } catch (error) {
-        console.error('Erro ao gerar PDF:', error);
+        // Erro ao gerar PDF
         return null;
     }
 }
@@ -452,7 +448,7 @@ async function generatePdfHeader(doc: any, startDate: string, endDate: string, t
         try {
             doc.image(iconPath, 450, 50, { width: 60, height: 60 });
         } catch (error) {
-            console.warn('Não foi possível adicionar o ícone ao PDF:', error);
+            // Não foi possível adicionar o ícone ao PDF
         }
     }
     
@@ -1423,7 +1419,7 @@ function generateChart4(doc: any, assays: any[], startY: number): number {
                     monthlyAssays[monthKey].count += 1;
                 }
             } catch (error) {
-                console.warn('Erro ao processar data do ensaio:', dateValue);
+                // Erro ao processar data do ensaio
             }
         }
     });
@@ -1519,7 +1515,7 @@ function generateChart4(doc: any, assays: any[], startY: number): number {
 }
 
 // Gera o conteúdo HTML para a Webview
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     // --- CRIAÇÃO DO ITEM NA BARRA DE STATUS ---
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.command = 'controle-de-insumos.abrir';
@@ -1528,40 +1524,76 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
 
-    // --- FUNÇÃO AUXILIAR PARA OBTER O CAMINHO DO BANCO DE DADOS ---
-    const getDbPath = (): string | null => {
+    // --- FUNÇÃO AUXILIAR PARA INICIALIZAR O BANCO DE DADOS ---
+    const initializeDatabase = async (): Promise<boolean> => {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
             console.error('LabControl: Por favor, abra uma pasta de projeto para usar a extensão.');
-            return null;
+            return false;
         }
         
         const rootPath = workspaceFolders[0].uri.fsPath;
-        const dbPath = path.join(rootPath, 'database.json');
+        const jsonDbPath = path.join(rootPath, 'database.json');
         
-        if (!fs.existsSync(dbPath)) {
-            try {
-                const initialData = {
-                    inventory: [],
-                    historicalAssays: []
-                };
-                fs.writeFileSync(dbPath, JSON.stringify(initialData, null, 2), 'utf8');
-                console.log(`👍 Arquivo database.json criado com sucesso em: ${dbPath}`);
-            } catch (error) {
-                handleError(error, 'ERRO ao criar o database.json na pasta do projeto:');
-                return null;
+        try {
+            // Inicializa o DatabaseManager
+            databaseManager = new DatabaseManager(rootPath);
+            await databaseManager.initialize();
+            
+            // Se existe database.json, migra os dados
+            if (fs.existsSync(jsonDbPath)) {
+                // Migrando dados do database.json para SQLite
+                await databaseManager.migrateFromJson(jsonDbPath);
+                
+                // Cria backup do JSON antes de removê-lo usando o sistema de backup
+                if (backupManager) {
+                    backupManager.createBackup(jsonDbPath);
+                } else {
+                    // Fallback caso o backupManager não esteja inicializado
+                    const backupDir = path.join(rootPath, '.labcontrol-backups');
+                    if (!fs.existsSync(backupDir)) {
+                        fs.mkdirSync(backupDir, { recursive: true });
+                    }
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const backupJsonPath = path.join(backupDir, `database-backup-${timestamp}.json`);
+                    fs.copyFileSync(jsonDbPath, backupJsonPath);
+                    // Backup do database.json criado
+                }
             }
+            
+            // Banco de dados SQLite inicializado com sucesso
+            return true;
+        } catch (error) {
+            handleError(error, 'ERRO ao inicializar banco de dados SQLite:');
+            return false;
         }
-
-        return dbPath;
     };
 
-    // --- INICIALIZAÇÃO DO SISTEMA DE BACKUP ---
+    // --- FUNÇÃO AUXILIAR PARA COMPATIBILIDADE (DEPRECATED) ---
+    const getDbPath = (): string | null => {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            return null;
+        }
+        return path.join(workspaceFolders[0].uri.fsPath, 'database.json');
+    };
+
+    // --- INICIALIZAÇÃO DO SISTEMA DE BANCO DE DADOS E BACKUP ---
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
         const workspaceRoot = workspaceFolders[0].uri.fsPath;
+        
+        // Inicializa o banco de dados SQLite
+        const dbInitialized = await initializeDatabase(); // <--- Agora funciona!
+        if (!dbInitialized) {
+            vscode.window.showErrorMessage('Erro ao inicializar banco de dados. A extensão pode não funcionar corretamente.');
+            return;
+        }
+        
+        // Inicializa o sistema de backup
         backupManager = new BackupManager(workspaceRoot);
         
+        // Para compatibilidade, ainda verifica se existe database.json
         const dbPath = getDbPath();
         if (dbPath && fs.existsSync(dbPath)) {
             backupManager.startAutoBackup(dbPath);
@@ -1571,14 +1603,14 @@ export function activate(context: vscode.ExtensionContext) {
     // --- REGISTRO DO COMANDO PRINCIPAL ---
     // Verifica se o comando já foi registrado para evitar duplicação
     if (isCommandRegistered) {
-        console.log('⚠️ Comando já registrado, pulando registro...');
+        // Comando já registrado, pulando registro
         return;
     }
     
     let disposable;
     try {
         disposable = vscode.commands.registerCommand('controle-de-insumos.abrir', () => {
-            console.log('✅ COMANDO "controle-de-insumos.abrir" ACIONADO!');
+            // Comando "controle-de-insumos.abrir" acionado
 
         const panel = vscode.window.createWebviewPanel(
             'labControl',
@@ -1599,26 +1631,30 @@ export function activate(context: vscode.ExtensionContext) {
         
         // --- LISTENER DE MENSAGENS DO WEBVIEW ---
         panel.webview.onDidReceiveMessage(async (message) => {
-            console.log('🔍 Mensagem recebida:', message);
+            // Mensagem recebida do webview
             const dbPath = getDbPath();
 
             if (!dbPath) {
-                console.log('Operação do LabControl cancelada pois nenhuma pasta de projeto está aberta.');
+                // Operação cancelada pois nenhuma pasta de projeto está aberta
                 return; 
             }
             
             switch (message.command) {
                 case 'webviewReady':
-                    console.log('✅ Webview está pronto. Lendo e enviando dados de:', dbPath);
+                    // Webview está pronto, carregando dados do SQLite
                     try {
-                        const dbContent = fs.readFileSync(dbPath, 'utf8');
-                        const database = JSON.parse(dbContent);
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        
+                        // Carregando dados do banco
+                        const database = await databaseManager.getAllData();
+                        // Dados carregados do banco
                         
                         // Obtém o nome do usuário do sistema operacional
                         const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
-                        console.log('🔍 Usuário do sistema detectado:', systemUsername);
                         
-                        // Lê os usuários cadastrados do database.json
+                        // Lê os usuários cadastrados do banco SQLite
                         const systemUsers = database.systemUsers || {
                             // Usuário administrador padrão (sempre presente)
                             '10088141': {
@@ -1637,7 +1673,7 @@ export function activate(context: vscode.ExtensionContext) {
                             }
                         };
                         
-                        console.log('👥 Usuários cadastrados no sistema:', Object.keys(systemUsers));
+                        // Usuários cadastrados no sistema
                         
                         // Determina o usuário baseado no username do sistema
                         const currentUser = systemUsers[systemUsername] || {
@@ -1655,7 +1691,7 @@ export function activate(context: vscode.ExtensionContext) {
                             }
                         };
                         
-                        console.log('👤 Usuário mapeado:', currentUser);
+                        // Usuário mapeado e dados preparados para webview
                         
                         panel.webview.postMessage({
                             command: 'loadData',
@@ -1663,39 +1699,436 @@ export function activate(context: vscode.ExtensionContext) {
                             currentUser: currentUser
                         });
                     } catch (err) {
-                        handleError(err, 'ERRO AO LER/ENVIAR DADOS:');
+                        handleError(err, 'ERRO AO LER/ENVIAR DADOS DO SQLITE:');
+                    }
+                    break;
+
+                case 'updateAssayStatusOnly':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { assayId, status, table } = message.data;
+                        
+                        // Usa a função otimizada para alterar apenas o status
+                        await databaseManager.updateAssayStatus(assayId, status, table);
+                        
+                        // Status do ensaio alterado
+                        
+                        panel.webview.postMessage({
+                            command: 'updateAssayStatusResult',
+                            success: true,
+                            assayId: assayId,
+                            newStatus: status
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR STATUS DO ENSAIO:');
+                        panel.webview.postMessage({
+                            command: 'updateAssayStatusResult',
+                            success: false,
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'addInventoryItem':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // Validação robusta dos dados recebidos
+                        // Dados recebidos para addInventoryItem
+                        
+                        let item;
+                        if (message.data && message.data.item) {
+                            item = message.data.item;
+                        } else if (message.data && message.data.reagent) {
+                            // Se os dados vieram diretamente sem wrapper 'item'
+                            item = message.data;
+                        } else {
+                            throw new Error('Dados do item não encontrados na mensagem');
+                        }
+
+                        // Validação dos campos obrigatórios
+                        if (!item || typeof item !== 'object') {
+                            throw new Error('Item deve ser um objeto válido');
+                        }
+
+                        const requiredFields = ['reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
+                        const missingFields = requiredFields.filter(field => !item[field]);
+                        
+                        if (missingFields.length > 0) {
+                            throw new Error(`Campos obrigatórios ausentes: ${missingFields.join(', ')}`);
+                        }
+
+                        // Item validado
+                        const newId = await databaseManager.addInventoryItem(item);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: true,
+                            operation: 'add',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ADICIONAR ITEM AO INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: false,
+                            operation: 'add',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateInventoryItem':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // O webview envia o item completo, extrair id e criar objeto updates
+                        const item = message.data;
+                        if (!item || !item.id) {
+                            throw new Error('Item inválido: ID é obrigatório');
+                        }
+
+                        const { id, ...updates } = item;
+                        await databaseManager.updateInventoryItem(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ITEM DO INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteInventoryItem':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id } = message.data;
+                        await databaseManager.deleteInventoryItem(id);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ITEM DO INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'addHoliday':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // Dados recebidos para addHoliday
+                        const holiday = message.data;
+                        const newId = await databaseManager.addHoliday(holiday);
+                        
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: true,
+                            operation: 'add',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ADICIONAR FERIADO:');
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: false,
+                            operation: 'add',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteHoliday':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id } = message.data;
+                        await databaseManager.deleteHoliday(id);
+                        
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR FERIADO:');
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'addSystemUser':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // Dados recebidos para addSystemUser
+                        const user = message.data;
+                        const newId = await databaseManager.addSystemUser(user);
+                        
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: true,
+                            operation: 'add',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ADICIONAR USUÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: false,
+                            operation: 'add',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateSystemUser':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateSystemUser(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR USUÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteSystemUser':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id } = message.data;
+                        await databaseManager.deleteSystemUser(id);
+                        
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR USUÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'userOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'addCategory':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { category, isSafety } = message.data;
+                        const newId = await databaseManager.addCategory(category, isSafety);
+                        
+                        panel.webview.postMessage({
+                            command: 'categoryOperationResult',
+                            success: true,
+                            operation: 'add',
+                            newId: newId,
+                            isSafety: isSafety
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ADICIONAR CATEGORIA:');
+                        panel.webview.postMessage({
+                            command: 'categoryOperationResult',
+                            success: false,
+                            operation: 'add',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteCategory':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, isSafety } = message.data;
+                        await databaseManager.deleteCategory(id, isSafety);
+                        
+                        panel.webview.postMessage({
+                            command: 'categoryOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: id,
+                            isSafety: isSafety
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR CATEGORIA:');
+                        panel.webview.postMessage({
+                            command: 'categoryOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateSettings':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const settings = message.data;
+                        await databaseManager.updateSettings(settings);
+                        
+                        panel.webview.postMessage({
+                            command: 'settingsOperationResult',
+                            success: true,
+                            operation: 'update'
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR CONFIGURAÇÕES:');
+                        panel.webview.postMessage({
+                            command: 'settingsOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
                     }
                     break;
 
                 case 'saveData':
-                    const dataPath = getDbPath();
-                    if (!dataPath) { return; }
-
-                    let database = {};
                     try {
-                        const dbContent = fs.readFileSync(dataPath, 'utf8');
-                        database = JSON.parse(dbContent);
-                    } catch (err) {
-                        console.error("Não foi possível ler o database.json para atualização, um novo será criado.", err);
-                    }
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
 
-                    const dataToSave = {
-                        ...database,
-                        ...message.data
-                    };
+                        // Obtém dados atuais do banco
+                        const currentDatabase = await databaseManager.getAllData();
+                        
+                        // Mescla com os novos dados
+                        const dataToSave = {
+                            ...currentDatabase,
+                            ...message.data
+                        };
 
-                    const dataToSaveString = JSON.stringify(dataToSave, null, 2);
-                    
-                    fs.writeFile(dataPath, dataToSaveString, 'utf8', (err) => {
-                        if (err) {
-                            handleError(err, 'ERRO AO SALVAR DADOS:');
-                        } else {
-                            console.log('✅ Dados salvos com sucesso em:', dataPath);
-                            if (backupManager) {
-                                backupManager.createBackup(dataPath);
+                        // Salva no SQLite
+                        await databaseManager.saveData(dataToSave);
+                        
+                        // Dados salvos com sucesso no SQLite
+                        
+                        // Cria backup do SQLite
+                        if (backupManager) {
+                            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                            if (workspaceRoot) {
+                                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                                const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
+                                await databaseManager.createBackup(backupPath);
                             }
                         }
-                    });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO SALVAR DADOS NO SQLITE:');
+                    }
+                    break;
+
+                case 'saveScheduleData':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // Obtém dados atuais do banco
+                        const currentDatabase = await databaseManager.getAllData();
+                        
+                        // Mescla com os novos dados do cronograma
+                        const dataToSave = {
+                            ...currentDatabase,
+                            ...message.data
+                        };
+
+                        // Salva no SQLite
+                        await databaseManager.saveData(dataToSave);
+                        
+                        // Cria backup do banco de dados
+                        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                        if (workspaceRoot) {
+                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                            const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
+                            await databaseManager.createBackup(backupPath);
+                        }
+                        
+                        console.log('[EXTENSION] Dados do cronograma salvos com sucesso no SQLite');
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO SALVAR DADOS DO CRONOGRAMA NO SQLITE:');
+                    }
                     break;
 
                 case 'listBackups':
@@ -1785,25 +2218,23 @@ export function activate(context: vscode.ExtensionContext) {
 
                 case 'generatePdfReport':
                     try {
-                        console.log('Recebendo comando generatePdfReport:', message);
+                        // Recebendo comando generatePdfReport
                         const requestData = message.data;
                         
                         if (!requestData || !requestData.startDate || !requestData.endDate) {
                             throw new Error('Datas de início e fim são obrigatórias');
                         }
                         
-                        // Lê os dados diretamente do database.json
-                        const dbPath = getDbPath();
-                        if (!dbPath) {
-                            throw new Error('Caminho do banco de dados não encontrado');
+                        // Lê os dados do SQLite
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
                         }
                         
                         let databaseContent;
                         try {
-                            const dbContent = fs.readFileSync(dbPath, 'utf8');
-                            databaseContent = JSON.parse(dbContent);
+                            databaseContent = await databaseManager.getAllData();
                         } catch (err) {
-                            throw new Error('Erro ao ler database.json: ' + (err as Error).message);
+                            throw new Error('Erro ao ler dados do SQLite: ' + (err as Error).message);
                         }
                         
                         const reportData = {
@@ -1814,12 +2245,7 @@ export function activate(context: vscode.ExtensionContext) {
                             timestamp: new Date().toISOString()
                         };
                         
-                        console.log('Dados do relatório carregados do database.json:', {
-                            hasStartDate: !!reportData.startDate,
-                            hasEndDate: !!reportData.endDate,
-                            assaysCount: reportData.assays.length,
-                            inventoryCount: reportData.inventory.length
-                        });
+                        // Dados do relatório carregados
                         
                         const pdfPath = await generatePdfReport(reportData, context.extensionPath);
                         
@@ -1872,24 +2298,23 @@ export function activate(context: vscode.ExtensionContext) {
 
                 case 'saveSystemUsers':
                     try {
-                        const dbPath = getDbPath();
-                        if (!dbPath) {
+                        if (!databaseManager) {
                             panel.webview.postMessage({
                                 command: 'saveSystemUsersResult',
                                 success: false,
-                                error: 'Caminho do banco de dados não encontrado'
+                                error: 'DatabaseManager não inicializado'
                             });
                             return;
                         }
                         
-                        const dbContent = fs.readFileSync(dbPath, 'utf8');
-                        const database = JSON.parse(dbContent);
+                        // Obtém dados atuais
+                        const database = await databaseManager.getAllData();
                         
                         // Atualiza os usuários do sistema
                         database.systemUsers = message.data.systemUsers;
                         
-                        // Salva o arquivo
-                        fs.writeFileSync(dbPath, JSON.stringify(database, null, 2), 'utf8');
+                        // Salva no SQLite
+                        await databaseManager.saveData(database);
                         
                         panel.webview.postMessage({
                             command: 'saveSystemUsersResult',
@@ -1910,20 +2335,18 @@ export function activate(context: vscode.ExtensionContext) {
                 case 'bulkDelete':
                     console.log('🔍 Processando comando bulkDelete no backend:', message.data);
                     try {
-                        const dbPath = getDbPath();
-                        if (!dbPath) {
+                        if (!databaseManager) {
                             panel.webview.postMessage({
                                 command: 'bulkDeleteResult',
                                 success: false,
-                                error: 'Caminho do banco de dados não encontrado'
+                                error: 'DatabaseManager não inicializado'
                             });
                             return;
                         }
                         
                         // Verifica se o usuário é administrador
                         const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
-                        const dbContent = fs.readFileSync(dbPath, 'utf8');
-                        const database = JSON.parse(dbContent);
+                        const database = await databaseManager.getAllData();
                         const systemUsers = database.systemUsers || {};
                         const currentUser = systemUsers[systemUsername];
                         
@@ -1949,7 +2372,12 @@ export function activate(context: vscode.ExtensionContext) {
                         
                         // Cria backup antes da exclusão
                         if (backupManager) {
-                            backupManager.createBackup(dbPath);
+                            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                            if (workspaceRoot) {
+                                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                                const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
+                                await databaseManager.createBackup(backupPath);
+                            }
                         }
                         
                         // Filtra os dados removendo itens no período especificado
@@ -1983,8 +2411,8 @@ export function activate(context: vscode.ExtensionContext) {
                         database.holidays = (database.holidays || []).filter((item: any) => !isInRange(item.startDate));
                         database.calibrations = (database.calibrations || []).filter((item: any) => !isInRange(item.startDate));
                         
-                        // Salva o arquivo
-                        fs.writeFileSync(dbPath, JSON.stringify(database, null, 2), 'utf8');
+                        // Salva no SQLite
+                        await databaseManager.saveData(database);
                         
                         panel.webview.postMessage({
                             command: 'bulkDeleteResult',
@@ -1993,17 +2421,7 @@ export function activate(context: vscode.ExtensionContext) {
                             itemsDeleted: totalItems
                         });
                         
-                        console.log(`✅ Exclusão em massa realizada por ${currentUser.displayName}:`, {
-                            periodo: `${startDate} a ${endDate}`,
-                            itensRemovidos: totalItems,
-                            detalhes: {
-                                ensaiosCronograma: itemsToDelete.scheduledAssays.length,
-                                ensaiosSeguranca: itemsToDelete.safetyScheduledAssays.length,
-                                ensaiosHistorico: itemsToDelete.historicalAssays.length,
-                                ferias: itemsToDelete.holidays.length,
-                                calibracoes: itemsToDelete.calibrations.length
-                            }
-                        });
+                        // Exclusão em massa realizada
                         
                     } catch (err) {
                         handleError(err, 'ERRO AO REALIZAR EXCLUSÃO EM MASSA:');
@@ -2016,11 +2434,12 @@ export function activate(context: vscode.ExtensionContext) {
                     break;
             }
         });
-    });
-    
+        
         // Marca o comando como registrado após sucesso
         isCommandRegistered = true;
         console.log('✅ Comando registrado com sucesso');
+        
+    });
         
     } catch (error) {
         console.error('❌ Erro ao registrar comando:', error);
@@ -2032,9 +2451,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // --- CLEANUP AO DESATIVAR A EXTENSÃO ---
     context.subscriptions.push({
-        dispose: () => {
+        dispose: async () => {
             if (backupManager) {
                 backupManager.stopAutoBackup();
+            }
+            if (databaseManager) {
+                await databaseManager.close();
             }
         }
     });
@@ -2157,7 +2579,7 @@ function handleError(err: unknown, contextMessage: string) {
     });
 }
 
-export function deactivate() {
+export async function deactivate() {
     console.log('🔄 Desativando extensão Controle de Insumos...');
     
     // Para o sistema de backup automático
@@ -2165,6 +2587,13 @@ export function deactivate() {
         backupManager.stopAutoBackup();
         backupManager = null;
         console.log('✅ Sistema de backup parado');
+    }
+    
+    // Fecha a conexão com o banco de dados
+    if (databaseManager) {
+        await databaseManager.close();
+        databaseManager = null;
+        console.log('✅ Conexão com banco de dados fechada');
     }
     
     // Reseta a flag de comando registrado

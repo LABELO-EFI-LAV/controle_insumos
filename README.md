@@ -123,4 +123,82 @@ Este projeto é distribuído sob a Licença MIT. Veja o arquivo `LICENSE.md` par
 
 ---
 
+## Estruturas Migradas
+
+O script migra as seguintes estruturas do JSON para SQLite:
+
+### 1. Inventory (Inventário)
+- **Tabela**: `inventory`
+- **Campos**: id, reagent, manufacturer, lot, quantity, validity
+- **Descrição**: Controle de estoque de reagentes
+- **Registros**: 8 itens
+
+### 2. Historical Assays (Ensaios Históricos)
+- **Tabela**: `historical_assays`
+- **Campos**: id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, report
+- **Descrição**: Histórico de ensaios realizados
+- **Registros**: 93 ensaios
+
+### 3. Assay Lots (Lotes de Ensaios)
+- **Tabela**: `assay_lots`
+- **Campos**: assay_id, reagent_type, lot, cycles
+- **Descrição**: Lotes de reagentes utilizados em cada ensaio (relacionamento com historical_assays)
+- **Registros**: 372 lotes
+
+### 4. Scheduled Assays (Ensaios Agendados)
+- **Tabela**: `scheduled_assays`
+- **Campos**: id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles
+- **Descrição**: Ensaios programados para execução
+- **Registros**: 154 ensaios
+
+### 5. Safety Scheduled Assays (Ensaios de Segurança Agendados)
+- **Tabela**: `safety_scheduled_assays`
+- **Campos**: id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles
+- **Descrição**: Ensaios de segurança programados
+- **Registros**: 76 ensaios
+
+### 6. Holidays (Feriados)
+- **Tabela**: `holidays`
+- **Campos**: id, name, start_date, end_date
+- **Descrição**: Calendário de feriados
+- **Registros**: 13 feriados
+
+### 7. Calibrations (Calibrações)
+- **Tabela**: `calibrations`
+- **Campos**: id, protocol, start_date, end_date, type, status, affected_terminals
+- **Descrição**: Programação de calibrações de equipamentos
+- **Registros**: 2 calibrações
+
+### 8. Efficiency Categories (Categorias de Eficiência)
+- **Tabela**: `efficiency_categories`
+- **Campos**: id, name
+- **Descrição**: Categorias para classificação de eficiência
+- **Registros**: 8 categorias
+
+### 9. Safety Categories (Categorias de Segurança)
+- **Tabela**: `safety_categories`
+- **Campos**: id (TEXT), name
+- **Descrição**: Categorias de segurança (A, B, C)
+- **Registros**: 3 categorias
+
+### 10. Calibration Equipments (Equipamentos de Calibração)
+- **Tabela**: `calibration_equipments`
+- **Campos**: id, tag, equipment, validity, observations
+- **Descrição**: Controle de equipamentos de calibração
+- **Registros**: 30 equipamentos
+
+### 11. Settings (Configurações)
+- **Tabela**: `settings`
+- **Campos**: key, value
+- **Descrição**: Configurações do sistema
+- **Registros**: 6 configurações
+
+### 12. System Users (Usuários do Sistema)
+- **Tabela**: `system_users`
+- **Campos**: id, username, type, display_name, permissions
+- **Descrição**: Usuários e permissões do sistema
+- **Registros**: 1 usuário
+
+---
+
 **Desenvolvido com ❤️ para laboratórios de eficiência energética**

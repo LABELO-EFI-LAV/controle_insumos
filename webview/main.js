@@ -2,6 +2,8 @@
 // 1. Configuração e Inicialização
 // -----------------------------------------------------------------------------
 
+// Aplicação iniciada
+
 /**
  * Função segura para obter chaves de objetos
  * @param {any} obj - Objeto para extrair chaves
@@ -354,7 +356,7 @@ const notificationSystem = {
     init: () => {
         // Notificações do navegador desabilitadas para evitar pop-ups do Windows
         notificationSystem.config.browserNotifications = false;
-        console.log('🔕 Notificações do navegador desabilitadas para evitar pop-ups do Windows');
+        // Notificações do navegador desabilitadas
         
         // Carrega configurações salvas
         const savedConfig = localStorage.getItem('labcontrol-notifications');
@@ -421,10 +423,15 @@ const notificationSystem = {
         const toast = document.createElement('div');
         
         // Calcula a posição vertical baseada no número de toasts ativos
-        const toastHeight = 120; // Altura aproximada de cada toast
-        const spacing = 10; // Espaçamento entre toasts
+        const spacing = 20; // Espaçamento entre toasts
         const bottomOffset = 20; // Offset inicial do bottom
-        const verticalPosition = bottomOffset + (notificationSystem.activeToasts.length * (toastHeight + spacing));
+        
+        // Calcula a posição baseada na altura real dos toasts existentes
+        let verticalPosition = bottomOffset;
+        notificationSystem.activeToasts.forEach(existingToast => {
+            const rect = existingToast.getBoundingClientRect();
+            verticalPosition += rect.height + spacing;
+        });
         
         toast.className = `fixed right-5 max-w-md bg-white border-l-4 rounded-lg shadow-xl z-50 transform translate-x-full transition-all duration-300 ease-in-out`;
         toast.style.bottom = `${verticalPosition}px`;
@@ -447,7 +454,7 @@ const notificationSystem = {
         toast.className += ` ${colors[notification.type] || colors.info}`;
         
         // Formatar mensagem com quebras de linha preservadas
-        const formattedMessage = notification.message.replace(/\n/g, '<br>');
+        const formattedMessage = (notification.message || '').replace(/\n/g, '<br>');
         
         toast.innerHTML = `
             <div class="p-5">
@@ -525,7 +532,7 @@ const notificationSystem = {
     clearHistory: () => {
         try {
             localStorage.removeItem('labcontrol-notification-history');
-            console.log('Histórico de notificações limpo.');
+            // Histórico de notificações limpo
         } catch (e) {
             console.warn('Erro ao limpar histórico de notificações:', e);
         }
@@ -535,13 +542,14 @@ const notificationSystem = {
      * Reposiciona todos os toasts ativos
      */
     repositionToasts: () => {
-        const toastHeight = 120;
-        const spacing = 10;
+        const spacing = 20;
         const bottomOffset = 20;
         
+        let currentPosition = bottomOffset;
         notificationSystem.activeToasts.forEach((toast, index) => {
-            const newPosition = bottomOffset + (index * (toastHeight + spacing));
-            toast.style.bottom = `${newPosition}px`;
+            toast.style.bottom = `${currentPosition}px`;
+            const rect = toast.getBoundingClientRect();
+            currentPosition += rect.height + spacing;
         });
     },
     
@@ -551,7 +559,7 @@ const notificationSystem = {
     showBrowserNotification: (notification) => {
         // Função desabilitada para evitar pop-ups do Windows
         // As notificações são mostradas apenas como toasts na interface
-        console.log(`Notificação: ${notification.title} - ${notification.message}`);
+        // Notificação enviada
         return;
     },
     
@@ -634,7 +642,8 @@ const notificationSystem = {
             return;
         }
         
-        const possibleAssays = calculations.calculatePossibleAssays();
+        const possibleAssaysResult = calculations.calculatePossibleAssays();
+        const possibleAssays = possibleAssaysResult.count || possibleAssaysResult;
         const threshold = state.settings.alertThreshold || 24;
         
         if (possibleAssays <= threshold) {
@@ -705,7 +714,8 @@ const notificationSystem = {
         
         const equipmentsNeedingCalibration = state.calibrationEquipments.filter(equipment => {
             const validityDate = new Date(equipment.validity);
-            return validityDate <= warningDate && validityDate > today;
+            // Exclui equipamentos que já estão em calibração
+            return validityDate <= warningDate && validityDate > today && equipment.calibrationStatus !== 'em_calibracao';
         });
         
         if (equipmentsNeedingCalibration.length > 0) {
@@ -821,7 +831,7 @@ const auditSystem = {
         auditSystem.saveLog(logEntry);
         
         // Log no console para desenvolvimento
-        console.log('🔍 Audit Log:', logEntry);
+        // Log de auditoria registrado
         
         return logEntry.id;
     },
@@ -1046,7 +1056,7 @@ const auditSystem = {
         
         if (removedCount > 0) {
             localStorage.setItem(auditSystem.config.storageKey, JSON.stringify(filteredLogs));
-            console.log(`🧹 ${removedCount} logs antigos removidos`);
+            // Logs antigos removidos
         }
         
         return removedCount;
@@ -1176,7 +1186,7 @@ const cacheSystem = {
             cacheSystem.cleanup();
         }, cacheSystem.config.cleanupInterval);
         
-        console.log('🚀 Sistema de cache inicializado');
+        // Sistema de cache inicializado
     },
     
     /**
@@ -1270,22 +1280,45 @@ const cacheSystem = {
      * Limpa itens expirados
      */
     cleanup: () => {
-        // Limpeza do cache em memória
+        let cleanedCount = 0;
+        
+        // Limpeza do cache em memória - mais eficiente
+        const keysToDelete = [];
         for (const [key, data] of cacheSystem.memory.entries()) {
             if (!cacheSystem.isValid(data)) {
-                cacheSystem.memory.delete(key);
+                keysToDelete.push(key);
             }
         }
-        
-        // Limpeza do cache persistente
-        safeObjectKeys(localStorage || {}).forEach(key => {
-            if (key.startsWith(cacheSystem.config.storageKey)) {
-                const data = cacheSystem.persistent.get(key.replace(`${cacheSystem.config.storageKey}-`, ''));
-                if (data && !cacheSystem.isValid(data)) {
-                    localStorage.removeItem(key);
-                }
-            }
+        keysToDelete.forEach(key => {
+            cacheSystem.memory.delete(key);
+            cleanedCount++;
         });
+        
+        // Limpeza do cache persistente - com controle de erro
+        try {
+            const storageKeys = safeObjectKeys(localStorage || {});
+            const cacheKeys = storageKeys.filter(key => key.startsWith(cacheSystem.config.storageKey));
+            
+            cacheKeys.forEach(key => {
+                try {
+                    const data = cacheSystem.persistent.get(key.replace(`${cacheSystem.config.storageKey}-`, ''));
+                    if (data && !cacheSystem.isValid(data)) {
+                        localStorage.removeItem(key);
+                        cleanedCount++;
+                    }
+                } catch (e) {
+                    // Remove chaves corrompidas
+                    localStorage.removeItem(key);
+                    cleanedCount++;
+                }
+            });
+        } catch (e) {
+            console.warn('Erro durante limpeza do cache persistente:', e);
+        }
+        
+        if (cleanedCount > 0) {
+            // Cache limpo
+        }
     },
     
     /**
@@ -1326,7 +1359,7 @@ const cacheSystem = {
          */
         getConsumption: (nominalLoad, cycles) => {
             const base = (16 * nominalLoad + 54) * cycles;
-            const tiras = calculations.calculateTiras(nominalLoad) * cycles;
+            const tiras = Math.ceil(calculations.calculateTiras(nominalLoad) * cycles);
             return {
                 poBase: base * 0.77,
                 perborato: base * 0.20,
@@ -1411,8 +1444,11 @@ const cacheSystem = {
             persistent: persistentStats,
             enabled: cacheSystem.config.enabled
         };
-    }
+    },
+
 };
+
+
 
 /**
  * Sistema de usuários estáticos com diferentes níveis de permissão
@@ -1466,7 +1502,7 @@ const vscode = (() => {
             console.warn("API do VS Code não está disponível. Executando em modo de desenvolvimento com fallback.");
             return {
                 postMessage: (message) => {
-                    console.log("[DEV_MODE] Mensagem postada para a extensão:", message);
+                    // Mensagem enviada para extensão
                 }
             };
         }
@@ -1545,6 +1581,97 @@ const REAGENT_KEYS = Object.fromEntries(
 const COLOR_PALETTE = ['#4f46e5', '#db2777', '#f59e0b', '#10b981', '#3b82f6',
     '#8b5cf6', '#f43f5e', '#06b6d4', '#f97316'
 ];
+
+/**
+ * Função global para validar e deduzir estoque de reagentes
+ * @param {string} reagentKey - Chave do reagente (poBase, perborato, taed, tiras)
+ * @param {Array} lotsArray - Array de lotes com ciclos
+ * @param {number} nominalLoad - Carga nominal do ensaio
+ * @returns {boolean} - True se o estoque foi validado e deduzido com sucesso
+ */
+const checkAndDeductStock = (reagentKey, lotsArray, nominalLoad) => {
+    const reagentName = REAGENT_NAMES[reagentKey];
+    if (!lotsArray || lotsArray.length === 0) return true;
+    
+    // Primeiro valida se há estoque suficiente para cada lote individualmente
+    for (const { lot, cycles } of lotsArray) {
+        let consumption;
+        // Usa as mesmas fórmulas diretas do handleFinishAssay
+        if (reagentKey === 'poBase') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.77;
+        } else if (reagentKey === 'perborato') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.20;
+        } else if (reagentKey === 'taed') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.03;
+        } else if (reagentKey === 'tiras') {
+            consumption = calculations.calculateTiras(nominalLoad) * cycles;
+        }
+        
+        const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
+        if (itemIndex === -1 || state.inventory[itemIndex].quantity < consumption) {
+            utils.showToast(`Estoque insuficiente para o lote ${lot} de ${reagentName}. Necessário: ${consumption.toFixed(2)}, Disponível: ${state.inventory[itemIndex]?.quantity.toFixed(2) || 0}`, true);
+            return false;
+        }
+    }
+    
+    // Se a validação passou, deduz o estoque de cada lote individualmente
+    for (const { lot, cycles } of lotsArray) {
+        let consumption;
+        // Usa as mesmas fórmulas diretas do handleFinishAssay
+        if (reagentKey === 'poBase') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.77;
+        } else if (reagentKey === 'perborato') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.20;
+        } else if (reagentKey === 'taed') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.03;
+        } else if (reagentKey === 'tiras') {
+            consumption = calculations.calculateTiras(nominalLoad) * cycles;
+        }
+        
+        const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
+        state.inventory[itemIndex].quantity -= consumption;
+        
+        // Log para debug da dedução
+        console.log(`[INVENTORY] Deduzido ${consumption.toFixed(2)} de ${reagentName} (lote ${lot}). Novo estoque: ${state.inventory[itemIndex].quantity.toFixed(2)}`);
+    }
+    
+    // Força salvamento imediato após dedução para garantir persistência
+    console.log('[INVENTORY] Salvando inventário após dedução de estoque...');
+    dataHandlers.saveData();
+    
+    return true;
+};
+
+/**
+ * Função global para reverter o desconto de estoque de reagentes
+ * @param {string} reagentKey - Chave do reagente (poBase, perborato, taed, tiras)
+ * @param {Array} lotsArray - Array de lotes com ciclos
+ * @param {number} nominalLoad - Carga nominal do ensaio
+ */
+const revertStockDeduction = (reagentKey, lotsArray, nominalLoad) => {
+    const reagentName = REAGENT_NAMES[reagentKey];
+    if (!lotsArray || lotsArray.length === 0) return;
+    
+    // Adiciona de volta ao estoque o consumo individual de cada lote
+    for (const { lot, cycles } of lotsArray) {
+        let consumption;
+        // Usa as mesmas fórmulas diretas do handleFinishAssay
+        if (reagentKey === 'poBase') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.77;
+        } else if (reagentKey === 'perborato') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.20;
+        } else if (reagentKey === 'taed') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.03;
+        } else if (reagentKey === 'tiras') {
+            consumption = calculations.calculateTiras(nominalLoad) * cycles;
+        }
+        
+        const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
+        if (itemIndex !== -1) {
+            state.inventory[itemIndex].quantity += consumption;
+        }
+    }
+};
 
 /**
  * Configurações para a funcionalidade de arrastar e soltar (drag and drop) no Gantt.
@@ -1653,7 +1780,6 @@ const state = {
     isLoggedIn: false,
     ganttZoomLevel: 25,
     ganttRowHeighLevel: 80,
-    ganttInitialRenderDone: false,
 };
 
 // Referências do DOM
@@ -1683,8 +1809,6 @@ const state = {
  */
 const DOM = {
     loadingSpinner: document.getElementById('loading-spinner'),
-    toast: document.getElementById('toast'),
-    toastMessage: document.getElementById('toast-message'),
     modal: document.getElementById('modal-template'),
     ganttLabelsContainer: document.getElementById('gantt-labels-container'),
     ganttHeaderContainer: document.getElementById('gantt-header-container'),
@@ -1764,22 +1888,24 @@ const utils = {
     hideLoading: () => DOM.loadingSpinner?.classList.add('hidden'),
 
     /**
-     * Exibe um toast de notificação na tela.
+     * Exibe um toast de notificação na tela usando o sistema unificado.
      * @param {string} message - A mensagem a ser exibida.
      * @param {boolean} [isError=false] - Se true, a mensagem é um erro e tem cor vermelha.
      */
     showToast: (message, isError = false) => {
-        if (!DOM.toast || !DOM.toastMessage) return;
-        
         // Bloqueia notificações para usuários visualizadores
         if (state.currentUser && state.currentUser.permissions.viewOnly) {
             return;
         }
         
-        DOM.toastMessage.textContent = message;
-        DOM.toast.classList.remove('hidden', 'bg-green-500', 'bg-red-500');
-        DOM.toast.classList.add(isError ? 'bg-red-500' : 'bg-green-500');
-        setTimeout(() => DOM.toast.classList.add('hidden'), 3000);
+        // Usa o sistema de notificações unificado para evitar sobreposição
+        const type = isError ? 'error' : 'success';
+        const title = isError ? 'Erro' : 'Sucesso';
+        
+        notificationSystem.send(title, message, type, {
+            autoClose: true,
+            autoCloseDelay: 3000
+        });
     },
 
     /**
@@ -2094,16 +2220,19 @@ const authSystem = {
 
         // Se é visualizador, desabilita todos os botões de edição
         if (userType === 'visualizador' || permissions.viewOnly) {
-            // Desabilita botões de adicionar/editar
+            // Desabilita botões de adicionar/editar (exceto botões do modal de cronograma)
             const editButtons = document.querySelectorAll(
                 '#btn-open-reagent-modal, #btn-open-assay-modal, .btn-edit, .btn-delete, .btn-add'
             );
             editButtons.forEach(btn => {
-                if (btn) btn.style.display = 'none';
+                // Permite botões de editar e excluir do modal de cronograma para visualizadores
+                if (btn && !btn.classList.contains('btn-edit-gantt-assay') && !btn.classList.contains('btn-delete-gantt-assay')) {
+                    btn.style.display = 'none';
+                }
             });
 
-            // Esconde botões do cronograma
-            const ganttAddButtons = document.querySelectorAll('#btn-open-add-gantt-assay-modal, #btn-open-add-safety-assay-modal, #btn-open-add-vacation-modal, #btn-open-add-calibration-modal');
+            // Esconde botões do cronograma (exceto ensaios de eficiência e segurança para permitir cenários)
+            const ganttAddButtons = document.querySelectorAll('#btn-open-add-vacation-modal, #btn-open-add-calibration-modal');
             ganttAddButtons.forEach(btn => {
                 if (btn) btn.style.display = 'none';
             });
@@ -2138,19 +2267,16 @@ const authSystem = {
             // Drag and drop liberado para visualizadores
         }
 
-        // Para técnicos (eficiência e segurança), esconde botões do cronograma
+        // Para técnicos (eficiência e segurança), esconde apenas botões de férias
         if (userType === 'tecnico_eficiencia' || userType === 'tecnico_seguranca') {
-            const scheduleActions = document.getElementById('schedule-actions-container');
-            if (scheduleActions) {
-                scheduleActions.style.display = 'none';
-            }
-
-            // Esconde botões de adicionar ensaio no cronograma
-            const ganttAddButtons = document.querySelectorAll('#btn-open-add-gantt-assay-modal, #btn-open-add-safety-assay-modal, #btn-open-add-vacation-modal');
+            // Esconde apenas botões de férias no cronograma (mantém ensaios visíveis)
+            const ganttAddButtons = document.querySelectorAll('#btn-open-add-vacation-modal');
             ganttAddButtons.forEach(btn => {
                 if (btn) btn.style.display = 'none';
             });
 
+            // Os botões de Guardar Alterações e Cancelar permanecem disponíveis para técnicos
+            // pois eles precisam poder salvar suas edições no cronograma
             // Drag and drop liberado para técnicos
         }
 
@@ -2226,6 +2352,9 @@ const authSystem = {
         document.addEventListener('pointermove', dragHandlers.handleDrag);
         document.addEventListener('pointerup', dragHandlers.handleDragEnd);
         
+        // Adiciona event listener para clique direito (duplicar elemento)
+        DOM.ganttGridContainer?.addEventListener('contextmenu', dragHandlers.handleRightClick);
+        
         // Remove estilos que impedem arrastar
         const draggableElements = document.querySelectorAll('.gantt-assay, .gantt-calibration');
         draggableElements.forEach(element => {
@@ -2242,6 +2371,9 @@ const authSystem = {
         DOM.ganttGridContainer?.removeEventListener('pointerdown', dragHandlers.handleDragStart);
         document.removeEventListener('pointermove', dragHandlers.handleDrag);
         document.removeEventListener('pointerup', dragHandlers.handleDragEnd);
+        
+        // Remove event listener de clique direito
+        DOM.ganttGridContainer?.removeEventListener('contextmenu', dragHandlers.handleRightClick);
         
         // Adiciona estilo para indicar que não é arrastável
         const draggableElements = document.querySelectorAll('.gantt-assay, .gantt-calibration');
@@ -2267,16 +2399,16 @@ const authSystem = {
                 btn.style.display = 'none';
             });
 
-            // Esconde botões específicos para segurança
-            const securityRestrictedButtons = document.querySelectorAll('#btn-open-add-calibration-modal, #btn-toggle-gantt-actions');
+            // Esconde apenas botão de calibração para segurança
+            const securityRestrictedButtons = document.querySelectorAll('#btn-open-add-calibration-modal');
             securityRestrictedButtons.forEach(btn => {
                 if (btn) btn.style.display = 'none';
             });
         }
 
-        // Para técnico eficiência, esconde botões específicos
+        // Para técnico eficiência, esconde apenas botão de calibração
         if (userType === 'tecnico_eficiencia') {
-            const efficiencyRestrictedButtons = document.querySelectorAll('#btn-open-add-calibration-modal, #btn-toggle-gantt-actions');
+            const efficiencyRestrictedButtons = document.querySelectorAll('#btn-open-add-calibration-modal');
             efficiencyRestrictedButtons.forEach(btn => {
                 if (btn) btn.style.display = 'none';
             });
@@ -2293,13 +2425,8 @@ const authSystem = {
             });
         }
 
-        // Para técnicos, esconde botões específicos do cronograma
-        if (userType === 'tecnico_eficiencia' || userType === 'tecnico_seguranca') {
-            const ganttActionButtons = document.querySelectorAll('.gantt-assay .btn-edit, .gantt-assay .btn-delete, .gantt-calibration .btn-edit, .gantt-calibration .btn-delete');
-            ganttActionButtons.forEach(btn => {
-                btn.style.display = 'none';
-            });
-        }
+        // Botões do cronograma liberados para técnicos
+        // Os técnicos agora podem editar e excluir ensaios e calibrações no cronograma
     },
 
     /**
@@ -2424,7 +2551,7 @@ const accessControl = {
         const correctPassword = state.settings.schedulePassword || 'admin';
         if (enteredPassword === correctPassword) {
             if (state.passwordContext === 'saveSchedule') {
-                dataHandlers.saveData();
+                dataHandlers.saveScheduleData();
                 state.originalScheduledAssays = JSON.parse(JSON.stringify(state.scheduledAssays));
                 state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays)); // Salva o estado de segurança
                 state.hasUnsavedChanges = false;
@@ -2493,7 +2620,7 @@ const calculations = {
      */
     calculateConsumption: (nominalLoad, cycles) => {
         const base = (16 * nominalLoad + 54) * cycles;
-        const tiras = calculations.calculateTiras(nominalLoad) * cycles;
+        const tiras = Math.ceil(calculations.calculateTiras(nominalLoad) * cycles);
         return {
             poBase: base * 0.77,
             perborato: base * 0.20,
@@ -2541,7 +2668,7 @@ const calculations = {
         limitingReagent: isFinite(finalCount) && finalCount > 0 ? limitingFactor.reagent : 'Nenhum'
     };
 }
-};
+}
 
 /**
  * Funções auxiliares para o dashboard.
@@ -2555,10 +2682,16 @@ const dashboardUtils = {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         // Apenas ensaios de eficiência (scheduledAssays) - ensaios de segurança ficam limitados ao cronograma
+        // Excluir ensaios com status "pendente", férias e calibração
         return state.scheduledAssays.filter(assay => {
             const startDate = utils.parseDate(assay.startDate);
             const endDate = utils.parseDate(assay.endDate);
-            return today >= startDate && today <= endDate;
+            const isToday = today >= startDate && today <= endDate;
+            const isNotPending = assay.status && assay.status.toLowerCase() !== 'pendente';
+            const isNotVacation = assay.type !== 'férias';
+            const isNotCalibration = !assay.type || (!assay.type.includes('calibracao') && assay.status.toLowerCase() !== 'calibração');
+            
+            return isToday && isNotPending && isNotVacation && isNotCalibration;
         }).sort((a, b) => utils.parseDate(a.startDate) - utils.parseDate(b.startDate));
     },
     /**
@@ -2631,14 +2764,17 @@ const dashboardUtils = {
             const isWithinDateRange = assay.parsedDate >= today && assay.parsedDate <= endDate;
             const isNotPending = assay.status.toLowerCase() !== 'pendente';
             const isAssignedToTerminal = assay.setup != null; // Garante que o ensaio tem um terminal definido
+            const isNotVacation = assay.type !== 'férias';
+            const isNotCalibration = !assay.type || (!assay.type.includes('calibracao') && assay.status.toLowerCase() !== 'calibração');
 
-            return isWithinDateRange && isNotPending && isAssignedToTerminal;
+            return isWithinDateRange && isNotPending && isAssignedToTerminal && isNotVacation && isNotCalibration;
         })
         .sort((a, b) => a.parsedDate - b.parsedDate);
 
     return upcomingAssays;
 },
 };
+
 
 /**
  * Funções de renderização que atualizam a interface do usuário.
@@ -2733,6 +2869,8 @@ const renderers = {
         `;
         filteredAssays.forEach(assay => {
             let consumption = { poBase: 0, perborato: 0, taed: 0, tiras: 0 };
+            let displayCycles = assay.cycles; // Valor padrão
+            
             if (assay.lots && !Array.isArray(assay.lots.poBase)) {
                 // Lógica para dados antigos (consumo calculado)
                 consumption = calculations.calculateConsumption(assay.nominalLoad, assay.cycles);
@@ -2742,6 +2880,13 @@ const renderers = {
                 consumption.perborato = assay.lots.perborato.reduce((sum, l) => sum + (16 * assay.nominalLoad + 54) * l.cycles * 0.20, 0);
                 consumption.taed = assay.lots.taed.reduce((sum, l) => sum + (16 * assay.nominalLoad + 54) * l.cycles * 0.03, 0);
                 consumption.tiras = assay.lots.tiras.reduce((sum, l) => sum + calculations.calculateTiras(assay.nominalLoad) * l.cycles, 0);
+                
+                // Calcular média dos ciclos dos lotes
+                const allLots = [...(assay.lots.poBase || []), ...(assay.lots.perborato || []), ...(assay.lots.taed || []), ...(assay.lots.tiras || [])];
+                if (allLots.length > 0) {
+                    const totalCycles = allLots.reduce((sum, lot) => sum + (lot.cycles || 0), 0);
+                    displayCycles = Math.round(totalCycles / allLots.length);
+                }
             } else {
                 // Fallback
                 consumption = { poBase: 0, perborato: 0, taed: 0, tiras: 0 };
@@ -2754,7 +2899,11 @@ const renderers = {
             const lotHTML = (reagentName) => {
                 if (!assay.lots || !assay.lots[reagentName]) return 'N/A';
                 if (Array.isArray(assay.lots[reagentName])) {
-                    return assay.lots[reagentName].map(l => `${l.lot} (${l.cycles}c)`).join(', ');
+                    // Remove duplicatas baseado no lote e ciclos
+                    const uniqueLots = assay.lots[reagentName].filter((lot, index, self) => 
+                        index === self.findIndex(l => l.lot === lot.lot && l.cycles === lot.cycles)
+                    );
+                    return uniqueLots.map(l => `${l.lot} (${l.cycles}c)`).join(', ');
                 }
                 return assay.lots[reagentName]; // Para compatibilidade com dados antigos
             };
@@ -2774,7 +2923,7 @@ const renderers = {
                     <td class="py-3 px-4">${startDateFormatted}</td>
                     <td class="py-3 px-4">${endDateFormatted}</td>
                     <td class="py-3 px-4">${assay.nominalLoad}</td>
-                    <td class="py-3 px-4">${assay.cycles}</td>
+                    <td class="py-3 px-4">${displayCycles}</td>
                     <td class="py-3 px-4">${consumption.tiras.toFixed(0)}</td>
                     <td class="py-3 px-4">${consumption.poBase.toFixed(2)}</td>
                     <td class="py-3 px-4">${consumption.perborato.toFixed(2)}</td>
@@ -2898,27 +3047,52 @@ const renderers = {
 
         // Junta todos os eventos para calcular o período
         const allEvents = [...state.scheduledAssays, ...state.safetyScheduledAssays, ...state.calibrations];
-        
+                
         // Mantém a lógica original de cálculo do período
         if (allEvents.length > 0) {
             const allDates = allEvents.flatMap(e => [e.startDate, e.endDate]).map(dateStr => utils.parseDate(dateStr));
             const minDate = new Date(Math.min(...allDates));
             const maxDate = new Date(Math.max(...allDates));
-            minDate.setDate(minDate.getDate() - 30);
-            maxDate.setDate(maxDate.getDate() + 60);
-            state.ganttStart = minDate;
-            state.ganttEnd = maxDate;
+
+            // Usar abordagem mais robusta para adicionar/subtrair dias
+            const startDate = new Date(minDate.getTime() - (30 * 24 * 60 * 60 * 1000));
+            const endDate = new Date(maxDate.getTime() + (60 * 24 * 60 * 60 * 1000));
+            
+            state.ganttStart = startDate;
+            state.ganttEnd = endDate;
         } else {
             const today = new Date();
-            state.ganttStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
-            state.ganttEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 21);
+            state.ganttStart = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
+            state.ganttEnd = new Date(today.getTime() + (21 * 24 * 60 * 60 * 1000));
         }
 
         let days = [];
         let currentDate = new Date(state.ganttStart);
-        while (currentDate <= state.ganttEnd) {
+        let dayCount = 0;
+        
+        // Calcular maxDays baseado no período real do cronograma + margem de segurança
+        const timeDiff = state.ganttEnd.getTime() - state.ganttStart.getTime();
+        const daysDiff = Math.ceil(timeDiff / (24 * 60 * 60 * 1000));
+        const maxDays = Math.max(daysDiff + 10, 100); // Mínimo de 100 dias, ou período calculado + 10 dias de margem
+        
+        // Normalizar as datas para comparação (apenas data, sem hora)
+        const endTime = new Date(state.ganttEnd.getFullYear(), state.ganttEnd.getMonth(), state.ganttEnd.getDate()).getTime();
+        
+        while (dayCount < maxDays) {
+            const currentTime = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
+            
+            if (currentTime > endTime) {
+                break;
+            }
+            
             days.push(currentDate.toISOString().split('T')[0]);
-            currentDate.setDate(currentDate.getDate() + 1);
+            // Usar abordagem mais robusta para adicionar 1 dia
+            currentDate = new Date(currentDate.getTime() + (24 * 60 * 60 * 1000));
+            dayCount++;
+        }
+        
+        if (dayCount >= maxDays) {
+            console.warn('⚠️ Loop de dias limitado a', maxDays, 'dias para evitar problemas de performance');
         }
 
         const today = new Date();
@@ -2975,13 +3149,15 @@ const renderers = {
         // 1. Adiciona as categorias de segurança dinamicamente
         state.safetyCategories.forEach(cat => {
             // A chave é o nome da categoria, e o valor é uma lista de ensaios cujo 'setup' corresponde ao 'id' da categoria
-            groupedAssays[cat.name] = state.safetyScheduledAssays.filter(a => a.setup === cat.id);
+            const safetyAssaysForCategory = state.safetyScheduledAssays.filter(a => a.setup === cat.id);
+            groupedAssays[cat.name] = safetyAssaysForCategory;
         });
 
         // 2. Adiciona as categorias de eficiência dinamicamente
         state.efficiencyCategories.forEach(cat => {
             // A chave é o nome da categoria, e o valor é uma lista de ensaios cujo 'setup' corresponde ao 'id' da categoria
-            groupedAssays[cat.name] = state.scheduledAssays.filter(a => a.setup === cat.id && a.status.toLowerCase() !== 'pendente' && a.type !== 'férias');
+            const efficiencyAssaysForCategory = state.scheduledAssays.filter(a => a.setup === cat.id && a.status.toLowerCase() !== 'pendente' && a.type !== 'férias');
+            groupedAssays[cat.name] = efficiencyAssaysForCategory;
         });
 
         // 3. Adiciona as categorias estáticas que não são dinâmicas
@@ -3057,6 +3233,8 @@ const renderers = {
                 if (categoryObj) {
                     deleteButton.dataset.categoryId = categoryObj.id;
                     deleteButton.dataset.categoryName = category; // Passa o nome para a mensagem de confirmação
+                } else {
+                    console.error('Categoria não encontrada no estado:', category);
                 }
 
                 deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
@@ -4349,9 +4527,15 @@ chartContainers.forEach(container => {
     
     /** Verifica o nível de estoque e exibe um alerta se necessário. */
     checkStockLevel: () => {
-        const possibleAssays = calculations.calculatePossibleAssays();
+        const possibleAssaysResult = calculations.calculatePossibleAssays();
+        const possibleAssays = possibleAssaysResult.count || possibleAssaysResult;
+        // Debug de alertas removido
+        
         const banner = document.getElementById('stock-alert-banner');
-        if (!banner) return;
+        if (!banner) {
+            // Banner de alerta não encontrado
+            return;
+        }
         if (possibleAssays <= state.settings.alertThreshold) {
             const alertText = document.getElementById('stock-alert-text');
             if (alertText) alertText.textContent = `Atenção! Apenas ${possibleAssays} ensaios possíveis. É necessário comprar insumos.`;
@@ -4454,16 +4638,25 @@ chartContainers.forEach(container => {
 function getBusinessDays(start, end) {
     const days = [];
     const current = new Date(start);
+    let dayCount = 0;
+    const maxDays = 365; // Proteção contra loops infinitos
 
-    while (current <= end) {
+    while (current <= end && dayCount < maxDays) {
         const day = current.getDay(); // 0 = domingo, 6 = sábado
         if (day !== 0 && day !== 6) {
             days.push(new Date(current));
         }
         current.setDate(current.getDate() + 1);
+        dayCount++;
     }
+    
+    if (dayCount >= maxDays) {
+        console.warn('⚠️ getBusinessDays: Loop limitado a', maxDays, 'dias para evitar problemas de performance');
+    }
+    
     return days;
 }
+
 const forecastSystem = {
     charts: {},
 
@@ -4485,7 +4678,8 @@ const forecastSystem = {
         state.scheduledAssays
             .filter(a => {
                 const d = new Date(a.startDate);
-                return d >= today && d <= limitDate;
+                // Exclui ensaios de secadora do cálculo de previsão de consumo
+                return d >= today && d <= limitDate && a.type !== 'secadora';
             })
             .forEach(assay => {
                 const startDate = new Date(assay.startDate + 'T00:00:00');
@@ -4566,7 +4760,8 @@ const forecastSystem = {
 
         const relevantAssays = state.historicalAssays.filter(assay => {
             const assayDate = new Date(assay.startDate);
-            return assayDate >= ninetyDaysAgo && assayDate <= today;
+            // Exclui ensaios de secadora do cálculo da média histórica
+            return assayDate >= ninetyDaysAgo && assayDate <= today && assay.type !== 'secadora';
         });
 
         if (relevantAssays.length === 0) return 0;
@@ -4591,6 +4786,31 @@ const forecastSystem = {
         return totalConsumption / 90; // Média diária sobre o período de 90 dias
     },
 
+    // NOVA FUNÇÃO: Adiciona dias úteis a uma data (excluindo finais de semana)
+    addBusinessDays(startDate, businessDaysToAdd) {
+        const result = new Date(startDate);
+        let daysAdded = 0;
+        let totalDays = 0;
+        const maxDays = 365; // Proteção contra loops infinitos
+        
+        while (daysAdded < businessDaysToAdd && totalDays < maxDays) {
+            result.setDate(result.getDate() + 1);
+            totalDays++;
+            const dayOfWeek = result.getDay();
+            
+            // Se não for sábado (6) nem domingo (0), conta como dia útil
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                daysAdded++;
+            }
+        }
+        
+        if (totalDays >= maxDays) {
+            console.warn('⚠️ addBusinessDays: Loop limitado a', maxDays, 'dias para evitar problemas de performance');
+        }
+        
+        return result;
+    },
+
     // NOVA FUNÇÃO: Lógica principal para encontrar a data de fim do estoque.
     calculateReagentEndDate(reagentName, supplier, initialStock, dailyConsumptions) {
         const stockKey = `${reagentName}-${supplier}`;
@@ -4601,7 +4821,7 @@ const forecastSystem = {
         const sortedDates = [...dailyConsumptions.keys()].sort();
         let lastDate = new Date();
     
-        // 1. Simulação baseada no cronograma
+        // 1. Simulação baseada no cronograma (excluindo secadoras)
         for (const dateKey of sortedDates) {
             const consumptionOnDay = dailyConsumptions.get(dateKey)[stockKey] || 0;
             currentStock -= consumptionOnDay;
@@ -4611,13 +4831,28 @@ const forecastSystem = {
             }
         }
     
-        // 2. Se o estoque não acabou, usa a média histórica como fallback
+        // 2. Após o último ensaio agendado, simula laboratório com 8 terminais ocupados (13kg cada)
+        if (sortedDates.length > 0) {
+            // Calcula consumo diário com 8 terminais de 13kg cada
+            const dailyConsumptionWith8Terminals = calculations.calculateConsumption(13, 1);
+            const reagentKey = Object.keys(REAGENT_NAMES).find(key => REAGENT_NAMES[key] === reagentName);
+            const dailyConsumptionAmount = dailyConsumptionWith8Terminals[reagentKey] * 8; // 8 terminais
+            
+            if (dailyConsumptionAmount > 0) {
+                const businessDaysRemaining = Math.floor(currentStock / dailyConsumptionAmount);
+                // Usa apenas dias úteis para calcular a data final
+                const endDate = this.addBusinessDays(lastDate, businessDaysRemaining);
+                return `Estimado para ${endDate.toLocaleDateString('pt-BR')}`;
+            }
+        }
+    
+        // 3. Fallback: usa a média histórica se não há ensaios agendados
         const averageDailyConsumption = this.calculateHistoricalDailyAverage(reagentName, supplier);
     
         if (averageDailyConsumption > 0) {
-            const daysRemaining = Math.floor(currentStock / averageDailyConsumption);
-            const endDate = new Date(lastDate);
-            endDate.setDate(lastDate.getDate() + daysRemaining);
+            const businessDaysRemaining = Math.floor(currentStock / averageDailyConsumption);
+            // Usa apenas dias úteis para calcular a data final
+            const endDate = this.addBusinessDays(lastDate, businessDaysRemaining);
             return `Estimado para ${endDate.toLocaleDateString('pt-BR')}`;
         }
     
@@ -5081,10 +5316,17 @@ const ganttMiddleClickHandler = (e) => {
 const dataHandlers = {
     /** Salva o estado atual da aplicação. */
     saveData: () => {
-        console.log('[WEBVIEW] 1. Iniciando saveData...');
+        // Iniciando processo de salvamento
+        
+        // Verificando equipamentos em calibração
+        const equipmentsInCalibration = state.calibrationEquipments.filter(eq => eq.calibrationStatus === 'em_calibracao');
         
         // Invalida caches relacionados a dados
         cacheSystem.rendering.invalidateOnDataChange();
+        
+        // Log para debug do salvamento do inventário
+        console.log('[INVENTORY] Preparando para salvar inventário...');
+        console.log('[INVENTORY] Itens no estado atual:', state.inventory?.length || 0);
         
         const dataToSave = {
             inventory: state.inventory,
@@ -5101,22 +5343,187 @@ const dataHandlers = {
         };
         try {
             JSON.stringify(dataToSave);
-            console.log('[WEBVIEW] 2. Teste de JSON.stringify passou com sucesso.');
+            // Teste de serialização passou
         } catch (error) {
             console.error('[WEBVIEW] ERRO FATAL: Os dados contêm uma referência circular e não podem ser salvos!', error);
             utils.showToast('ERRO GRAVE: Os dados não puderam ser serializados. Verifique o console.', true);
             return;
         }
+        // Processando equipamentos de calibração para salvamento
+        
         vscode.postMessage({
             command: 'saveData',
             data: dataToSave
         });
-        console.log('[WEBVIEW] 3. postMessage foi enviado para a extensão.');
+        // Dados enviados para extensão
         
         // Atualizar dashboard automaticamente quando algo for alterado no cronograma
         if (document.getElementById('dashboard-page') && !document.getElementById('dashboard-page').classList.contains('hidden')) {
             renderers.renderDashboard();
         }
+    },
+
+    /**
+     * Função otimizada para alterar apenas o status de um ensaio específico
+     * @param {number} assayId - ID do ensaio
+     * @param {string} newStatus - Novo status
+     * @param {string} table - Tabela ('scheduled_assays' ou 'safety_scheduled_assays')
+     */
+    updateAssayStatusOnly: (assayId, newStatus, table = 'scheduled_assays') => {
+        console.log(`[WEBVIEW] Alterando status do ensaio ${assayId} para '${newStatus}' na tabela ${table}`);
+        
+        vscode.postMessage({
+            command: 'updateAssayStatusOnly',
+            data: {
+                assayId: assayId,
+                status: newStatus,
+                table: table
+            }
+        });
+    },
+
+    /**
+     * Função otimizada para operações de inventário
+     */
+    addInventoryItem: (item) => {
+        console.log('[WEBVIEW] Adicionando item ao inventário:', item);
+        
+        // Validação básica antes de enviar
+        if (!item || typeof item !== 'object') {
+            console.error('[WEBVIEW] Item inválido:', item);
+            notificationSystem.send('Erro', 'Dados do item são inválidos', 'error');
+            return;
+        }
+
+        // Verificar campos obrigatórios
+        const requiredFields = ['reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
+        const missingFields = requiredFields.filter(field => !item[field]);
+        
+        if (missingFields.length > 0) {
+            console.error('[WEBVIEW] Campos obrigatórios ausentes:', missingFields);
+            notificationSystem.send('Erro', `Campos obrigatórios ausentes: ${missingFields.join(', ')}`, 'error');
+            return;
+        }
+
+        vscode.postMessage({
+            command: 'addInventoryItem',
+            data: {
+                item: item  // Envolvendo o item em um objeto data
+            }
+        });
+    },
+
+    updateInventoryItem: (item) => {
+        console.log('[WEBVIEW] Atualizando item do inventário:', item);
+        vscode.postMessage({
+            command: 'updateInventoryItem',
+            data: item
+        });
+    },
+
+    deleteInventoryItem: (itemId) => {
+        console.log('[WEBVIEW] Removendo item do inventário:', itemId);
+        vscode.postMessage({
+            command: 'deleteInventoryItem',
+            data: { id: itemId }
+        });
+    },
+
+    /**
+     * Função otimizada para operações de feriados
+     */
+    addHoliday: (holiday) => {
+        console.log('[WEBVIEW] Adicionando feriado:', holiday);
+        vscode.postMessage({
+            command: 'addHoliday',
+            data: holiday
+        });
+    },
+
+    deleteHoliday: (holidayId) => {
+        console.log('[WEBVIEW] Removendo feriado:', holidayId);
+        vscode.postMessage({
+            command: 'deleteHoliday',
+            data: { id: holidayId }
+        });
+    },
+
+    /**
+     * Função otimizada para operações de usuários do sistema
+     */
+    addSystemUser: (user) => {
+        console.log('[WEBVIEW] Adicionando usuário do sistema:', user);
+        vscode.postMessage({
+            command: 'addSystemUser',
+            data: user
+        });
+    },
+
+    updateSystemUser: (user) => {
+        console.log('[WEBVIEW] Atualizando usuário do sistema:', user);
+        vscode.postMessage({
+            command: 'updateSystemUser',
+            data: user
+        });
+    },
+
+    deleteSystemUser: (userId) => {
+        console.log('[WEBVIEW] Removendo usuário do sistema:', userId);
+        vscode.postMessage({
+            command: 'deleteSystemUser',
+            data: { id: userId }
+        });
+    },
+
+    /**
+     * Função otimizada para operações de categorias
+     */
+    addScheduleCategory: (category, type) => {
+        console.log('[WEBVIEW] Adicionando categoria:', category, 'tipo:', type);
+        const isSafety = type === 'safety';
+        vscode.postMessage({
+            command: 'addCategory',
+            data: { category, isSafety }
+        });
+    },
+
+    deleteScheduleCategory: (categoryId, type) => {
+        console.log('[WEBVIEW] Removendo categoria:', categoryId, 'tipo:', type);
+        const isSafety = type === 'safety';
+        vscode.postMessage({
+            command: 'deleteCategory',
+            data: { id: categoryId, isSafety }
+        });
+    },
+
+    /**
+     * Função otimizada para salvar cronograma completo
+     */
+    saveScheduleData: () => {
+        console.log('[WEBVIEW] Salvando dados do cronograma...');
+        
+        const scheduleData = {
+            scheduledAssays: state.scheduledAssays,
+            safetyScheduledAssays: state.safetyScheduledAssays,
+            efficiencyCategories: state.efficiencyCategories,
+            safetyCategories: state.safetyCategories
+        };
+        
+        vscode.postMessage({
+            command: 'saveScheduleData',
+            data: scheduleData
+        });
+    },
+
+    /**
+     * Função otimizada para atualizar configurações do sistema
+     */
+    updateSystemSettings: (settings) => {
+        console.log('[WEBVIEW] Atualizando configurações do sistema:', settings);
+        vscode.postMessage({
+            command: 'updateSystemSettings',
+            data: settings
+        });
     },
     /**
      * Lida com a submissão do formulário para adicionar novas linhas ao Gantt.
@@ -5144,7 +5551,9 @@ const dataHandlers = {
             newId = maxId + 1;
         }
 
-        state.efficiencyCategories.push({ id: newId, name: rowName });
+        const newCategory = { id: newId, name: rowName };
+        state.efficiencyCategories.push(newCategory);
+        dataHandlers.addScheduleCategory(newCategory, 'efficiency');
         utils.showToast("Nova linha de eficiência adicionada.");
 
     } else if (rowType === 'safety') {
@@ -5163,7 +5572,9 @@ const dataHandlers = {
             }
         }
         
-        state.safetyCategories.push({ id: newId, name: rowName });
+        const newCategory = { id: newId, name: rowName };
+        state.safetyCategories.push(newCategory);
+        dataHandlers.addScheduleCategory(newCategory, 'safety');
         utils.showToast("Nova linha de segurança adicionada.");
     }
 
@@ -5193,7 +5604,7 @@ const dataHandlers = {
             return;
         }
         state.holidays.push(newHoliday);
-        dataHandlers.saveData();
+        dataHandlers.addHoliday(newHoliday);
         renderers.renderHolidaysList();
         utils.showToast("Feriado adicionado com sucesso!");
         form.reset();
@@ -5206,9 +5617,23 @@ const dataHandlers = {
     handleRemoveHoliday: (holidayId) => {
         undoManager.saveState();
         state.holidays = state.holidays.filter(h => h.id !== holidayId);
-        dataHandlers.saveData();
+        dataHandlers.deleteHoliday(holidayId);
         renderers.renderHolidaysList();
         utils.showToast("Feriado removido com sucesso!");
+    },
+
+    /**
+     * Remove um email da lista de notificações.
+     * @param {string} emailToRemove - O email a ser removido.
+     */
+    handleRemoveEmail: (emailToRemove) => {
+        let emails = state.settings.notificationEmail.split(',').filter(e => e);
+        emails = emails.filter(e => e !== emailToRemove);
+        state.settings.notificationEmail = emails.join(',');
+        dataHandlers.saveSettings();
+        renderers.populateSettingsForm();
+        utils.closeModal();
+        utils.showToast("E-mail removido com sucesso!");
     },
 
     /**
@@ -5264,15 +5689,16 @@ const dataHandlers = {
         }
         
         // Adiciona o novo usuário
-        state.systemUsers[username] = {
+        const newUser = {
             username: username,
             type: userType,
             displayName: displayName,
             permissions: permissions
         };
+        state.systemUsers[username] = newUser;
         
         // Salva no backend
-        dataHandlers.saveSystemUsers();
+        dataHandlers.addSystemUser(newUser);
         
         // Limpa o formulário
         form.reset();
@@ -5303,7 +5729,7 @@ const dataHandlers = {
         
         ui.showConfirmationModal(confirmMessage, () => {
             delete state.systemUsers[username];
-            dataHandlers.saveSystemUsers();
+            dataHandlers.deleteSystemUser(username);
             renderers.populateSettingsForm();
             utils.showToast(`Usuário ${user.displayName} removido com sucesso!`);
         });
@@ -5362,7 +5788,7 @@ const dataHandlers = {
         // Log da auditoria
         auditSystem.logInventoryAction(auditSystem.actionTypes.CREATE, newReagent);
         
-        dataHandlers.saveData();
+        dataHandlers.addInventoryItem(newReagent);
         renderers.renderAll();
         utils.closeModal();
         notificationSystem.send(
@@ -5405,7 +5831,7 @@ const dataHandlers = {
         
         undoManager.saveState();
         
-        state.inventory[reagentIndex] = {
+        const updatedItem = {
             ...state.inventory[reagentIndex],
             reagent: formData.reagent,
             manufacturer: formData.manufacturer,
@@ -5413,7 +5839,8 @@ const dataHandlers = {
             quantity: parseInt(formData.quantity),
             validity: formData.validity,
         };
-        dataHandlers.saveData();
+        state.inventory[reagentIndex] = updatedItem;
+        dataHandlers.updateInventoryItem(updatedItem);
         renderers.renderAll();
         utils.closeModal();
         utils.showToast("Insumo atualizado com sucesso!");
@@ -5433,8 +5860,10 @@ const dataHandlers = {
             isSafety = true;
             assaysOnRow = state.safetyScheduledAssays.filter(a => a.setup === categoryId);
         } else {
-            categoryIndex = state.efficiencyCategories.findIndex(c => c.id === categoryId);
-            assaysOnRow = state.scheduledAssays.filter(a => a.setup === categoryId);
+            // Para categorias de eficiência, o ID pode ser string mas precisa ser comparado como número
+            const numericCategoryId = parseInt(categoryId, 10);
+            categoryIndex = state.efficiencyCategories.findIndex(c => c.id === numericCategoryId);
+            assaysOnRow = state.scheduledAssays.filter(a => a.setup === numericCategoryId);
         }
 
         if (categoryIndex === -1) {
@@ -5455,11 +5884,13 @@ const dataHandlers = {
             
             if (isSafety) {
                 state.safetyCategories.splice(categoryIndex, 1);
+                dataHandlers.deleteScheduleCategory(categoryId, 'safety');
             } else {
                 state.efficiencyCategories.splice(categoryIndex, 1);
+                // Para categorias de eficiência, usar o ID numérico
+                const numericCategoryId = parseInt(categoryId, 10);
+                dataHandlers.deleteScheduleCategory(numericCategoryId, 'efficiency');
             }
-
-            dataHandlers.saveData();
             renderers.renderGanttChart();
             utils.showToast(`Linha "${categoryName}" excluída com sucesso.`);
         });
@@ -5475,7 +5906,7 @@ const dataHandlers = {
         state.inventory = state.inventory.filter(item => item.id !== reagentId);
         utils.closeModal();
         renderers.renderAll();
-        dataHandlers.saveData();
+        dataHandlers.deleteInventoryItem(reagentId);
         utils.showToast("Insumo excluído com sucesso!");
     },
 
@@ -5487,6 +5918,19 @@ const dataHandlers = {
         undoManager.saveState();
         const historicalIndex = state.historicalAssays.findIndex(a => a.id === assayId);
         if (historicalIndex > -1) {
+            const assay = state.historicalAssays[historicalIndex];
+            
+            // Devolver reagentes ao inventário se o ensaio tiver lotes registrados
+            if (assay.lots) {
+                // Usar a função revertStockDeduction existente para cada tipo de reagente
+                if (assay.lots.poBase) revertStockDeduction('poBase', assay.lots.poBase, assay.nominalLoad);
+                if (assay.lots.perborato) revertStockDeduction('perborato', assay.lots.perborato, assay.nominalLoad);
+                if (assay.lots.taed) revertStockDeduction('taed', assay.lots.taed, assay.nominalLoad);
+                if (assay.lots.tiras) revertStockDeduction('tiras', assay.lots.tiras, assay.nominalLoad);
+                
+                console.log(`📦 Reagentes do ensaio ${assay.id} devolvidos ao inventário`);
+            }
+            
             state.historicalAssays.splice(historicalIndex, 1);
         }
         utils.closeModal();
@@ -5577,18 +6021,24 @@ handleUpdateCalibration: (e) => {
         let assayToMove = null;
         let scheduledIndex = state.scheduledAssays.findIndex(a => a.id === assayId);
         let safetyScheduledIndex = state.safetyScheduledAssays.findIndex(a => a.id === assayId);
+        let table = 'scheduled_assays';
 
         if (scheduledIndex !== -1) {
             assayToMove = { ...state.scheduledAssays[scheduledIndex], status: newStatus };
             state.scheduledAssays.splice(scheduledIndex, 1);
+            table = 'scheduled_assays';
         } else if (safetyScheduledIndex !== -1) {
             assayToMove = { ...state.safetyScheduledAssays[safetyScheduledIndex], status: newStatus };
             state.safetyScheduledAssays.splice(safetyScheduledIndex, 1);
+            table = 'safety_scheduled_assays';
         }
 
         if (assayToMove) {
             state.historicalAssays.push(assayToMove);
-            dataHandlers.saveData();
+            
+            // Usa a função otimizada para alterar apenas o status no banco
+            dataHandlers.updateAssayStatusOnly(assayId, newStatus, table);
+            
             renderers.renderAll();
             utils.showToast(`Status do ensaio atualizado para '${newStatus}'!`);
         } else {
@@ -5606,12 +6056,19 @@ handleUpdateCalibration: (e) => {
             utils.showToast("Erro: Ensaio não encontrado no cronograma.", true);
             return;
         }
+        
+        // Determina a tabela correta
+        const isInScheduled = state.scheduledAssays.find(a => a.id === assayId);
+        const table = isInScheduled ? 'scheduled_assays' : 'safety_scheduled_assays';
+        
         assay.status = 'labelo';
-        state.hasUnsavedChanges = true;
-        ui.toggleScheduleActions(true);
+        
+        // Usa a função otimizada para alterar apenas o status no banco
+        dataHandlers.updateAssayStatusOnly(assayId, 'labelo', table);
+        
         renderers.ganttInitialRenderDone = false;
         renderers.renderGanttChart();
-        utils.showToast("Amostra no LABELO! Guarde as alterações para confirmar.");
+        utils.showToast("Amostra no LABELO!");
         utils.closeModal();
     },
     /**
@@ -5625,12 +6082,19 @@ handleUpdateCalibration: (e) => {
             utils.showToast("Erro: Ensaio não encontrado no cronograma.", true);
             return;
         }
+        
+        // Determina a tabela correta
+        const isInScheduled = state.scheduledAssays.find(a => a.id === assayId);
+        const table = isInScheduled ? 'scheduled_assays' : 'safety_scheduled_assays';
+        
         assay.status = 'andamento';
-        state.hasUnsavedChanges = true;
-        ui.toggleScheduleActions(true);
+        
+        // Usa a função otimizada para alterar apenas o status no banco
+        dataHandlers.updateAssayStatusOnly(assayId, 'andamento', table);
+        
         renderers.ganttInitialRenderDone = false;
         renderers.renderGanttChart();
-        utils.showToast("Ensaio iniciado com sucesso! Guarde as alterações para confirmar.");
+        utils.showToast("Ensaio iniciado com sucesso!");
         utils.closeModal();
     },
 
@@ -5696,31 +6160,23 @@ handleUpdateCalibration: (e) => {
         assayToUpdate.cycles = averageCycles;
         assayToUpdate.lots = newLots;
 
-        // Valida e deduz o estoque
-        const checkAndDeductStock = (reagentKey, lotsArray) => {
-            const reagentName = REAGENT_NAMES[reagentKey];
-            if (!lotsArray || lotsArray.length === 0) return true;
-            for (const { lot, cycles } of lotsArray) {
-                const consumption = calculations.calculateConsumption(assayToUpdate.nominalLoad, cycles)[reagentKey];
-                const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
-                if (itemIndex === -1 || state.inventory[itemIndex].quantity < consumption) {
-                    utils.showToast(`Estoque insuficiente para o lote ${lot} de ${reagentName}. Necessário: ${consumption.toFixed(2)}, Disponível: ${state.inventory[itemIndex]?.quantity.toFixed(2) || 0}`, true);
-                    return false;
-                }
-            }
-            // Deduz o estoque se a validação passar
-            for (const { lot, cycles } of lotsArray) {
-                const consumption = calculations.calculateConsumption(assayToUpdate.nominalLoad, cycles)[reagentKey];
-                const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
-                state.inventory[itemIndex].quantity -= consumption;
-            }
-            return true;
-        };
+        // Valida e deduz o estoque usando a função global
+        if (!checkAndDeductStock('poBase', newLots.poBase, assayToUpdate.nominalLoad)) return;
+        if (!checkAndDeductStock('perborato', newLots.perborato, assayToUpdate.nominalLoad)) return;
+        if (!checkAndDeductStock('taed', newLots.taed, assayToUpdate.nominalLoad)) return;
+        if (!checkAndDeductStock('tiras', newLots.tiras, assayToUpdate.nominalLoad)) return;
 
-        if (!checkAndDeductStock('poBase', newLots.poBase)) return;
-        if (!checkAndDeductStock('perborato', newLots.perborato)) return;
-        if (!checkAndDeductStock('taed', newLots.taed)) return;
-        if (!checkAndDeductStock('tiras', newLots.tiras)) return;
+        // Calcula o consumo total baseado nos lotes utilizados
+        const consumption = {
+            poBase: newLots.poBase.reduce((sum, l) => sum + (16 * assayToUpdate.nominalLoad + 54) * l.cycles * 0.77, 0),
+            perborato: newLots.perborato.reduce((sum, l) => sum + (16 * assayToUpdate.nominalLoad + 54) * l.cycles * 0.20, 0),
+            taed: newLots.taed.reduce((sum, l) => sum + (16 * assayToUpdate.nominalLoad + 54) * l.cycles * 0.03, 0),
+            tiras: newLots.tiras.reduce((sum, l) => sum + calculations.calculateTiras(assayToUpdate.nominalLoad) * l.cycles, 0)
+        };
+        
+        // Calcula o consumo total de sabão (soma de todos os reagentes)
+        assayToUpdate.totalConsumption = consumption.poBase + consumption.perborato + consumption.taed + consumption.tiras;
+        assayToUpdate.consumption = consumption;
     }
     
     // Atualiza as informações comuns a ambos os tipos de ensaio
@@ -5802,71 +6258,111 @@ handleUpdateCalibration: (e) => {
         undoManager.saveState();
         e.preventDefault();
         const form = e.target;
-        const nominalLoad = parseFloat(form.nominalLoad.value);
-        const cycles = parseInt(form.cycles.value);
-        const consumption = calculations.calculateConsumption(nominalLoad, cycles);
-        const lots = {
-            poBase: form.lotePoBase.value,
-            perborato: form.lotePerborato.value,
-            taed: form.loteTaed.value,
-            tiras: form.loteTiras.value,
-        };
-        const checkStock = (lot, reagent, amount) => {
-            if (!lot && amount > 0) {
-                utils.showToast(`O consumo de ${reagent} é maior que zero, mas nenhum lote foi selecionado.`, true);
-                return false;
-            }
-            if (!lot) return true;
-            const item = state.inventory.find(i => i.lot === lot && i.reagent === reagent);
-            if (!item || item.quantity < amount) {
-                utils.showToast(`Estoque insuficiente para ${reagent} (Lote: ${lot}). Necessário: ${amount.toFixed(2)}, Disponível: ${item ? item.quantity.toFixed(2) : 0}`, true);
-                return false;
-            }
-            return true;
-        };
-        if (!checkStock(lots.poBase, 'Pó Base', consumption.poBase)) return;
-        if (!checkAndDeductStock('perborato', [{ lot: lots.perborato, cycles: cycles }])) return;
-        if (!checkAndDeductStock('taed', [{ lot: lots.taed, cycles: cycles }])) return;
-        if (!checkAndDeductStock('tiras', [{ lot: lots.tiras, cycles: cycles }])) return;
-        const deductFromStock = (lot, reagent, amount) => {
-            if (lot && amount > 0) {
-                const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagent);
-                if (itemIndex > -1) {
-                    state.inventory[itemIndex].quantity -= amount;
-                }
-            }
-        };
-        deductFromStock(lots.poBase, 'Pó Base', consumption.poBase);
-        deductFromStock(lots.perborato, 'Perborato', consumption.perborato);
-        deductFromStock(lots.taed, 'TAED', consumption.taed);
-        deductFromStock(lots.tiras, 'Tiras de sujidade', consumption.tiras);
         
+        // Função auxiliar para obter valores do formulário com segurança
+        const getFormValue = (elementName, defaultValue = '') => {
+            const element = form[elementName] || form.querySelector(`[name="${elementName}"]`);
+            return element ? element.value : defaultValue;
+        };
+
+        const getFormFloatValue = (elementName, defaultValue = 0) => {
+            const element = form[elementName] || form.querySelector(`[name="${elementName}"]`);
+            return element ? parseFloat(element.value) || defaultValue : defaultValue;
+        };
+
+        const getFormIntValue = (elementName, defaultValue = 0) => {
+            const element = form[elementName] || form.querySelector(`[name="${elementName}"]`);
+            return element ? parseInt(element.value) || defaultValue : defaultValue;
+        };
+
+        // Obter valores do formulário
+        const nominalLoad = getFormFloatValue('nominalLoad');
+        
+        // Validação básica
+        if (!nominalLoad || nominalLoad <= 0) {
+            utils.showToast('Carga nominal deve ser maior que zero.', true);
+            return;
+        }
+        
+        // Coleta os dados dos lotes dinâmicos dos containers
+        const lots = {};
+        const lotContainers = form.querySelectorAll('.lote-container');
+        let totalCyclesSum = 0;
+        let totalLotEntries = 0;
+
+        lotContainers.forEach(container => {
+            const reagentType = container.dataset.reagentType;
+            lots[reagentType] = [];
+            container.querySelectorAll('.lote-entry').forEach(entry => {
+                const lot = entry.querySelector('select[name="lote"]').value;
+                const cycles = parseInt(entry.querySelector('input[name="cycles"]').value, 10);
+                if (lot && cycles > 0) {
+                    lots[reagentType].push({ lot, cycles });
+                    totalCyclesSum += cycles;
+                    totalLotEntries++;
+                }
+            });
+        });
+
+        // Calcular a média dos ciclos informados nos containers
+        const averageCycles = totalLotEntries > 0 ? Math.round(totalCyclesSum / totalLotEntries) : 0;
+        
+        // Validação dos ciclos
+        if (averageCycles <= 0) {
+            utils.showToast('Pelo menos um lote com ciclos deve ser informado.', true);
+            return;
+        }
+
+        // Verificar e deduzir estoque usando a função global checkAndDeductStock
+        if (!checkAndDeductStock('poBase', lots.poBase || [], nominalLoad)) return;
+        if (!checkAndDeductStock('perborato', lots.perborato || [], nominalLoad)) return;
+        if (!checkAndDeductStock('taed', lots.taed || [], nominalLoad)) return;
+        if (!checkAndDeductStock('tiras', lots.tiras || [], nominalLoad)) return;
+
+        // Calcular o consumo total baseado nos lotes utilizados
+        const consumption = {
+            poBase: (lots.poBase || []).reduce((sum, l) => sum + (16 * nominalLoad + 54) * l.cycles * 0.77, 0),
+            perborato: (lots.perborato || []).reduce((sum, l) => sum + (16 * nominalLoad + 54) * l.cycles * 0.20, 0),
+            taed: (lots.taed || []).reduce((sum, l) => sum + (16 * nominalLoad + 54) * l.cycles * 0.03, 0),
+            tiras: (lots.tiras || []).reduce((sum, l) => sum + calculations.calculateTiras(nominalLoad) * l.cycles, 0)
+        };
+        
+        // Calcular o consumo total de sabão (soma de todos os reagentes)
+        const totalConsumption = consumption.poBase + consumption.perborato + consumption.taed + consumption.tiras;
+        
+        // Criar objeto do novo ensaio
         const newAssay = {
             id: Date.now(),
-            protocol: form.protocol.value,
-            orcamento: form.orcamento.value,
-            assayManufacturer: form.assayManufacturer.value,
-            model: form.model.value,
+            protocol: getFormValue('protocol'),
+            orcamento: getFormValue('orcamento'),
+            assayManufacturer: getFormValue('assayManufacturer'),
+            model: getFormValue('model'),
             nominalLoad: nominalLoad,
-            cycles: cycles,
-            type: form.type.value,
-            startDate: form.startDate.value,
-            endDate: form.endDate.value,
-            reason: form.reason.value,
+            cycles: averageCycles,
+            type: getFormValue('type'),
+            startDate: getFormValue('startDate'),
+            endDate: getFormValue('endDate'),
+            observacoes: getFormValue('reason') || getFormValue('observacoes') || '',
             report: null,
             lots: lots,
+            consumption: consumption,
+            totalConsumption: totalConsumption,
             status: 'Concluido',
-            setup: parseInt(form.setup.value),
-            tensao: form.tensao.value,
+            setup: getFormIntValue('setup', 0),
+            tensao: getFormValue('tensao'),
             plannedSuppliers: {
-            poBase: mainSupplierInput.value,
-            taed: mainSupplierInput.value
-        }
+                poBase: getFormValue('mainSupplier'),
+                taed: getFormValue('mainSupplier')
+            }
         };
+
+        // Adicionar ao histórico e salvar
         state.historicalAssays.push(newAssay);
         dataHandlers.saveData();
         renderers.renderAll();
         utils.closeModal();
+        
+        // Notificação de sucesso
         notificationSystem.send(
             'Ensaio Registrado com Sucesso',
             `✅ OPERAÇÃO CONCLUÍDA: O ensaio foi registrado no histórico e o estoque foi atualizado automaticamente.`,
@@ -5878,7 +6374,7 @@ handleUpdateCalibration: (e) => {
      * Salva o código de relatório para um ensaio.
      * @param {Event} e - O evento de submissão do formulário.
      */
-    hhandleSaveReport: (e) => {
+    handleSaveReport: (e) => {
         undoManager.saveState();
         e.preventDefault();
         const form = e.target;
@@ -6003,8 +6499,8 @@ handleUpdateCalibration: (e) => {
             observacoes: observacoesInput?.value || '',
             cycles: parseInt(cyclesInput?.value) || 0,
             plannedSuppliers: {
-                poBase: mainSupplierInput.value,
-                taed: mainSupplierInput.value
+                poBase: mainSupplierInput ? mainSupplierInput.value : '',
+                taed: mainSupplierInput ? mainSupplierInput.value : ''
             }
         };
         state.scheduledAssays.push(newAssay);
@@ -6138,16 +6634,34 @@ handleUpdateCalibration: (e) => {
         undoManager.saveState();
         e.preventDefault();
         const form = e.target;
+        const mainSupplierInput = form.querySelector('[name="mainSupplier"]');
         const assayIndex = state.historicalAssays.findIndex(a => a.id === state.selectedAssayId);
         if (assayIndex === -1) {
             utils.showToast("Erro ao salvar: Ensaio não encontrado.", true);
             return;
         }
         
+        // Verificação de segurança para mainSupplierInput
+        if (!mainSupplierInput) {
+            console.warn('Campo mainSupplier não encontrado no formulário');
+        }
+        
+        // Obter dados originais do ensaio para reverter o desconto
+        const originalAssay = state.historicalAssays[assayIndex];
+        const originalLots = originalAssay.lots || {};
+        const originalNominalLoad = originalAssay.nominalLoad;
+        
+        // Reverter o desconto original do inventário
+        if (originalLots.poBase) revertStockDeduction('poBase', originalLots.poBase, originalNominalLoad);
+        if (originalLots.perborato) revertStockDeduction('perborato', originalLots.perborato, originalNominalLoad);
+        if (originalLots.taed) revertStockDeduction('taed', originalLots.taed, originalNominalLoad);
+        if (originalLots.tiras) revertStockDeduction('tiras', originalLots.tiras, originalNominalLoad);
+        
         // Coleta os dados dos lotes dinâmicos
         const newLots = {};
         const lotContainers = form.querySelectorAll('.lote-container');
         let totalCycles = 0;
+        const newNominalLoad = parseFloat(form.nominalLoad.value);
 
         lotContainers.forEach(container => {
             const reagentType = container.dataset.reagentType;
@@ -6162,6 +6676,12 @@ handleUpdateCalibration: (e) => {
                 }
             });
         });
+        
+        // Aplicar o novo desconto do inventário
+        if (!checkAndDeductStock('poBase', newLots.poBase, newNominalLoad)) return;
+        if (!checkAndDeductStock('perborato', newLots.perborato, newNominalLoad)) return;
+        if (!checkAndDeductStock('taed', newLots.taed, newNominalLoad)) return;
+        if (!checkAndDeductStock('tiras', newLots.tiras, newNominalLoad)) return;
         
         state.historicalAssays[assayIndex] = {
             ...state.historicalAssays[assayIndex],
@@ -6179,8 +6699,8 @@ handleUpdateCalibration: (e) => {
             setup: parseInt(form.setup.value) || 0,
             tensao: form.tensao.value,
             plannedSuppliers: {
-                poBase: mainSupplierInput.value,
-                taed: mainSupplierInput.value
+                poBase: mainSupplierInput ? mainSupplierInput.value : '',
+                taed: mainSupplierInput ? mainSupplierInput.value : ''
             }
         };
         try {
@@ -6273,8 +6793,8 @@ handleUpdateCalibration: (e) => {
         observacoes: form.observacoes?.value || '',
         cycles: parseInt(form.cycles?.value) || 0,
         plannedSuppliers: {
-            poBase: mainSupplierInput.value,
-            taed: mainSupplierInput.value
+            poBase: mainSupplierInput ? mainSupplierInput.value : '',
+            taed: mainSupplierInput ? mainSupplierInput.value : ''
         }
     };
 
@@ -6299,6 +6819,53 @@ handleUpdateCalibration: (e) => {
     utils.showToast("Tarefa atualizada. Guarde as alterações para confirmar.");
     state.selectedAssayId = null;
 },
+
+    /**
+     * Manipula a atualização de ensaios de secadoras.
+     * @param {Event} e - O evento de submit do formulário.
+     */
+    handleUpdateDryerAssay: (e) => {
+        undoManager.saveState();
+        e.preventDefault();
+        const form = e.target;
+
+        const assayId = state.selectedAssayId;
+        const assayIndex = state.scheduledAssays.findIndex(a => a.id === assayId);
+
+        if (assayIndex === -1) {
+            return utils.showToast("Erro ao salvar: Ensaio de secadora não encontrado.", true);
+        }
+
+        const newSetupValue = form.setup.value;
+        const newSetup = /^[0-9]+$/.test(newSetupValue) ? parseInt(newSetupValue, 10) : newSetupValue;
+        
+        const updatedData = {
+            protocol: form.protocol.value,
+            orcamento: form.orcamento?.value || 'N/A',
+            humidity: form.humidity?.value || 'N/A',
+            assayManufacturer: form.assayManufacturer?.value || 'N/A',
+            model: form.model?.value || 'N/A',
+            nominalLoad: parseFloat(form.nominalLoad?.value) || 0,
+            tensao: form.tensao?.value || 'N/A',
+            startDate: form.startDate.value,
+            endDate: form.endDate.value,
+            setup: newSetup,
+            status: form.status.value,
+            type: 'secadora', // Sempre manter como secadora
+            observacoes: form.observacoes?.value || ''
+        };
+
+        // Atualizar o ensaio
+        state.scheduledAssays[assayIndex] = { ...state.scheduledAssays[assayIndex], ...updatedData };
+
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+        renderers.ganttInitialRenderDone = false;
+        renderers.renderGanttChart();
+        utils.closeModal();
+        utils.showToast("Ensaio de secadora atualizado. Guarde as alterações para confirmar.");
+        state.selectedAssayId = null;
+    },
 
     /** Salva as configurações. */
     saveSettings: () => {
@@ -6469,6 +7036,71 @@ handleUpdateCalibration: (e) => {
         
         // Mostra mensagem de processamento
         utils.showToast('Processando exclusão em massa... Aguarde.');
+    },
+
+    /**
+     * Adiciona um novo ensaio de secadoras ao cronograma.
+     * @param {Event} e - O evento de submissão do formulário.
+     */
+    handleAddDryerAssay: (e) => {
+        undoManager.saveState();
+        e.preventDefault();
+        const form = e.target;
+        const startDateInput = form.querySelector('[name="startDate"]');
+        const orcamentoInput = form.querySelector('[name="orcamento"]');
+        const umidadeInput = form.querySelector('[name="humidity"]');
+        const endDateInput = form.querySelector('[name="endDate"]');
+        const protocolInput = form.querySelector('[name="protocol"]');
+        const nominalLoadInput = form.querySelector('[name="nominalLoad"]');
+        const tensaoInput = form.querySelector('[name="tensao"]');
+        const setupInput = form.querySelector('[name="setup"]');
+        const observacoesInput = form.querySelector('[name="observacoes"]');
+        const cyclesInput = form.querySelector('[name="cycles"]');
+        const reportDateInput = form.querySelector('[name="reportDate"]');
+
+        if (!protocolInput.value || !startDateInput.value || !endDateInput.value || !setupInput.value || !umidadeInput.value) {
+            utils.showToast('Erro: Por favor, preencha todos os campos obrigatórios.', true);
+            return;
+        }
+
+        const startDate = startDateInput.value;
+        const endDate = endDateInput.value;
+        if (new Date(endDate) < new Date(startDate)) {
+            utils.showToast('A data de fim não pode ser anterior à data de início.', true);
+            return;
+        }
+
+        const newAssay = {
+            id: Date.now(),
+            protocol: protocolInput.value,
+            orcamento: orcamentoInput?.value || 'N/A',
+            humidity: umidadeInput.value,
+            nominalLoad: parseFloat(nominalLoadInput?.value) || 0,
+            tensao: tensaoInput.value,
+            startDate: startDate,
+            endDate: endDate,
+            reportDate: reportDateInput?.value || '',
+            setup: parseInt(setupInput.value, 10),
+            status: 'aguardando',
+            type: 'secadora',
+            observacoes: observacoesInput?.value || '',
+            cycles: parseInt(cyclesInput?.value) || 0,
+            plannedSuppliers: {
+                poBase: '',
+                taed: ''
+            }
+        };
+
+        state.scheduledAssays.push(newAssay);
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+        renderers.renderGanttChart();
+        utils.closeModal();
+        utils.showToast("Ensaio de secadora adicionado. Guarde as alterações para confirmar.");
+
+        setTimeout(() => {
+            renderers.renderGanttChart();
+        }, 50);
     }
 };
 
@@ -6512,8 +7144,94 @@ const modalHandlers = {
      */
     openAddAssayModal: () => {
         utils.openModal('Registrar Novo Ensaio', document.getElementById('add-assay-modal-content')?.innerHTML, () => {
-            renderers.populateAssayModalLotes();
-            document.getElementById('form-add-assay')?.addEventListener('submit', dataHandlers.handleAddAssay);
+            const form = document.getElementById('form-add-assay');
+            if (!form) return;
+            const lotsContainer = document.getElementById('lots-container');
+
+            // Função para gerar os campos de lote
+            const generateLotFields = (reagentKey, reagentName) => {
+                const lotsHtml = state.inventory
+                    .filter(item => item.reagent === reagentName)
+                    .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
+                    .join('');
+
+                return `
+                    <div class="lote-container space-y-2 border-b pb-4 mb-4" data-reagent-type="${reagentKey}">
+                        <h4 class="font-semibold text-gray-700">${reagentName}</h4>
+                        <div class="lote-entry flex items-center space-x-2">
+                            <select name="lote" class="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione o lote</option>
+                                ${lotsHtml}
+                            </select>
+                            <input type="number" name="cycles" placeholder="Ciclos" class="w-20 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <button type="button" class="btn-add-lote text-sm text-blue-500 hover:text-blue-700">Adicionar outro lote</button>
+                    </div>
+                `;
+            };
+            
+            // Renderiza os campos de lote para cada reagente
+            lotsContainer.innerHTML = `
+                ${generateLotFields('poBase', 'Pó Base')}
+                ${generateLotFields('perborato', 'Perborato')}
+                ${generateLotFields('taed', 'TAED')}
+                ${generateLotFields('tiras', 'Tiras de sujidade')}
+            `;
+
+            // Adiciona a lógica para adicionar e remover campos de lote dinamicamente
+            form.addEventListener('click', (e) => {
+                if (e.target.classList.contains('btn-add-lote')) {
+                    const container = e.target.closest('.lote-container');
+                    const reagentType = container.dataset.reagentType;
+                    
+                    // Mapear reagentType para reagentName
+                    const reagentNameMap = {
+                        'poBase': 'Pó Base',
+                        'perborato': 'Perborato',
+                        'taed': 'TAED',
+                        'tiras': 'Tiras de sujidade'
+                    };
+                    const reagentName = reagentNameMap[reagentType];
+                    
+                    // Gerar opções limpas sem seleções
+                    const cleanOptions = state.inventory
+                        .filter(item => item.reagent === reagentName)
+                        .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
+                        .join('');
+                    
+                    const newEntry = document.createElement('div');
+                    newEntry.className = 'lote-entry flex items-center space-x-2 mt-2';
+                    newEntry.innerHTML = `
+                        <select name="lote" class="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Selecione o lote</option>
+                            ${cleanOptions}
+                        </select>
+                        <input type="number" name="cycles" placeholder="Ciclos" class="w-20 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <button type="button" class="btn-remove-lote text-red-500 hover:text-red-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    `;
+                    e.target.before(newEntry);
+                }
+                if (e.target.classList.contains('btn-remove-lote') || e.target.closest('.btn-remove-lote')) {
+                    const button = e.target.classList.contains('btn-remove-lote') ? e.target : e.target.closest('.btn-remove-lote');
+                    button.closest('.lote-entry').remove();
+                }
+            });
+
+            if (form) {
+                form.addEventListener('submit', dataHandlers.handleAddAssay);
+                
+                // Adiciona event listener para o botão cancelar
+                const cancelButton = form.querySelector('.btn-close-modal');
+                if (cancelButton) {
+                    cancelButton.addEventListener('click', () => {
+                        utils.closeModal();
+                    });
+                }
+            } else {
+                console.error('Formulário form-add-assay não encontrado');
+            }
         });
     },
 
@@ -6660,7 +7378,7 @@ openEditCalibrationModal: (calibrationId) => {
             const manufacturerEl = document.querySelector('[data-field="assayManufacturer"]');
             if (manufacturerEl) manufacturerEl.textContent = assay.assayManufacturer;
             const tensaoEl = document.querySelector('[data-field="tensao"]');
-            if (tensaoEl) tensaoEl.textContent = assay.tensao || 'N/A';
+            if (tensaoEl) tensaoEl.textContent = assay.tensao ? `${assay.tensao}` : 'N/A';
             const modelEl = document.querySelector('[data-field="model"]');
             if (modelEl) modelEl.textContent = assay.model;
             const periodEl = document.querySelector('[data-field="period"]');
@@ -6858,6 +7576,10 @@ openEditCalibrationModal: (calibrationId) => {
                     </div>
                 </div>
             `;
+        } else if (assay.type === 'secadora') {
+            // Usar modal específico para ensaios de secadoras
+            modalHandlers.openViewDryerAssayModal(assayId);
+            return;
         } else {
             modalContentHTML = `
                 <div class="space-y-4 text-sm text-gray-700">
@@ -6871,6 +7593,7 @@ openEditCalibrationModal: (calibrationId) => {
                     <p><span class="font-semibold">Orçamento:</span> ${assay.orcamento || 'N/A'}</p>
                     <p><span class="font-semibold">Tipo:</span> ${ASSAY_TYPE_MAP[assay.type] || 'N/A'}</p>
                     <p><span class="font-semibold">Data do Relatório:</span> ${assay.reportDate ? assay.reportDate.split('-').reverse().join('/') : 'N/A'}</p>
+                    <p><span class="font-semibold">Relatório:</span> ${assay.report ? (assay.report === 'Pendente' ? '<span class="text-red-500">Pendente</span>' : assay.report) : '<span class="text-red-500">Pendente</span>'}</p>
                     <p><span class="font-semibold">Observações:</span> ${assay.observacoes || 'N/A'}</p>
                 </div>
                 <div class="flex justify-end space-x-2 pt-4 border-t">
@@ -6999,11 +7722,25 @@ openEditCalibrationModal: (calibrationId) => {
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Tensão</label>
-                            <input type="text" name="tensao" value="${assayToEdit.tensao || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <select name="tensao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione a Tensão</option>
+                                <option value="127" ${assayToEdit.tensao == '127' ? 'selected' : ''}>127V</option>
+                                <option value="220" ${assayToEdit.tensao == '220' ? 'selected' : ''}>220V</option>
+                            </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Setup</label>
-                            <input type="number" name="setup" value="${assayToEdit.setup || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-sm font-medium text-gray-700">Terminal</label>
+                            <select name="setup" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione o Terminal</option>
+                                <option value="1" ${assayToEdit.setup === 1 ? 'selected' : ''}>Terminal 1</option>
+                                <option value="2" ${assayToEdit.setup === 2 ? 'selected' : ''}>Terminal 2</option>
+                                <option value="3" ${assayToEdit.setup === 3 ? 'selected' : ''}>Terminal 3</option>
+                                <option value="4" ${assayToEdit.setup === 4 ? 'selected' : ''}>Terminal 4</option>
+                                <option value="5" ${assayToEdit.setup === 5 ? 'selected' : ''}>Terminal 5</option>
+                                <option value="6" ${assayToEdit.setup === 6 ? 'selected' : ''}>Terminal 6</option>
+                                <option value="7" ${assayToEdit.setup === 7 ? 'selected' : ''}>Terminal 7</option>
+                                <option value="8" ${assayToEdit.setup === 8 ? 'selected' : ''}>Terminal 8</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -7082,17 +7819,24 @@ openEditCalibrationModal: (calibrationId) => {
                     .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
                     .join('');
 
-                let fieldsHtml = lotsArray.map(lotEntry => `
+                let fieldsHtml = lotsArray.map(lotEntry => {
+                    const lotOptions = state.inventory
+                        .filter(item => item.reagent === reagentName)
+                        .map(item => `<option value="${item.lot}" ${item.lot === lotEntry.lot ? 'selected' : ''}>${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
+                        .join('');
+                    
+                    return `
                     <div class="lote-entry flex items-center space-x-2 mt-2">
                         <select name="lote" class="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
-                            ${lotsHtml.replace(`value="${lotEntry.lot}"`, `value="${lotEntry.lot}" selected`)}
+                            ${lotOptions}
                         </select>
                         <input type="number" name="cycles" placeholder="Ciclos" value="${lotEntry.cycles}" class="w-20 border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
                         <button type="button" class="btn-remove-lote text-red-500 hover:text-red-700">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
-                `).join('');
+                    `;
+                }).join('');
 
                 if (lotsArray.length === 0) {
                     fieldsHtml = `
@@ -7141,8 +7885,9 @@ openEditCalibrationModal: (calibrationId) => {
                     `;
                     e.target.before(newEntry);
                 }
-                if (e.target.classList.contains('btn-remove-lote')) {
-                    e.target.closest('.lote-entry').remove();
+                if (e.target.classList.contains('btn-remove-lote') || e.target.closest('.btn-remove-lote')) {
+                    const button = e.target.classList.contains('btn-remove-lote') ? e.target : e.target.closest('.btn-remove-lote');
+                    button.closest('.lote-entry').remove();
                 }
             });
 
@@ -7284,8 +8029,9 @@ openEditCalibrationModal: (calibrationId) => {
                     `;
                     e.target.before(newEntry);
                 }
-                if (e.target.classList.contains('btn-remove-lote')) {
-                    e.target.closest('.lote-entry').remove();
+                if (e.target.classList.contains('btn-remove-lote') || e.target.closest('.btn-remove-lote')) {
+                    const button = e.target.classList.contains('btn-remove-lote') ? e.target : e.target.closest('.btn-remove-lote');
+                    button.closest('.lote-entry').remove();
                 }
             });
         }
@@ -7355,6 +8101,13 @@ openEditCalibrationModal: (calibrationId) => {
             utils.showToast("Erro: Tarefa do cronograma não encontrada.", true);
             return;
         }
+        
+        // Se for ensaio de secadora, usar modal específico
+        if (assayToEdit.type === 'secadora') {
+            modalHandlers.openEditDryerAssayModal(assayId);
+            return;
+        }
+        
         state.selectedAssayId = assayId;
         const modalContentTemplate = document.getElementById('add-gantt-assay-modal-content');
         if (!modalContentTemplate) return;
@@ -7626,6 +8379,19 @@ openEditCalibrationModal: (calibrationId) => {
             }
         });
     },
+
+    /**
+     * Abre o modal de adicionar ensaio de secadoras.
+     */
+    openAddDryerAssayModal: () => {
+        utils.openModal('Adicionar Ensaio de Secadoras', document.getElementById('add-dryer-assay-modal-content')?.innerHTML, () => {
+            const form = document.getElementById('form-add-dryer-assay');
+            if (form) {
+                renderers.populateTerminalSelects(form);
+                form.addEventListener('submit', dataHandlers.handleAddDryerAssay);
+            }
+        });
+    },
     
     /**
      * Abre o modal de exclusão em massa.
@@ -7734,6 +8500,120 @@ openEditCalibrationModal: (calibrationId) => {
             holidays: state.holidays.filter(holiday => isInRange(holiday.startDate)),
             calibrations: state.calibrations.filter(calibration => isInRange(calibration.startDate))
         };
+    },
+
+    /**
+     * Abre o modal de visualização específico para ensaios de secadoras.
+     * @param {number} assayId - O ID do ensaio de secadora a ser visualizado.
+     */
+    openViewDryerAssayModal: (assayId) => {
+        let assay = state.scheduledAssays.find(a => a.id === assayId);
+        if (!assay) {
+            assay = state.safetyScheduledAssays.find(a => a.id === assayId);
+        }
+        if (!assay) {
+            utils.showToast("Erro: Ensaio não encontrado.", true);
+            return;
+        }
+
+        const modalContent = document.getElementById('view-dryer-assay-modal-content');
+        if (!modalContent) {
+            utils.showToast('Template do modal de visualização de secadoras não encontrado.', true);
+            return;
+        }
+
+        utils.openModal('Visualizar Ensaio de Secadora', modalContent.innerHTML, () => {
+            // Preencher os campos com os dados do ensaio
+            document.getElementById('view-dryer-protocol').textContent = assay.protocol || 'N/A';
+            document.getElementById('view-dryer-orcamento').textContent = assay.orcamento || 'N/A';
+            document.getElementById('view-dryer-manufacturer').textContent = assay.assayManufacturer || 'N/A';
+            document.getElementById('view-dryer-model').textContent = assay.model || 'N/A';
+            document.getElementById('view-dryer-nominal-load').textContent = assay.nominalLoad ? `${assay.nominalLoad} kg` : 'N/A';
+            document.getElementById('view-dryer-humidity').textContent = assay.humidity ? `${assay.humidity}%` : 'N/A';
+            document.getElementById('view-dryer-tensao').textContent = assay.tensao ? `${assay.tensao}V` : 'N/A';
+            document.getElementById('view-dryer-period').textContent = `${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}`;
+            document.getElementById('view-dryer-terminal').textContent = assay.setup || 'N/A';
+            document.getElementById('view-dryer-status').textContent = ASSAY_STATUS_MAP[assay.status] || assay.status || 'N/A';
+            document.getElementById('view-dryer-report').textContent = assay.reportIssued ? 'Sim' : 'Não';
+            document.getElementById('view-dryer-observacoes').textContent = assay.observacoes || 'Nenhuma observação';
+
+            // Configurar botões
+            const editBtn = document.querySelector('.btn-edit-dryer-assay');
+            const deleteBtn = document.querySelector('.btn-delete-dryer-assay');
+
+            if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                    utils.closeModal();
+                    modalHandlers.openEditDryerAssayModal(assay.id);
+                });
+            }
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', () => {
+                    ui.showConfirmationModal('Tem certeza que deseja excluir este ensaio de secadora?', () => {
+                        dataHandlers.handleDeleteGanttItem(assay.id);
+                        utils.closeModal();
+                    });
+                });
+            }
+         });
+     },
+
+    /**
+     * Abre o modal de edição específico para ensaios de secadoras.
+     * @param {number} assayId - O ID do ensaio de secadora a ser editado.
+     */
+    openEditDryerAssayModal: (assayId) => {
+        let assayToEdit = state.scheduledAssays.find(a => a.id === assayId);
+        if (!assayToEdit) {
+            assayToEdit = state.safetyScheduledAssays.find(a => a.id === assayId);
+        }
+        if (!assayToEdit) {
+            utils.showToast("Erro: Ensaio não encontrado.", true);
+            return;
+        }
+
+        state.selectedAssayId = assayId;
+        const modalContentTemplate = document.getElementById('edit-dryer-assay-modal-content');
+        if (!modalContentTemplate) {
+            utils.showToast("Erro: Template do modal de edição de secadora não encontrado.", true);
+            return;
+        }
+
+        utils.openModal('Editar Ensaio de Secadora', modalContentTemplate.innerHTML, () => {
+            const form = document.getElementById('form-edit-dryer-assay');
+            if (!form) return;
+
+            // Popular os selects de terminal
+            renderers.populateTerminalSelects(form);
+            
+            // Preencher o formulário com os dados do ensaio
+            form.querySelector('[name="protocol"]').value = assayToEdit.protocol || '';
+            form.querySelector('[name="orcamento"]').value = assayToEdit.orcamento || '';
+            form.querySelector('[name="humidity"]').value = assayToEdit.humidity || '';
+            form.querySelector('[name="assayManufacturer"]').value = assayToEdit.assayManufacturer || '';
+            form.querySelector('[name="model"]').value = assayToEdit.model || '';
+            form.querySelector('[name="nominalLoad"]').value = assayToEdit.nominalLoad || '';
+            form.querySelector('[name="tensao"]').value = assayToEdit.tensao || '';
+            form.querySelector('[name="setup"]').value = assayToEdit.setup || '';
+            form.querySelector('[name="startDate"]').value = assayToEdit.startDate || '';
+            form.querySelector('[name="endDate"]').value = assayToEdit.endDate || '';
+            form.querySelector('[name="status"]').value = assayToEdit.status || '';
+            form.querySelector('[name="observacoes"]').value = assayToEdit.observacoes || '';
+            form.querySelector('[name="id"]').value = assayToEdit.id;
+            
+            // Configurar o botão de submit
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.textContent = 'Salvar Alterações';
+                submitButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                submitButton.classList.add('bg-green-600', 'hover:bg-green-700');
+            }
+            
+            // Configurar o evento de submit
+            form.removeEventListener('submit', dataHandlers.handleAddGanttAssay);
+            form.addEventListener('submit', dataHandlers.handleUpdateDryerAssay);
+        });
     }
 };
 
@@ -7911,6 +8791,92 @@ const dragHandlers = {
         state.originalDragTarget = null;
         state.initialAssay = null;
         state.dragOffset = { x: 0, y: 0 };
+    },
+
+    /**
+     * Manipula o clique direito nos elementos do cronograma para duplicação.
+     * @param {Event} e - O evento de clique direito.
+     */
+    handleRightClick: (e) => {
+        e.preventDefault(); // Previne o menu de contexto padrão
+
+        const targetElement = e.target.closest('.gantt-event');
+        if (!targetElement) return;
+
+        const assayId = parseInt(targetElement.dataset.assayId, 10);
+        const assay = [...state.scheduledAssays, ...state.safetyScheduledAssays].find(a => a.id === assayId);
+
+        if (!assay) return;
+
+        // Não permite duplicar férias
+        if (assay.type === 'férias') {
+            utils.showToast('Não é possível duplicar eventos de férias.', true);
+            return;
+        }
+
+        dragHandlers.duplicateAssay(assay);
+    },
+
+    /**
+     * Duplica um ensaio criando uma cópia com dados similares.
+     * @param {Object} originalAssay - O ensaio original a ser duplicado.
+     */
+    duplicateAssay: (originalAssay) => {
+        undoManager.saveState();
+
+        // Posiciona o elemento duplicado logo após o original
+        const originalEndDate = utils.parseDate(originalAssay.endDate);
+        const newStartDate = new Date(originalEndDate);
+        newStartDate.setDate(newStartDate.getDate() + 1);
+
+        // Calcula a duração do ensaio original
+        const originalStartDate = utils.parseDate(originalAssay.startDate);
+        const durationInDays = Math.ceil((originalEndDate - originalStartDate) / (1000 * 60 * 60 * 24));
+        
+        const newEndDate = new Date(newStartDate);
+        newEndDate.setDate(newEndDate.getDate() + durationInDays);
+
+        // Gera um novo ID único
+        const allAssays = [...state.scheduledAssays, ...state.safetyScheduledAssays, ...state.historicalAssays];
+        const maxId = Math.max(...allAssays.map(a => a.id), 0);
+        const newId = maxId + 1;
+
+        // Cria o ensaio duplicado com dados similares
+        const duplicatedAssay = {
+            ...originalAssay,
+            id: newId,
+            startDate: newStartDate.toISOString().split('T')[0],
+            endDate: newEndDate.toISOString().split('T')[0],
+            protocol: `${originalAssay.protocol}_COPIA`,
+            status: originalAssay.status, // Mantém o status original
+            setup: originalAssay.setup, // Mantém o setup original para ficar na mesma linha
+            subRowIndex: originalAssay.subRowIndex + 1 // Posiciona logo após o original
+        };
+
+        // Remove campos específicos que não devem ser copiados
+        delete duplicatedAssay.lots;
+        delete duplicatedAssay.cycles;
+        delete duplicatedAssay.reportDate;
+
+        // Determina se é um ensaio de segurança
+        const isSafetyAssay = state.safetyCategories.some(cat => cat.id === originalAssay.setup);
+
+        // Adiciona ao array apropriado
+        if (isSafetyAssay) {
+            state.safetyScheduledAssays.push(duplicatedAssay);
+        } else {
+            state.scheduledAssays.push(duplicatedAssay);
+        }
+
+        // Marca como alterações não salvas
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+
+        // Re-renderiza o cronograma
+        renderers.ganttInitialRenderDone = false;
+        renderers.renderGanttChart();
+
+        utils.showToast(`Ensaio "${originalAssay.protocol}" duplicado com sucesso!`);
     }
 };
 
@@ -8156,6 +9122,13 @@ document.addEventListener('DOMContentLoaded', () => {
                           }, 1500);
                       }
                     
+                    // Log para debug do carregamento do inventário
+                    console.log('[INVENTORY] Carregando inventário do banco de dados...');
+                    console.log('[INVENTORY] Itens recebidos:', data.inventory?.length || 0);
+                    if (data.inventory && data.inventory.length > 0) {
+                        console.log('[INVENTORY] Primeiro item:', data.inventory[0]);
+                    }
+                    
                     state.inventory = data.inventory || [];
                     state.historicalAssays = data.historicalAssays || [];
                     state.scheduledAssays = data.scheduledAssays || [];
@@ -8164,12 +9137,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(data.safetyScheduledAssays || [])); // Salva o estado original
                     state.originalCalibrations = JSON.parse(JSON.stringify(data.calibrations || []));
                     state.efficiencyCategories = data.efficiencyCategories || state.efficiencyCategories;
+                    console.log('🔍 DEBUG - data.safetyCategories recebido:', data.safetyCategories);
                     state.safetyCategories = data.safetyCategories || state.safetyCategories;
+                    console.log('🔍 DEBUG - state.safetyCategories após atribuição:', state.safetyCategories);
                     state.originalEfficiencyCategories = JSON.parse(JSON.stringify(state.efficiencyCategories));
                     state.originalSafetyCategories = JSON.parse(JSON.stringify(state.safetyCategories));                    
                     state.holidays = data.holidays || [];
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || []; // Carrega os equipamentos de calibração
+                    
+                    // 🔍 DEBUG - Verificar calibrationEquipments recebidos
+                    // Equipamentos de calibração recebidos
+                    // Dados de calibração processados
+                    // Quantidade de equipamentos processada
+                    
+                    // Log específico para equipamentos em calibração
+                    const equipmentsInCalibration = state.calibrationEquipments.filter(eq => eq.calibrationStatus === 'em_calibracao');
+                    console.log('🔧 [WEBVIEW] Equipamentos em calibração recebidos:', equipmentsInCalibration.length);
+                    equipmentsInCalibration.forEach(eq => {
+                        console.log(`🔧 [WEBVIEW] Equipamento em calibração: ${eq.id}, status=${eq.calibrationStatus}, startDate=${eq.calibrationStartDate}`);
+                    });
+                    
+                    if (state.calibrationEquipments && state.calibrationEquipments.length > 0) {
+                        console.log('📊 Primeiro equipamento:', state.calibrationEquipments[0]);
+                    }
                     state.settings = { ...state.settings, ...(data.settings || {}) };
                     state.systemUsers = data.systemUsers || {};
                     const allEvents = [...(data.historicalAssays || []), ...(data.scheduledAssays || []), ...(data.safetyScheduledAssays || []), ...(data.calibrations || [])];
@@ -8221,18 +9212,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     utils.showToast(message.message || 'Erro ao gerar relatório PDF', true);
                 }
                 break;
+            case 'categoryOperationResult':
+                if (message.success) {
+                    if (message.operation === 'add') {
+                        utils.showToast('Categoria adicionada com sucesso!');
+                        // Recarrega os dados para refletir a nova categoria
+                        dataHandlers.requestData();
+                    } else if (message.operation === 'delete') {
+                        utils.showToast('Categoria excluída com sucesso!');
+                        // Recarrega os dados para refletir a exclusão
+                        dataHandlers.requestData();
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro na operação da categoria', true);
+                }
+                break;
         }
     });
 
     // Botões de ação do cronograma
     DOM.btnSaveSchedule?.addEventListener('click', () => {
         // Com o sistema de hierarquia, não é mais necessário solicitar senha
-        dataHandlers.saveData();
+        dataHandlers.saveScheduleData();
         state.originalScheduledAssays = JSON.parse(JSON.stringify(state.scheduledAssays));
         state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
         state.hasUnsavedChanges = false;
         ui.toggleScheduleActions(false);
-        notificationSystem.send();
+        utils.showToast("Alterações guardadas com sucesso!");
     });
     DOM.btnCancelSchedule?.addEventListener('click', () => {
         state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays));
@@ -8261,7 +9267,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newPassword = DOM.settingSchedulePasswordInput.value;
         if (newPassword && newPassword.length >= 4) {
             state.settings.schedulePassword = newPassword;
-            dataHandlers.saveData();
+            dataHandlers.updateSystemSettings(state.settings);
             utils.showToast("Senha do cronograma atualizada com sucesso!");
             DOM.settingSchedulePasswordInput.value = '';
         } else {
@@ -8338,12 +9344,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const removeButton = e.target.closest('.btn-remove-email');
         if (removeButton) {
             const emailToRemove = removeButton.dataset.email;
-            let emails = state.settings.notificationEmail.split(',').filter(e => e);
-            emails = emails.filter(e => e !== emailToRemove);
-            state.settings.notificationEmail = emails.join(',');
-            dataHandlers.saveSettings();
-            renderers.populateSettingsForm();
-            utils.showToast("E-mail removido com sucesso!");
+            const message = `Tem a certeza de que deseja remover o e-mail "${emailToRemove}"?`;
+            ui.showConfirmationModal(message, () => dataHandlers.handleRemoveEmail(emailToRemove));
         }
     });
     document.querySelectorAll('.nav-link').forEach(link => {
@@ -8463,22 +9465,19 @@ assaysFilters.forEach(id => {
     document.body.addEventListener('click', (e) => {
     // Ignora cliques durante drag and drop
     if (state.isDragging) {
-        console.log('Ignorando clique durante drag and drop');
         return;
     }
     
-    console.log('--- Clique Detectado no Body ---'); // Pista 1
+    // Detectando clique no body
     const button = e.target.closest('button');
 
     if (!button) {
-        console.log('O clique não foi num botão.');
         return;
     }
     
     // Verifica se o clique foi dentro de um modal - se sim, não processa aqui
     const modal = e.target.closest('#modal-template');
     if (modal && (modal.classList.contains('visible') || !modal.classList.contains('hidden'))) {
-        console.log('Clique dentro do modal - ignorando listener global');
         return;
     }
     
@@ -8605,8 +9604,9 @@ assaysFilters.forEach(id => {
         dataHandlers.handleHereAssay(parseInt(button.dataset.id));
     } else if (button.classList.contains('btn-finish-assay')) {
         modalHandlers.openFinishAssayModal(parseInt(button.dataset.id), button.dataset.status);
-    } else if (button.classList.contains('btn-remove-lote')) {
-        button.closest('.lote-entry')?.remove();
+    } else if (button.classList.contains('btn-remove-lote') || button.closest('.btn-remove-lote')) {
+        const removeButton = button.classList.contains('btn-remove-lote') ? button : button.closest('.btn-remove-lote');
+        removeButton.closest('.lote-entry')?.remove();
     } else if (button.classList.contains('btn-close-modal')) {
         utils.closeModal();
     }
@@ -8665,24 +9665,7 @@ assaysFilters.forEach(id => {
         }
     });
 
-    // Ações do Cronograma (Salvar/Cancelar)
-    DOM.btnSaveSchedule?.addEventListener('click', () => {
-        // Com o sistema de hierarquia, não é mais necessário solicitar senha
-        dataHandlers.saveData();
-        state.originalScheduledAssays = JSON.parse(JSON.stringify(state.scheduledAssays));
-        state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
-        state.hasUnsavedChanges = false;
-        ui.toggleScheduleActions(false);
-        notificationSystem.send();
-    });
-    DOM.btnCancelSchedule?.addEventListener('click', () => {
-        state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays));
-        state.safetyScheduledAssays = JSON.parse(JSON.stringify(state.originalSafetyScheduledAssays));
-        state.hasUnsavedChanges = false;
-        ui.toggleScheduleActions(false);
-        renderers.renderGanttChart();
-        utils.showToast("Alterações canceladas.");
-    });
+    // Event listeners duplicados removidos - já existem nas linhas 9125-9146
 
     // Modal de Senha
     DOM.passwordSubmitBtn?.addEventListener('click', accessControl.handlePasswordSubmit);
@@ -8704,6 +9687,7 @@ assaysFilters.forEach(id => {
     }));
     // Listeners para abrir modais
     document.getElementById('btn-open-add-gantt-assay-modal')?.addEventListener('click', () => modalHandlers.openAddGanttAssayModal());
+    document.getElementById('btn-open-add-dryer-assay-modal')?.addEventListener('click', () => modalHandlers.openAddDryerAssayModal());
     document.getElementById('btn-open-add-safety-assay-modal')?.addEventListener('click', () => modalHandlers.openAddSafetyAssayModal());
     document.getElementById('btn-open-add-calibration-modal')?.addEventListener('click', () => modalHandlers.openAddCalibrationModal());
     document.getElementById('btn-open-add-vacation-modal')?.addEventListener('click', () => modalHandlers.openAddVacationModal());
@@ -8766,6 +9750,24 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
 
     document.getElementById('btn-add-efficiency-row')?.addEventListener('click', () => modalHandlers.openAddRowModal('efficiency'));
     document.getElementById('btn-add-security-row')?.addEventListener('click', () => modalHandlers.openAddRowModal('safety'));
+
+    // Lógica do menu dropdown para ensaios de eficiência
+    const efficiencyAssayMenu = document.getElementById('efficiency-assay-menu');
+    if (efficiencyAssayMenu) {
+        const toggleButton = document.getElementById('btn-toggle-efficiency-menu');
+        const dropdown = document.getElementById('efficiency-dropdown');
+        
+        toggleButton?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!efficiencyAssayMenu.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
     // Listener para tornar os nomes das linhas editáveis
     DOM.ganttLabelsContainer.addEventListener('dblclick', (e) => {
         const labelDiv = e.target.closest('.gantt-label');
@@ -8814,17 +9816,27 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
     // Funcionalidades da página de Calibrações
     const calibrationsHandlers = {
         renderCalibrationsTable: () => {
+            console.log('🔍 renderCalibrationsTable chamada');
+            console.log('📊 state.calibrationEquipments:', state.calibrationEquipments);
+            console.log('📊 Quantidade:', state.calibrationEquipments?.length || 0);
+            
             const tbody = document.getElementById('calibrations-table-body');
-            if (!tbody) return;
+            if (!tbody) {
+                console.log('❌ tbody não encontrado');
+                return;
+            }
+            console.log('✅ tbody encontrado');
 
             const tagFilter = document.getElementById('filter-tag-calibrations')?.value.toLowerCase() || '';
             const equipmentFilter = document.getElementById('filter-equipment-calibrations')?.value.toLowerCase() || '';
+            console.log('🔍 Filtros aplicados - TAG:', tagFilter, 'EQUIPMENT:', equipmentFilter);
 
             let filteredEquipments = state.calibrationEquipments.filter(equipment => {
                 const matchesTag = equipment.tag.toLowerCase().includes(tagFilter);
                 const matchesEquipment = equipment.equipment.toLowerCase().includes(equipmentFilter);
                 return matchesTag && matchesEquipment;
             });
+            console.log('📊 Equipamentos após filtro:', filteredEquipments.length);
 
             // Ordena por data de validade (mais próximo do vencimento primeiro)
             filteredEquipments.sort((a, b) => new Date(a.validity) - new Date(b.validity));
@@ -8910,19 +9922,35 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         },
 
         startCalibration: (equipmentId) => {
+            console.log('[CALIBRATION] 🔧 Iniciando calibração para equipamento ID:', equipmentId);
+            
             const equipment = state.calibrationEquipments.find(e => e.id == equipmentId);
             if (!equipment) {
+                console.error('[CALIBRATION] ❌ Equipamento não encontrado:', equipmentId);
                 utils.showToast('Equipamento não encontrado.', true);
                 return;
             }
+            
+            console.log('[CALIBRATION] 🔧 Equipamento encontrado:', equipment);
+            console.log('[CALIBRATION] 🔧 Status anterior:', equipment.calibrationStatus);
             
             // Atualiza status para em calibração
             equipment.calibrationStatus = 'em_calibracao';
             equipment.calibrationStartDate = new Date().toISOString().split('T')[0];
             
+            console.log('[CALIBRATION] 🔧 Novo status:', equipment.calibrationStatus);
+            console.log('[CALIBRATION] 🔧 Data de início:', equipment.calibrationStartDate);
+            console.log('[CALIBRATION] 🔧 Chamando saveData...');
+            
+            // Verificar se o estado foi preservado antes de salvar
+            const equipmentAfterUpdate = state.calibrationEquipments.find(e => e.id == equipmentId);
+            console.log('[CALIBRATION] 🔧 Estado do equipamento antes de saveData:', equipmentAfterUpdate);
+            
             dataHandlers.saveData();
             calibrationsHandlers.renderCalibrationsTable();
             utils.showToast(`Equipamento ${equipment.tag} marcado como "Em calibração".`);
+            
+            console.log('[CALIBRATION] ✅ Processo de iniciar calibração concluído');
         },
         
         openFinishCalibrationModal: (equipmentId) => {
@@ -9177,6 +10205,8 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
     document.getElementById("page-forecast").classList.remove("hidden");
     forecastSystem.renderAll();
 });
+
+
 
     // Início da aplicação
     authSystem.init();

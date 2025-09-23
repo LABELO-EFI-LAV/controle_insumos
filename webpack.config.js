@@ -22,9 +22,9 @@ const extensionConfig = {
     },
     externals: {
         vscode: 'commonjs vscode',
-        // Adicionar estas linhas se o problema persistir:
-        // 'pdfkit': 'commonjs pdfkit',
-        // 'fs': 'commonjs fs'
+        pdfkit: 'commonjs pdfkit',
+        fs: 'commonjs fs',
+        sqlite3: 'commonjs sqlite3'
     },
     resolve: {
         // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader

@@ -102,9 +102,7 @@
         </svg>
     </div>
 
-    <div id="toast" class="hidden fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg z-50">
-        <p id="toast-message">Operação realizada com sucesso!</p>
-    </div>
+
     
     <!-- Overlay de transição entre páginas -->
     <div id="stock-alert-banner" class="hidden fixed top-0 left-0 right-0 bg-red-500 text-white p-4 text-center shadow-lg flex justify-center items-center z-50">
@@ -194,19 +192,19 @@
             <nav class="flex-1 px-2 md:px-4 py-4 flex flex-col">
                 <ul>
                     <li class="mb-2">
-                        <a href="#" id="nav-dashboard" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg">
+                        <a href="Dashboard" id="nav-dashboard" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                             <span>Dashboard</span>
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="nav-inventory" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                        <a href="Inventário" id="nav-inventory" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                             <span>Inventário</span>
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="nav-forecast" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                        <a href="Previsão" id="nav-forecast" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3">
                                 <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
                                 <polyline points="16 7 22 7 22 13"></polyline>
@@ -214,8 +212,9 @@
                             <span>Previsão de Consumo</span>
                         </a>
                     </li>
+
                     <li class="mb-2">
-                        <a href="#" id="nav-assays" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                        <a href="Ensaios" id="nav-assays" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110">
                                 <path d="M3 3a2 2 0 0 1 2-1h14a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path>
                                 <circle cx="12" cy="13" r="5"></circle>
@@ -226,31 +225,31 @@
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="nav-schedule" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                        <a href="Cronograma" id="nav-schedule" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
                             <span>Cronograma</span>
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="nav-calibrations" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
+                        <a href="Calibrações" id="nav-calibrations" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-gray-700 hover:text-white hover:shadow-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                             <span>Calibrações</span>
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="nav-settings" class="nav-link py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
+                        <a href="Configurações" id="nav-settings" class="nav-link py-3 px-2 md:px-4 rounded-lg transition-colors duration-200 text-gray-300 hover:bg-gray-700 hover:text-white">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             <span>Configurações</span>
                         </a>
                     </li>
                     <li class="mb-2">
-                        <a href="#" id="btn-generate-pdf-report" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-purple-700 hover:text-white border-t border-gray-600 mt-2 pt-4">
+                        <a href="Relatório" id="btn-generate-pdf-report" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-purple-700 hover:text-white border-t border-gray-600 mt-2 pt-4">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
                             <span>Gerar Relatório PDF</span>
                         </a>
                     </li>
                     <li class="mb-2" id="nav-bulk-delete-item" style="display: none;">
-                        <a href="#" id="nav-bulk-delete" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-red-700 hover:text-white">
+                        <a href="Exclusão em Massa" id="nav-bulk-delete" class="nav-link flex items-center py-3 px-2 md:px-4 rounded-lg transition-all duration-300 text-gray-300 hover:bg-red-700 hover:text-white">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-3 transition-transform duration-200 hover:scale-110"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             <span>Exclusão em Massa</span>
                         </a>
@@ -439,6 +438,8 @@
                 </div>
             </div>
 
+
+
             <div id="page-assays" class="page p-6 hidden">
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
@@ -508,10 +509,17 @@
                         </div>
                         <div class="border-l h-8 border-gray-300"></div>
                         
-                        <button id="btn-open-add-gantt-assay-modal" class="flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
-                            Adicionar Ensaio de Eficiência
-                        </button>
+                        <div class="relative" id="efficiency-assay-menu">
+                            <button id="btn-toggle-efficiency-menu" class="flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
+                                Adicionar Ensaio de Eficiência
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="efficiency-dropdown" class="hidden absolute left-0 mt-2 w-64 bg-white rounded-md shadow-xl z-20">
+                                <a href="#" id="btn-open-add-gantt-assay-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Adicionar ensaio de Máquinas de lavar</a>
+                                <a href="#" id="btn-open-add-dryer-assay-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Adicionar ensaio de Secadora de Roupas</a>
+                            </div>
+                        </div>
                         <button id="btn-open-add-safety-assay-modal" class="flex items-center bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
                             Adicionar Ensaio de Segurança
@@ -796,101 +804,105 @@
         
         <div id="add-assay-modal-content">
             <form id="form-add-assay" class="space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label for="protocol" class="block text-sm font-medium text-gray-700">Protocolo</label>
-                <input type="text" name="protocol" id="protocol" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="assayManufacturer" class="block text-sm font-medium text-gray-700">Fabricante</label>
-                <input type="text" name="assayManufacturer" id="assayManufacturer" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="model" class="block text-sm font-medium text-gray-700">Modelo</label>
-                <input type="text" name="model" id="model" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-        </div>
+                <!-- Informações Básicas -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800">Informações Básicas</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Protocolo *</label>
+                            <input type="text" name="protocol" id="protocol" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Orçamento</label>
+                            <input type="text" name="orcamento" id="orcamento" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Fabricante</label>
+                            <input type="text" name="assayManufacturer" id="assayManufacturer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Modelo</label>
+                            <input type="text" name="model" id="model" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Tensão</label>
+                            <select name="tensao" id="tensao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione a Tensão</option>
+                                <option value="127">127V</option>
+                                <option value="220">220V</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Terminal</label>
+                            <select name="setup" id="setup" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione o Terminal</option>
+                                <option value="1">Terminal 1</option>
+                                <option value="2">Terminal 2</option>
+                                <option value="3">Terminal 3</option>
+                                <option value="4">Terminal 4</option>
+                                <option value="5">Terminal 5</option>
+                                <option value="6">Terminal 6</option>
+                                <option value="7">Terminal 7</option>
+                                <option value="8">Terminal 8</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label for="nominalLoad" class="block text-sm font-medium text-gray-700">Carga (kg)</label>
-                <input type="number" step="0.1" name="nominalLoad" id="nominalLoad" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="cycles" class="block text-sm font-medium text-gray-700">Ciclos</label>
-                <input type="number" name="cycles" id="cycles" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="tensao" class="block text-sm font-medium text-gray-700">Tensão</label>
-                <select name="tensao" id="tensao" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                    <option value="">Selecione a Tensão</option>
-                    <option value="127V">127V</option>
-                    <option value="220V">220V</option>
-                </select>
-            </div>
-        </div>
+                <!-- Tipo e Motivo -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800">Classificação</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Tipo de Ensaio</label>
+                            <select name="type" id="assay-type-select" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="homologation">Homologação</option>
+                                <option value="acp">AcP</option>
+                                <option value="secadora">Ensaio de Secadora</option>
+                                <option value="seguranca-eletrica">Segurança Elétrica</option>
+                                <option value="acao-corretiva">Ação Corretiva</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Motivo</label>
+                            <input type="text" name="reason" id="reason" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label for="startDate" class="block text-sm font-medium text-gray-700">Data de Início</label>
-                <input type="date" name="startDate" id="startDate" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="endDate" class="block text-sm font-medium text-gray-700">Data de Término</label>
-                <input type="date" name="endDate" id="endDate" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="setup" class="block text-sm font-medium text-gray-700">Setup</label>
-                <select name="setup" id="setup" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                </select>
-            </div>
-        </div>
-        
-        <div>
-            <h4 class="text-md font-medium text-gray-800 mb-2">Lotes Utilizados</h4>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label for="lotePoBase" class="block text-sm font-medium text-gray-700">Pó Base</label>
-                    <select name="lotePoBase" id="lotePoBase" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
+                <!-- Datas e Ciclos -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800">Datas e Ciclos</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Data de Início</label>
+                            <input type="date" name="startDate" id="startDate" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Data de Término</label>
+                            <input type="date" name="endDate" id="endDate" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Carga Nominal (kg)</label>
+                            <input type="number" step="0.1" name="nominalLoad" id="nominalLoad" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label for="lotePerborato" class="block text-sm font-medium text-gray-700">Perborato</label>
-                    <select name="lotePerborato" id="lotePerborato" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
-                </div>
-                <div>
-                    <label for="loteTaed" class="block text-sm font-medium text-gray-700">TAED</label>
-                    <select name="loteTaed" id="loteTaed" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
-                </div>
-                <div>
-                    <label for="loteTiras" class="block text-sm font-medium text-gray-700">Tiras</label>
-                    <select name="loteTiras" id="loteTiras" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></select>
-                </div>
-            </div>
-        </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label for="reason" class="block text-sm font-medium text-gray-700">Motivo (Opcional)</label>
-                <input type="text" name="reason" id="reason" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-            </div>
-            <div>
-                <label for="assay-type-select" class="block text-sm font-medium text-gray-700">Tipo de Ensaio</label>
-                <select name="type" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500" id="assay-type-select">
-                    <option value="homologation">Homologação</option>
-                    <option value="acp">AcP</option>
-                    <option value="secadora">Ensaio de Secadora</option>
-                    <option value="acreditado">Não Acreditado</option>
-                    <option value="acao-corretiva">Ação Corretiva</option>
-                </select>
-            </div>
-        </div>
-        
-        <div class="pt-4 flex justify-end">
-            <button type="submit" id="submit-assay-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                Registrar
-            </button>
-        </div>
-    </form>
+                <!-- Lotes de Reagentes -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-bold mb-4 text-gray-800">Lotes de Reagentes Utilizados</h3>
+                    <p class="text-sm text-gray-600 mb-4">Selecione os lotes e especifique os ciclos para cada reagente.</p>
+                    <div id="lots-container" class="space-y-4">
+                        <!-- Lotes serão injetados aqui -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-6 border-t">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg transition duration-200">Cancelar</button>
+                    <button type="submit" id="submit-assay-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition duration-200">Registrar Ensaio</button>
+                </div>
+            </form>
         </div>    
 
         <div id="view-assay-modal-content">
@@ -996,6 +1008,75 @@
         </div>
     </form>
 </div>
+
+<div id="add-dryer-assay-modal-content">
+    <form id="form-add-dryer-assay" class="space-y-6">
+        <input type="hidden" name="id">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label for="dryer-orcamento" class="block text-sm font-medium text-gray-900">Orçamento</label>
+                <input type="text" id="dryer-orcamento" name="orcamento" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-protocolo" class="block text-sm font-medium text-gray-900">Protocolo</label>
+                <input type="text" id="dryer-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-humidity" class="block text-sm font-medium text-gray-900">Umidade</label>
+                <select id="dryer-humidity" name="humidity" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="60%">60%</option>
+                    <option value="70%">70%</option>
+                </select>
+            </div>
+            <div>
+                <label for="dryer-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
+                <input type="text" id="dryer-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>
+                <input type="text" id="dryer-modelo" name="model" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-cargaNominal" class="block text-sm font-medium text-gray-900">Carga Nominal (kg)</label>
+                <input type="number" step="0.1" id="dryer-cargaNominal" name="nominalLoad" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-tensao" class="block text-sm font-medium text-gray-900">Tensão</label>
+                <select id="dryer-tensao" name="tensao" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+            <div>
+                <label for="dryer-terminal" class="block text-sm font-medium text-gray-900">Terminal</label>
+                <select id="dryer-terminal" name="setup" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                </select>
+            </div>
+            <div>
+                <label for="dryer-startDate" class="block text-sm font-medium text-gray-900">Data de Início</label>
+                <input type="date" id="dryer-startDate" name="startDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-endDate" class="block text-sm font-medium text-gray-900">Data de Fim</label>
+                <input type="date" id="dryer-endDate" name="endDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-reportDate" class="block text-sm font-medium text-gray-900">Emissão de Relatório</label>
+                <input type="date" id="dryer-reportDate" name="reportDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="dryer-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
+                <input type="text" id="dryer-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end">
+            <button type="submit" class="bg-pink-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-pink-700 transition-colors">Agendar Ensaio de Secadora</button>
+        </div>
+    </form>
+</div>
+
 <div id="view-gantt-assay-modal-content">
     <div class="grid grid-cols-2 gap-4 text-sm text-gray-700">
         <div>
@@ -1053,6 +1134,69 @@
             Editar
         </button>
         <button class="btn-delete-gantt-assay" data-id="assay.id">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            Excluir
+        </button>
+    </div>
+</div>
+
+<div id="view-dryer-assay-modal-content">
+    <div class="grid grid-cols-2 gap-4 text-sm text-gray-700">
+        <div>
+            <strong class="text-gray-900">Protocolo:</strong>
+            <span id="view-dryer-protocol"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Orçamento:</strong>
+            <span id="view-dryer-orcamento"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Fabricante:</strong>
+            <span id="view-dryer-manufacturer"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Modelo:</strong>
+            <span id="view-dryer-model"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Carga Nominal:</strong>
+            <span id="view-dryer-nominal-load"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Umidade:</strong>
+            <span id="view-dryer-humidity"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Tensão:</strong>
+            <span id="view-dryer-tensao"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Período:</strong>
+            <span id="view-dryer-period"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Terminal:</strong>
+            <span id="view-dryer-terminal"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Status:</strong>
+            <span id="view-dryer-status"></span>
+        </div>
+        <div>
+            <strong class="text-gray-900">Emissão de Relatório:</strong>
+            <span id="view-dryer-report"></span>
+        </div>
+        <div class="col-span-2">
+            <strong class="text-gray-900">Observações:</strong>
+            <span id="view-dryer-observacoes"></span>
+        </div>
+    </div>
+    <div class="flex justify-end space-x-2 pt-4 border-t">
+        <button class="btn-edit-dryer-assay bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center" data-id="">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            Editar
+        </button>
+        <button class="btn-delete-dryer-assay bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center" data-id="">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             Excluir
         </button>
@@ -1147,6 +1291,87 @@
         </div>
     </form>
 </div>
+
+<div id="edit-dryer-assay-modal-content">
+    <form id="form-edit-dryer-assay" class="space-y-6">
+        <input type="hidden" name="id">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label for="edit-dryer-protocolo" class="block text-sm font-medium text-gray-900">Protocolo</label>
+                <input type="text" id="edit-dryer-protocolo" name="protocol" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-orcamento" class="block text-sm font-medium text-gray-900">Orçamento</label>
+                <input type="text" id="edit-dryer-orcamento" name="orcamento" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-humidity" class="block text-sm font-medium text-gray-900">Umidade</label>
+                <select id="edit-dryer-humidity" name="humidity" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="60%">60%</option>
+                    <option value="70%">70%</option>
+                </select>
+            </div>
+            <div>
+                <label for="edit-dryer-fabricante" class="block text-sm font-medium text-gray-900">Fabricante</label>
+                <input type="text" id="edit-dryer-fabricante" name="assayManufacturer" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-modelo" class="block text-sm font-medium text-gray-900">Modelo</label>
+                <input type="text" id="edit-dryer-modelo" name="model" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-cargaNominal" class="block text-sm font-medium text-gray-900">Carga Nominal (kg)</label>
+                <input type="number" step="0.1" id="edit-dryer-cargaNominal" name="nominalLoad" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-tensao" class="block text-sm font-medium text-gray-900">Tensão</label>
+                <select id="edit-dryer-tensao" name="tensao" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="">Selecione...</option>
+                    <option value="127V">127V</option>
+                    <option value="220V">220V</option>
+                </select>
+            </div>
+            <div>
+                <label for="edit-dryer-terminal" class="block text-sm font-medium text-gray-900">Terminal</label>
+                <select id="edit-dryer-terminal" name="setup" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                </select>
+            </div>
+            <div>
+                <label for="edit-dryer-startDate" class="block text-sm font-medium text-gray-900">Data de Início</label>
+                <input type="date" id="edit-dryer-startDate" name="startDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-endDate" class="block text-sm font-medium text-gray-900">Data de Fim</label>
+                <input type="date" id="edit-dryer-endDate" name="endDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-reportDate" class="block text-sm font-medium text-gray-900">Emissão de Relatório</label>
+                <input type="date" id="edit-dryer-reportDate" name="reportDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+            <div>
+                <label for="edit-dryer-status" class="block text-sm font-medium text-gray-900">Status</label>
+                <select id="edit-dryer-status" name="status" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="aguardando">Aguardando Amostra</option>
+                    <option value="labelo">Amostra no LABELO</option>
+                    <option value="andamento">Ensaios em Andamento</option>
+                    <option value="incompleto">Ensaio Incompleto</option>
+                    <option value="concluido">Ensaios concluído</option>
+                    <option value="relatorio">Relatório Emitido</option>
+                    <option value="pendente">Ensaio Pendente</option>
+                </select>
+            </div>
+            <div class="md:col-span-3">
+                <label for="edit-dryer-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
+                <input type="text" id="edit-dryer-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end">
+            <button type="submit" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors">Salvar Alterações</button>
+        </div>
+    </form>
+</div>
+
 <div id="add-safety-assay-modal-content">
     <form id="form-add-safety-assay" class="space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
