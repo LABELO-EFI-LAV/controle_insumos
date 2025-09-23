@@ -422,7 +422,7 @@ export class DatabaseManager {
             
             if (!hasTotalConsumption) {
                 await this.runQuery('ALTER TABLE historical_assays ADD COLUMN total_consumption REAL');
-                console.log('✅ Coluna total_consumption adicionada à tabela historical_assays');
+                console.log('✅ Coluna total_consumo adicionada à tabela historical_assays');
             }
         } catch (error) {
             console.error('❌ Erro na migração das colunas de consumo:', error);
@@ -445,7 +445,8 @@ export class DatabaseManager {
             this.db!.run(sql, params, function(err) {
                 if (err) {
                     // Verificar se é erro de lock e se ainda pode tentar novamente
-                    if ((err.message.includes('SQLITE_BUSY') || err.message.includes('database is locked')) && retryCount < maxRetries) {
+                    const errorMessage = err.message || '';
+                    if ((errorMessage.includes('SQLITE_BUSY') || errorMessage.includes('database is locked')) && retryCount < maxRetries) {
                         console.warn(`⚠️ Database busy, tentativa ${retryCount + 1}/${maxRetries + 1}:`, sql);
                         
                         // Aguardar um pouco antes de tentar novamente
@@ -486,7 +487,8 @@ export class DatabaseManager {
             this.db!.all(sql, params, (err, rows) => {
                 if (err) {
                     // Verificar se é erro de lock e se ainda pode tentar novamente
-                    if ((err.message.includes('SQLITE_BUSY') || err.message.includes('database is locked')) && retryCount < maxRetries) {
+                    const errorMessage = err.message || '';
+                    if ((errorMessage.includes('SQLITE_BUSY') || errorMessage.includes('database is locked')) && retryCount < maxRetries) {
                         console.warn(`⚠️ Database busy (SELECT), tentativa ${retryCount + 1}/${maxRetries + 1}:`, sql);
                         
                         // Aguardar um pouco antes de tentar novamente
@@ -512,213 +514,6 @@ export class DatabaseManager {
     /**
      * Migra dados do database.json para SQLite
      */
-    async migrateFromJson(jsonPath: string): Promise<void> {
-        if (!fs.existsSync(jsonPath)) {
-            console.log('⚠️ Arquivo database.json não encontrado, criando banco vazio');
-            return;
-        }
-
-        console.log('🔄 Iniciando migração do database.json para SQLite...');
-        
-        const jsonContent = fs.readFileSync(jsonPath, 'utf8');
-        const data = JSON.parse(jsonContent);
-
-        // Migrar inventário
-        if (data.inventory && Array.isArray(data.inventory)) {
-            for (const item of data.inventory) {
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO inventory (id, reagent, manufacturer, lot, quantity, validity) VALUES (?, ?, ?, ?, ?, ?)',
-                    [item.id, item.reagent, item.manufacturer, item.lot, item.quantity, item.validity]
-                );
-            }
-            console.log(`✅ Migrados ${data.inventory.length} itens do inventário`);
-        }
-
-        // Migrar ensaios históricos
-        if (data.historicalAssays && Array.isArray(data.historicalAssays)) {
-            for (const assay of data.historicalAssays) {
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO historical_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, report) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, assay.protocol, assay.orcamento, assay.assayManufacturer, assay.model, assay.nominalLoad, assay.tensao, assay.startDate, assay.endDate, assay.setup, assay.status, assay.type, assay.observacoes, assay.cycles, assay.report]
-                );
-
-                // Inserir lotes separadamente
-                if (assay.lots) {
-                    for (const [reagentType, lots] of Object.entries(assay.lots)) {
-                        for (const lot of lots as any[]) {
-                            // Verificar se o lote tem valores válidos antes de inserir
-                            const safeLot = lot.lot || 'N/A';
-                            const safeCycles = lot.cycles || 0;
-                            
-                            if (safeLot !== 'N/A') { // Só inserir se o lote for válido
-                                await this.runQuery(
-                                    'INSERT OR REPLACE INTO assay_lots (assay_id, reagent_type, lot, cycles) VALUES (?, ?, ?, ?)',
-                                    [assay.id, reagentType, safeLot, safeCycles]
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            console.log(`✅ Migrados ${data.historicalAssays.length} ensaios históricos`);
-        }
-
-        // Migrar ensaios agendados
-        if (data.scheduledAssays && Array.isArray(data.scheduledAssays)) {
-            for (const assay of data.scheduledAssays) {
-                // Tratar valores NULL/undefined para todos os campos obrigatórios
-                const safeProtocol = assay.protocol || 'Não especificado'; // Default para protocolo
-                const safeOrcamento = assay.orcamento || 'Não especificado'; // Default para orçamento
-                const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado'; // Default para fabricante
-                const safeModel = assay.model || 'Não especificado'; // Default para modelo
-                const safeNominalLoad = assay.nominalLoad || 0; // Default para carga nominal
-                const safeTensao = assay.tensao || 0; // Default para tensão
-                const safeStartDate = assay.startDate || new Date().toISOString(); // Default para data atual
-                const safeEndDate = assay.endDate || new Date().toISOString(); // Default para data atual
-                const safeSetup = assay.setup || 1; // Default para setup 1
-                const safeStatus = assay.status || 'pending'; // Default para status pending
-                const safeType = assay.type || 'efficiency'; // Default para tipo efficiency
-                
-                // Tratar plannedSuppliers - sempre inserir, mesmo que seja vazio
-                const plannedSuppliersValue = JSON.stringify(assay.plannedSuppliers || {});
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO scheduled_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, safeProtocol, safeOrcamento, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, plannedSuppliersValue]
-                );
-            }
-            console.log(`✅ Migrados ${data.scheduledAssays.length} ensaios agendados`);
-        }
-
-        // Migrar ensaios de segurança agendados
-        if (data.safetyScheduledAssays && Array.isArray(data.safetyScheduledAssays)) {
-            for (const assay of data.safetyScheduledAssays) {
-                // Tratar valores NULL/undefined para todos os campos obrigatórios
-                const safeProtocol = assay.protocol || 'Não especificado'; // Default para protocolo
-                const safeOrcamento = assay.orcamento || 'Não especificado'; // Default para orçamento
-                const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado'; // Default para fabricante
-                const safeModel = assay.model || 'Não especificado'; // Default para modelo
-                const safeNominalLoad = assay.nominalLoad || 0; // Default para carga nominal
-                const safeTensao = assay.tensao || 0; // Default para tensão
-                const safeStartDate = assay.startDate || new Date().toISOString(); // Default para data atual
-                const safeEndDate = assay.endDate || new Date().toISOString(); // Default para data atual
-                const safeSetup = assay.setup || 1; // Default para setup 1
-                const safeStatus = assay.status || 'pending'; // Default para status pending
-                const safeType = assay.type || 'safety'; // Default para tipo safety
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO safety_scheduled_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, safeProtocol, safeOrcamento, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, assay.subRowIndex]
-                );
-            }
-            console.log(`✅ Migrados ${data.safetyScheduledAssays.length} ensaios de segurança agendados`);
-        }
-
-        // Migrar feriados
-        if (data.holidays && Array.isArray(data.holidays)) {
-            for (const holiday of data.holidays) {
-                // Tratar valores NULL/undefined para campos obrigatórios
-                const safeName = holiday.name || 'Feriado não especificado'; // Default para nome
-                const safeStartDate = holiday.startDate || new Date().toISOString(); // Default para data atual
-                const safeEndDate = holiday.endDate || new Date().toISOString(); // Default para data atual
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO holidays (id, name, start_date, end_date) VALUES (?, ?, ?, ?)',
-                    [holiday.id, safeName, safeStartDate, safeEndDate]
-                );
-            }
-            console.log(`✅ Migrados ${data.holidays.length} feriados`);
-        }
-
-        // Migrar calibrações
-        if (data.calibrations && Array.isArray(data.calibrations)) {
-            for (const calibration of data.calibrations) {
-                // Tratar valores NULL/undefined para campos obrigatórios
-                const safeProtocol = calibration.protocol || 'Não especificado'; // Default para protocolo
-                const safeStartDate = calibration.startDate || new Date().toISOString(); // Default para data atual
-                const safeEndDate = calibration.endDate || new Date().toISOString(); // Default para data atual
-                const safeType = calibration.type || 'standard'; // Default para tipo
-                const safeStatus = calibration.status || 'pending'; // Default para status
-                const safeAffectedTerminals = calibration.affectedTerminals || 'Não especificado'; // Default para terminais
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO calibrations (id, protocol, start_date, end_date, type, status, affected_terminals) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [calibration.id, safeProtocol, safeStartDate, safeEndDate, safeType, safeStatus, safeAffectedTerminals]
-                );
-            }
-            console.log(`✅ Migradas ${data.calibrations.length} calibrações`);
-        }
-
-        // Migrar configurações
-        if (data.settings) {
-            const settings = data.settings;
-            for (const [key, value] of Object.entries(settings)) {
-                if (key !== '0') { // Ignora configurações antigas
-                    await this.runQuery(
-                        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-                        [key, typeof value === 'string' ? value : JSON.stringify(value)]
-                    );
-                }
-            }
-            console.log(`✅ Migradas configurações`);
-        }
-
-        // Migrar usuários do sistema
-        if (data.systemUsers) {
-            for (const [username, user] of Object.entries(data.systemUsers)) {
-                const userData = user as SystemUser;
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO system_users (username, type, display_name, permissions) VALUES (?, ?, ?, ?)',
-                    [username, userData.type, userData.displayName, JSON.stringify(userData.permissions)]
-                );
-            }
-            console.log(`✅ Migrados usuários do sistema`);
-        }
-
-        // Migrar categorias de eficiência
-        if (data.efficiencyCategories && Array.isArray(data.efficiencyCategories)) {
-            for (const category of data.efficiencyCategories) {
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO efficiency_categories (id, name) VALUES (?, ?)',
-                    [category.id, category.name]
-                );
-            }
-            console.log(`✅ Migradas ${data.efficiencyCategories.length} categorias de eficiência`);
-        }
-
-        // Migrar categorias de segurança
-        if (data.safetyCategories && Array.isArray(data.safetyCategories)) {
-            for (const category of data.safetyCategories) {
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO safety_categories (id, name) VALUES (?, ?)',
-                    [category.id, category.name]
-                );
-            }
-            console.log(`✅ Migradas ${data.safetyCategories.length} categorias de segurança`);
-        }
-
-        // Migrar equipamentos de calibração
-        if (data.calibrationEquipments && Array.isArray(data.calibrationEquipments)) {
-            for (const equipment of data.calibrationEquipments) {
-                // Tratar valores NULL/undefined para todos os campos obrigatórios
-                const safeTag = equipment.tag || 'TAG-' + equipment.id; // Default para tag
-                const safeEquipment = equipment.equipment || 'Equipamento não especificado'; // Default para equipamento
-                const safeValidity = equipment.validity || ''; // Default para validade
-                const safeObservations = equipment.observations || ''; // Default para observações
-                const safeCalibrationStatus = equipment.calibrationStatus || 'disponivel'; // Default para status
-                const safeCalibrationStartDate = equipment.calibrationStartDate || null; // Default para data de início
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO calibration_equipments (id, tag, equipment, validity, observations, calibration_status, calibration_start_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [equipment.id, safeTag, safeEquipment, safeValidity, safeObservations, safeCalibrationStatus, safeCalibrationStartDate]
-                );
-            }
-            console.log(`✅ Migrados ${data.calibrationEquipments.length} equipamentos de calibração`);
-        }
-
-        console.log('🎉 Migração concluída com sucesso!');
-    }
-
     /**
      * Obtém todos os dados em formato compatível com o JSON original
      */
@@ -763,7 +558,7 @@ export class DatabaseManager {
             startDate: assay.start_date,
             endDate: assay.end_date,
             consumption: assay.consumption ? JSON.parse(assay.consumption) : null,
-            totalConsumption: assay.total_consumption,
+            totalConsumption: assay.total_consumo,
             lots: lotsByAssayId[assay.id] || {}
         }));
 

@@ -1520,7 +1520,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.command = 'controle-de-insumos.abrir';
     statusBarItem.text = `$(beaker) Controle de Insumos`;
-    statusBarItem.tooltip = "Abrir gestor de insumos";
+    statusBarItem.tooltip = "Abrir Controle de insumos";
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
 
@@ -1533,33 +1533,11 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         
         const rootPath = workspaceFolders[0].uri.fsPath;
-        const jsonDbPath = path.join(rootPath, 'database.json');
         
         try {
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
             await databaseManager.initialize();
-            
-            // Se existe database.json, migra os dados
-            if (fs.existsSync(jsonDbPath)) {
-                // Migrando dados do database.json para SQLite
-                await databaseManager.migrateFromJson(jsonDbPath);
-                
-                // Cria backup do JSON antes de removê-lo usando o sistema de backup
-                if (backupManager) {
-                    backupManager.createBackup(jsonDbPath);
-                } else {
-                    // Fallback caso o backupManager não esteja inicializado
-                    const backupDir = path.join(rootPath, '.labcontrol-backups');
-                    if (!fs.existsSync(backupDir)) {
-                        fs.mkdirSync(backupDir, { recursive: true });
-                    }
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    const backupJsonPath = path.join(backupDir, `database-backup-${timestamp}.json`);
-                    fs.copyFileSync(jsonDbPath, backupJsonPath);
-                    // Backup do database.json criado
-                }
-            }
             
             // Banco de dados SQLite inicializado com sucesso
             return true;
@@ -1575,7 +1553,8 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!workspaceFolders || workspaceFolders.length === 0) {
             return null;
         }
-        return path.join(workspaceFolders[0].uri.fsPath, 'database.json');
+        // Ajuste para retornar o caminho do banco SQLite
+        return path.join(workspaceFolders[0].uri.fsPath, 'database.sqlite');
     };
 
     // --- INICIALIZAÇÃO DO SISTEMA DE BANCO DE DADOS E BACKUP ---
@@ -1584,7 +1563,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const workspaceRoot = workspaceFolders[0].uri.fsPath;
         
         // Inicializa o banco de dados SQLite
-        const dbInitialized = await initializeDatabase(); // <--- Agora funciona!
+        const dbInitialized = await initializeDatabase();
         if (!dbInitialized) {
             vscode.window.showErrorMessage('Erro ao inicializar banco de dados. A extensão pode não funcionar corretamente.');
             return;
@@ -1593,7 +1572,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Inicializa o sistema de backup
         backupManager = new BackupManager(workspaceRoot);
         
-        // Para compatibilidade, ainda verifica se existe database.json
+        // Ajuste para usar o banco SQLite
         const dbPath = getDbPath();
         if (dbPath && fs.existsSync(dbPath)) {
             backupManager.startAutoBackup(dbPath);
@@ -2507,7 +2486,7 @@ function handleError(err: unknown, contextMessage: string) {
     
     if (err instanceof Error) {
         errorType = err.constructor.name;
-        errorMessage = `${contextMessage} ${err.message}`;
+        errorMessage = `${contextMessage} ${err.message || 'Mensagem de erro não disponível'}`;
         
         // Adiciona detalhes específicos baseados no tipo de erro
         if (err.stack) {
@@ -2519,9 +2498,16 @@ function handleError(err: unknown, contextMessage: string) {
             errorDetails += `\nTipo de erro: Erro de tipo - verifique se os objetos/variáveis estão definidos corretamente.`;
             
             // Detalhes específicos para o erro "Cannot convert undefined or null to object"
-            if (err.message.includes('Cannot convert undefined or null to object')) {
+            // Verificação segura para evitar erro de indexOf em message undefined
+            if (err.message && typeof err.message === 'string' && err.message.includes('Cannot convert undefined or null to object')) {
                 errorDetails += `\nEste erro geralmente ocorre quando Object.keys() é chamado em um valor null/undefined.`;
                 errorDetails += `\nVerifique se todos os objetos estão sendo validados antes do uso.`;
+            }
+            
+            // Verificação adicional para erro de indexOf
+            if (err.message && typeof err.message === 'string' && err.message.includes('Cannot read properties of undefined')) {
+                errorDetails += `\nEste erro ocorre quando uma propriedade é acessada em um valor undefined.`;
+                errorDetails += `\nVerifique se todas as variáveis estão definidas antes de acessar suas propriedades.`;
             }
         } else if (err instanceof ReferenceError) {
             errorDetails += `\nTipo de erro: Erro de referência - uma variável não foi declarada ou está fora de escopo.`;

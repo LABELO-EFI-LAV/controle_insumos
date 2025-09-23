@@ -32,7 +32,8 @@
     "vscode:prepublish": "npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
+    "prepackage": "electron-rebuild -f -w sqlite3 -v 37.3.1",
+    "package": "npm run prepackage && webpack --mode production --devtool hidden-source-map",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
@@ -41,7 +42,9 @@
     "webpack": "webpack",
     "webpack-dev": "webpack --mode development",
     "webpack-prod": "webpack --mode production",
-    "postinstall": "electron-rebuild -v 37.3.1"
+    "postinstall": "electron-rebuild -v 37.3.1",
+    "debug": "node debug-extension.js",
+    "debug-quick": "node quick-debug.js"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -54,6 +57,7 @@
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "copy-webpack-plugin": "^13.0.0",
+    "electron": "^27.3.0",
     "electron-rebuild": "^3.2.9",
     "eslint": "^9.25.1",
     "ts-loader": "^9.5.2",
@@ -62,9 +66,13 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
+    "file-uri-to-path": "^2.0.0",
     "ml-regression-simple-linear": "^3.0.1",
     "pdfkit": "^0.17.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
+  },
+  "overrides": {
+    "ajv": "^8.17.1"
   }
 }

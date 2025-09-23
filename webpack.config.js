@@ -55,6 +55,16 @@ const extensionConfig = {
                     // Copia a pasta 'data' da biblioteca pdfkit para a pasta 'dist'
                     from: path.join(__dirname, 'node_modules', 'pdfkit', 'js', 'data'),
                     to: path.join(__dirname, 'dist', 'data')
+                },
+                {
+                    // Copia o arquivo binário do sqlite3 para a pasta 'dist'
+                    from: path.join(__dirname, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node'),
+                    to: path.join(__dirname, 'dist', 'node_sqlite3.node')
+                },
+                {
+                    // Copia o binário também para o local esperado pelo sqlite3
+                    from: path.join(__dirname, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node'),
+                    to: path.join(__dirname, 'node_modules', 'sqlite3', 'lib', 'binding', 'node_sqlite3.node')
                 }
             ],
         }),

@@ -2,11 +2,29 @@
 node_modules/
 package-lock.json
 
+# NÃO ignore os binários nativos do sqlite3
+!node_modules/sqlite3/lib/binding/**
+!node_modules/sqlite3/package.json
+!node_modules/sqlite3/lib/sqlite3.js
+!node_modules/sqlite3/lib/sqlite3-binding.js
+!node_modules/
+
+# NÃO ignore o módulo bindings usado pelo sqlite3
+!node_modules/bindings/**
+!node_modules/bindings/package.json
+
+# NÃO ignore o módulo file-uri-to-path usado pelo bindings/sqlite3
+!node_modules/file-uri-to-path/**
+!node_modules/file-uri-to-path/package.json
+
 # Excluir código-fonte TypeScript
 src/
 tsconfig.json
 webpack.config.js
 eslint.config.mjs
+
+# Excluir pasta de compilação TypeScript (usar apenas dist/)
+out/
 
 # Excluir configurações do editor e testes
 .vscode/
