@@ -1448,47 +1448,6 @@ const cacheSystem = {
 
 };
 
-
-
-/**
- * Sistema de usuários estáticos com diferentes níveis de permissão
- */
-const USERS = {
-    'lav': {
-        password: 'lav',
-        type: 'administrador',
-        displayName: 'Administrador',
-        permissions: {
-            accessSettings: true,
-            editHistory: true,
-            addEditSupplies: true,
-            viewOnly: false
-        }
-    },
-    'eficiencia': {
-        password: 'eficiencia',
-        type: 'tecnico_eficiencia',
-        displayName: 'Técnico Eficiência',
-        permissions: {
-            accessSettings: false,
-            editHistory: true,
-            addEditSupplies: true,
-            viewOnly: false
-        }
-    },
-    'geral': {
-        password: 'geral',
-        type: 'geral',
-        displayName: 'Geral',
-        permissions: {
-            accessSettings: false,
-            editHistory: false,
-            addEditSupplies: false,
-            viewOnly: true
-        }
-    }
-};
-
 /**
  * Garante que a API do VS Code esteja disponível, com um fallback robusto
  * para evitar erros de referência fora do ambiente do VS Code.
@@ -3178,23 +3137,21 @@ const renderers = {
 
         categoriesToRender.forEach((category, index) => {
             const isSafetyCategory = state.safetyCategories.some(cat => cat.name === category);
-            const safetyRowHeight = 180; // Altura para as linhas de segurança (aumentada para acomodar 4 containers)
-            const subRowHeightForSafety = (safetyRowHeight - subRowMargin) / 4; // Altura de 1/4 da linha, menos a margem
-            
+                        
             categoryPositions[category] = currentY;
 
             const isLastCategory = index === categoriesToRender.length - 1;
             const assaysForCategory = groupedAssays[category] || [];
             let rowHeight, assaysToRender, isStacked, effectiveSubRowHeight;
             
-            if (isSafetyCategory || category === 'Pendentes' || category === 'Férias') {
-                isStacked = true;
-                const { positionedAssays, subRowCount } = layoutEngine.calculateSubRows(assaysForCategory);
-                assaysToRender = positionedAssays;
+           if (isSafetyCategory || category === 'Pendentes' || category === 'Férias') {
+            isStacked = true;
+            const { positionedAssays, subRowCount } = layoutEngine.calculateSubRows(assaysForCategory);
+            assaysToRender = positionedAssays;
 
-                if (isSafetyCategory) {
-                    effectiveSubRowHeight = subRowHeightForSafety;
-                    rowHeight = safetyRowHeight;
+            if (isSafetyCategory) {
+                const fixedContainerHeight = 40; 
+                rowHeight = subRowCount * (fixedContainerHeight + subRowMargin) + subRowMargin;
                 } else if (category === 'Férias') {
                     effectiveSubRowHeight = subRowHeight / 2;
                     rowHeight = subRowCount * (effectiveSubRowHeight + subRowMargin) + subRowMargin;

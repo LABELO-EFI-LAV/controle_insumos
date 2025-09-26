@@ -7,7 +7,6 @@ package-lock.json
 !node_modules/sqlite3/package.json
 !node_modules/sqlite3/lib/sqlite3.js
 !node_modules/sqlite3/lib/sqlite3-binding.js
-!node_modules/
 
 # NÃO ignore o módulo bindings usado pelo sqlite3
 !node_modules/bindings/**
