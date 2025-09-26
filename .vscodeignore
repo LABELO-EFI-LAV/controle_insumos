@@ -18,11 +18,6 @@ package-lock.json
 !node_modules/file-uri-to-path/
 !node_modules/file-uri-to-path/**
 
-# NÃO ignore o módulo pdfkit
-!node_modules/pdfkit/
-!node_modules/pdfkit/**
-!node_modules/pdfkit/package.json
-
 # Excluir código-fonte TypeScript
 src/
 tsconfig.json
