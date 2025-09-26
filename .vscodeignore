@@ -1,20 +1,27 @@
 # Excluir dependências de desenvolvimento
-node_modules/
+node_modules/** 
 package-lock.json
 
 # NÃO ignore os binários nativos do sqlite3
+!node_modules/sqlite3/
+!node_modules/sqlite3/**
 !node_modules/sqlite3/lib/binding/**
 !node_modules/sqlite3/package.json
 !node_modules/sqlite3/lib/sqlite3.js
 !node_modules/sqlite3/lib/sqlite3-binding.js
 
 # NÃO ignore o módulo bindings usado pelo sqlite3
+!node_modules/bindings/
 !node_modules/bindings/**
-!node_modules/bindings/package.json
 
 # NÃO ignore o módulo file-uri-to-path usado pelo bindings/sqlite3
+!node_modules/file-uri-to-path/
 !node_modules/file-uri-to-path/**
-!node_modules/file-uri-to-path/package.json
+
+# NÃO ignore o módulo pdfkit
+!node_modules/pdfkit/
+!node_modules/pdfkit/**
+!node_modules/pdfkit/package.json
 
 # Excluir código-fonte TypeScript
 src/
@@ -45,3 +52,4 @@ temp_vsix/
 !dist
 !dist/
 !dist/**
+!dist/pdfkit/**

@@ -68,7 +68,7 @@
   "dependencies": {
     "file-uri-to-path": "^2.0.0",
     "ml-regression-simple-linear": "^3.0.1",
-    "pdfkit": "^0.17.1",
+    "pdfkit": "^0.17.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
   },

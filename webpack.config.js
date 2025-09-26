@@ -22,7 +22,7 @@ const extensionConfig = {
     },
     externals: {
         vscode: 'commonjs vscode',
-        pdfkit: 'commonjs pdfkit',
+        //pdfkit: 'commonjs pdfkit',
         fs: 'commonjs fs',
         sqlite3: 'commonjs sqlite3'
     },
@@ -54,7 +54,7 @@ const extensionConfig = {
                 {
                     // Copia a pasta 'data' da biblioteca pdfkit para a pasta 'dist'
                     from: path.join(__dirname, 'node_modules', 'pdfkit', 'js', 'data'),
-                    to: path.join(__dirname, 'dist', 'data')
+                    to: path.join(__dirname, 'dist', 'pdfkit', 'js', 'data')
                 },
                 {
                     // Copia o arquivo binário do sqlite3 para a pasta 'dist'
