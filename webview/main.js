@@ -9103,11 +9103,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || []; // Carrega os equipamentos de calibração
                     
-                    // 🔍 DEBUG - Verificar calibrationEquipments recebidos
-                    // Equipamentos de calibração recebidos
-                    // Dados de calibração processados
-                    // Quantidade de equipamentos processada
-                    
                     // Log específico para equipamentos em calibração
                     const equipmentsInCalibration = state.calibrationEquipments.filter(eq => eq.calibrationStatus === 'em_calibracao');
                     console.log('🔧 [WEBVIEW] Equipamentos em calibração recebidos:', equipmentsInCalibration.length);
@@ -9140,6 +9135,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     utils.showToast("Ocorreu um erro ao carregar os dados.", true);
                 } finally {
                     utils.hideLoading();
+                }
+                break;
+                case 'forceDataRefresh':
+                try {
+                    console.log("Recebida atualização forçada do backend:", message.data);
+                    const data = message.data && typeof message.data === 'object' ? message.data : {};
+
+                    // Atualiza todo o estado da aplicação com os novos dados
+                    state.inventory = data.inventory || [];
+                    state.historicalAssays = data.historicalAssays || [];
+                    state.scheduledAssays = data.scheduledAssays || [];
+                    state.safetyScheduledAssays = data.safetyScheduledAssays || [];
+                    state.holidays = data.holidays || [];
+                    state.calibrations = data.calibrations || [];
+                    state.calibrationEquipments = data.calibrationEquipments || [];
+                    state.settings = { ...state.settings, ...(data.settings || {}) };
+                    state.systemUsers = data.systemUsers || {};
+                    state.efficiencyCategories = data.efficiencyCategories || state.efficiencyCategories;
+                    state.safetyCategories = data.safetyCategories || state.safetyCategories;
+
+                    // Salva o estado original dos agendamentos para permitir o cancelamento
+                    state.originalScheduledAssays = JSON.parse(JSON.stringify(data.scheduledAssays || []));
+                    state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(data.safetyScheduledAssays || []));
+
+                    // Redesenha toda a interface
+                    renderers.renderAll();
+
+                    // Notifica o usuário de forma sutil
+                    utils.showToast("Os dados foram atualizados automaticamente.", false);
+
+                } catch (error) {
+                    console.error("Erro durante o processamento de 'forceDataRefresh':", error);
+                    utils.showToast("Erro ao sincronizar dados.", true);
                 }
                 break;
             case "executeDeleteReagent":

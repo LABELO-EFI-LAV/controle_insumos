@@ -230,6 +230,7 @@ export class DatabaseManager {
                 id INTEGER PRIMARY KEY,
                 protocol TEXT NOT NULL,
                 orcamento TEXT,
+                report_date TEXT NOT NULL,
                 assay_manufacturer TEXT NOT NULL,
                 model TEXT NOT NULL,
                 nominal_load REAL NOT NULL,
@@ -251,6 +252,7 @@ export class DatabaseManager {
                 id INTEGER PRIMARY KEY,
                 protocol TEXT NOT NULL,
                 orcamento TEXT NOT NULL,
+                report_date TEXT NOT NULL,
                 assay_manufacturer TEXT NOT NULL,
                 model TEXT NOT NULL,
                 nominal_load REAL NOT NULL,
@@ -342,6 +344,7 @@ export class DatabaseManager {
         }
 
         // Todas as tabelas criadas/verificadas
+        await this.migrateReportDateColumns();
         
         // Migração: Adicionar colunas de status de calibração se não existirem
         await this.migrateCalibrationStatusColumns();
@@ -381,7 +384,31 @@ export class DatabaseManager {
             console.error('❌ Erro na migração das colunas de calibração:', error);
         }
     }
+      private async migrateReportDateColumns(): Promise<void> {
+        try {
+            // Verificar tabela scheduled_assays
+            const scheduledInfo = await this.selectQuery("PRAGMA table_info(scheduled_assays)");
+            const hasScheduledReportDate = scheduledInfo.some((col: any) => col.name === 'report_date');
+            
+            if (!hasScheduledReportDate) {
+                // Adiciona a coluna com um valor padrão para não quebrar registros existentes
+                await this.runQuery("ALTER TABLE scheduled_assays ADD COLUMN report_date TEXT NOT NULL DEFAULT ''");
+                console.log('✅ Coluna report_date adicionada à tabela scheduled_assays');
+            }
 
+            // Verificar tabela safety_scheduled_assays
+            const safetyInfo = await this.selectQuery("PRAGMA table_info(safety_scheduled_assays)");
+            const hasSafetyReportDate = safetyInfo.some((col: any) => col.name === 'report_date');
+
+            if (!hasSafetyReportDate) {
+                // Adiciona a coluna com um valor padrão
+                await this.runQuery("ALTER TABLE safety_scheduled_assays ADD COLUMN report_date TEXT NOT NULL DEFAULT ''");
+                console.log('✅ Coluna report_date adicionada à tabela safety_scheduled_assays');
+            }
+        } catch (error) {
+            console.error('❌ Erro na migração da coluna report_date:', error);
+        }
+    }
     /**
      * Migração para adicionar coluna planned_suppliers na tabela safety_scheduled_assays
      */
@@ -581,6 +608,7 @@ export class DatabaseManager {
                 nominalLoad: assay.nominal_load,
                 startDate: assay.start_date,
                 endDate: assay.end_date,
+                reportDate: assay.report_date,
                 plannedSuppliers: plannedSuppliers
             };
         });
@@ -605,6 +633,7 @@ export class DatabaseManager {
                 startDate: assay.start_date,
                 endDate: assay.end_date,
                 subRowIndex: assay.sub_row_index,
+                reportDate: assay.report_date,
                 plannedSuppliers: plannedSuppliers
             };
         });
@@ -770,11 +799,12 @@ export class DatabaseManager {
                 const safeSetup = assay.setup || 1;
                 const safeStatus = assay.status || 'scheduled';
                 const safeType = assay.type || 'efficiency';
-                const safePlannedSuppliers = assay.plannedSuppliers || '';
+                const safeReportDate = assay.reportDate || ''; // 1. Adiciona a data do relatório
+                const safePlannedSuppliers = JSON.stringify(assay.plannedSuppliers || null);
                 
                 await this.runQuery(
-                    'INSERT OR REPLACE INTO scheduled_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, safeProtocol, safeOrcamento, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers]
+            'INSERT OR REPLACE INTO scheduled_assays (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [assay.id, safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers]
                 );
             }
         }
@@ -792,13 +822,13 @@ export class DatabaseManager {
                 const safeSetup = assay.setup || 1;
                 const safeStatus = assay.status || 'scheduled';
                 const safeType = assay.type || 'safety';
-                const safePlannedSuppliers = assay.plannedSuppliers || '';
-                
+                const safeReportDate = assay.reportDate || ''; // 1. Adiciona a data do relatório
+                const safePlannedSuppliers = JSON.stringify(assay.plannedSuppliers || null);                
                 const safeSubRowIndex = assay.subRowIndex || assay.sub_row_index || 0;
                 
                 await this.runQuery(
-                    'INSERT OR REPLACE INTO safety_scheduled_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, safeProtocol, safeOrcamento, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers]
+            'INSERT OR REPLACE INTO safety_scheduled_assays (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [assay.id, safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers]
                 );
             }
         }

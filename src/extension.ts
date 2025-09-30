@@ -7,6 +7,8 @@ const PDFKit = require('pdfkit');
 const PDFDocument = PDFKit.default || PDFKit;
 const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 
+let lastDbUpdateTime: number = 0;
+const POLLING_INTERVAL = 5000;
 // ========================================================================
 // START: Added Utility Functions
 // ========================================================================
@@ -1608,6 +1610,39 @@ export async function activate(context: vscode.ExtensionContext) {
         panel.iconPath = iconPatch;
         panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
         
+        const dbPath = getDbPath();
+        if (!dbPath) return;
+
+        // Inicia o "vigia" do arquivo
+        const fileWatcherInterval = setInterval(async () => {
+            try {
+                const stats = fs.statSync(dbPath);
+                const mtimeMs = stats.mtime.getTime();
+
+                // Se o arquivo foi modificado desde a última verificação
+                if (mtimeMs > lastDbUpdateTime) {
+                    console.log('[File Watcher] Mudança detectada no banco de dados. Recarregando...');
+                    lastDbUpdateTime = mtimeMs; // Atualiza o tempo
+
+                    if (databaseManager) {
+                        const updatedData = await databaseManager.getAllData();
+                        // Envia uma mensagem para o frontend forçar a atualização
+                        panel.webview.postMessage({
+                            command: 'forceDataRefresh',
+                            data: updatedData
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('[File Watcher] Erro ao verificar o arquivo:', err);
+            }
+        }, POLLING_INTERVAL);
+
+        // Limpa o intervalo quando o painel for fechado
+        panel.onDidDispose(() => {
+            clearInterval(fileWatcherInterval);
+        });
+
         // --- LISTENER DE MENSAGENS DO WEBVIEW ---
         panel.webview.onDidReceiveMessage(async (message) => {
             // Mensagem recebida do webview
@@ -1669,6 +1704,9 @@ export async function activate(context: vscode.ExtensionContext) {
                                 addAssays: false
                             }
                         };
+
+                        const dbStats = fs.statSync(dbPath);
+                        lastDbUpdateTime = dbStats.mtime.getTime();
                         
                         // Usuário mapeado e dados preparados para webview
                         
@@ -2392,6 +2430,9 @@ export async function activate(context: vscode.ExtensionContext) {
                         
                         // Salva no SQLite
                         await databaseManager.saveData(database);
+
+                        const newStats = fs.statSync(dbPath);
+                        lastDbUpdateTime = newStats.mtime.getTime()
                         
                         panel.webview.postMessage({
                             command: 'bulkDeleteResult',
