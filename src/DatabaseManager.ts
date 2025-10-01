@@ -750,13 +750,13 @@ export class DatabaseManager {
 
 
     // O VACUUM pode ser uma operação lenta e deve ser executado fora da transação principal
-    // para não bloquear outras operações.
+    /* para não bloquear outras operações.
     this.saveCount = (this.saveCount || 0) + 1;
     if (this.saveCount % 10 === 0) {
         console.log('Executando VACUUM para otimizar o banco de dados...');
         await this.runQuery('VACUUM');
         console.log('VACUUM concluído.');
-    }
+    }*/
 }
 
 // --- Funções Auxiliares ---
