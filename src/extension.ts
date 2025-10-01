@@ -2114,6 +2114,26 @@ export async function activate(context: vscode.ExtensionContext) {
                         handleError(err, 'ERRO AO SALVAR DADOS NO SQLITE:');
                     }
                     break;
+                    case 'requestManualRefresh':
+                        try {
+                            if (!databaseManager) {
+                                throw new Error('DatabaseManager não inicializado');
+                            }
+                            console.log('[EXTENSION] Recebida solicitação de sincronização manual.');
+
+                            // Lê todos os dados mais recentes do arquivo SQLite
+                            const updatedData = await databaseManager.getAllData();
+
+                            // Envia os dados atualizados de volta para a interface
+                            panel.webview.postMessage({
+                                command: 'forceDataRefresh', // Reutiliza o comando que a interface já sabe como tratar
+                                data: updatedData
+                            });
+
+                        } catch (err) {
+                            handleError(err, 'ERRO AO EXECUTAR SINCRONIZAÇÃO MANUAL:');
+                        }
+                        break;
 
                 case 'saveScheduleData':
                     try {

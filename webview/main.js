@@ -2752,6 +2752,7 @@ const renderers = {
         renderers.renderGanttChart();
         renderers.renderHolidaysList();
         renderers.renderCalibrationsTable();
+        forecastSystem.renderAll();
         
         // Aplica permissões após renderizar todos os elementos
         if (state.isLoggedIn) {
@@ -9291,6 +9292,12 @@ document.addEventListener('DOMContentLoaded', () => {
             utils.showToast("Limite de alerta salvo com sucesso!");
         }
     });
+    document.querySelectorAll('.btn-manual-refresh').forEach(button => {
+    button.addEventListener('click', () => {
+        utils.showToast('Sincronizando com a rede...', false);
+        vscode.postMessage({ command: 'requestManualRefresh' });
+    });
+});
     
     document.getElementById('btn-save-calibration-threshold')?.addEventListener('click', () => {
         const calibrationThresholdInput = document.getElementById('setting-calibration-threshold');

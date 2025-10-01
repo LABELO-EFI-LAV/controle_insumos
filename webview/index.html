@@ -263,7 +263,15 @@
             <div id="page-dashboard" class="page active p-4 md:p-6 bg-gray-50">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Dashboard</h1>
-                    <div class="relative">
+                    <div class="relative flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <polyline points="1 20 1 14 7 14"></polyline>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                            </svg>
+                            <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
                         <button id="notification-bell" class="p-2 rounded-full hover:bg-gray-200 relative">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                             <span id="notification-badge" class="hidden absolute top-0 right-0 h-4 w-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center"></span>
@@ -364,10 +372,20 @@
             <div id="page-inventory" class="page p-6 hidden">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 class="text-3xl font-bold text-gray-800">Inventário de Insumos</h1>
-                    <button id="btn-open-reagent-modal" class="mobile-optimized flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                        <span>Adicionar Insumo</span>
-                    </button>
+                    <div class="relative flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
+                        <button id="btn-open-reagent-modal" class="mobile-optimized flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                            <span>Adicionar Insumo</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-4">
                     <label for="filter-inventory" class="block text-sm font-medium text-gray-700">Buscar no Inventário:</label>
@@ -444,16 +462,26 @@
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                         <h1 class="text-3xl font-bold text-gray-800">Histórico de Ensaios</h1>
-                        <button id="btn-open-assay-modal" class=" flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200">
-                                <path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"></path>
-                                <circle cx="12" cy="12" r="4"></circle>
-                                <path d="M18 9h.01"></path>
-                                <path d="M16 19h6"></path>
-                                <path d="M19 16v6"></path>
-                            </svg>
-                            <span>Registrar Ensaio</span>
-                        </button>
+                        <div class="relative flex items-center space-x-4">
+                            <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                            </button>
+                            <button id="btn-open-assay-modal" class=" flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200">
+                                    <path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"></path>
+                                    <circle cx="12" cy="12" r="4"></circle>
+                                    <path d="M18 9h.01"></path>
+                                    <path d="M16 19h6"></path>
+                                    <path d="M19 16v6"></path>
+                                </svg>
+                                <span>Registrar Ensaio</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="my-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                         <div>
@@ -492,9 +520,8 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </button>
                             
-                            <div class="border-l h-6 border-gray-600 mx-2"></div>
+                            <div class="border-l h-6 border-gray-300 mx-2"></div>
                                 <div class="flex items-center bg-gray-200 rounded-full p-1 space-x-1">
-    
                                 <button id="zoom-out-gantt-btn" class="p-1 rounded-full hover:bg-gray-300 transition-colors" title="Reduzir Zoom (Ver mais dias)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="8" y1="11" x2="14" y2="11"></line></svg>
                                 </button>
@@ -504,8 +531,16 @@
                                 <button id="zoom-in-gantt-btn" class="p-1 rounded-full hover:bg-gray-300 transition-colors" title="Aumentar Zoom (Ver mais detalhes)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
                                 </button>
-
                             </div>
+                            <div class="border-l h-6 border-gray-300 mx-2"></div>   
+                                     <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="23 4 23 10 17 10"></polyline>
+                                                <polyline points="1 20 1 14 7 14"></polyline>
+                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                            </svg>
+                                            <span class="ml-2 text-sm">Sincronizar</span>
+                                    </button>
                         </div>
                         <div class="border-l h-8 border-gray-300"></div>
                         
@@ -618,12 +653,22 @@
             <div id="page-calibrations" class="page p-6 hidden">
                 <div class="flex justify-between items-center mb-6">
                     <h1 class="text-3xl font-bold text-gray-800">Calibrações</h1>
-                    <button id="btn-add-calibration-equipment" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        Adicionar Equipamento
-                    </button>
+                    <div class="flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
+                        <button id="btn-add-calibration-equipment" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Adicionar Equipamento
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Filtros -->

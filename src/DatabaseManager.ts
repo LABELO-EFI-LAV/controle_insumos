@@ -709,234 +709,313 @@ export class DatabaseManager {
      * Salva dados no banco SQLite
      */
     async saveData(data: any): Promise<void> {
-        // Limpar dados existentes antes de inserir os novos para garantir sincronização
-        if (data.inventory) {
-            await this.runQuery('DELETE FROM inventory');
-        }
-        if (data.historicalAssays) {
-            await this.runQuery('DELETE FROM assay_lots');
-            await this.runQuery('DELETE FROM historical_assays');
-        }
-        if (data.scheduledAssays) {
-            await this.runQuery('DELETE FROM scheduled_assays');
-        }
-        if (data.safetyScheduledAssays) {
-            await this.runQuery('DELETE FROM safety_scheduled_assays');
-        }
-        if (data.calibrations) {
-            await this.runQuery('DELETE FROM calibrations');
-        }
-        if (data.calibrationEquipments) {
-            await this.runQuery('DELETE FROM calibration_equipments');
-        }
-        
-        if (data.inventory) {
-            for (const item of data.inventory) {
-                // Tratar valores NULL/undefined para campos obrigatórios
-                const safeReagent = item.reagent || 'Não especificado';
-                const safeManufacturer = item.manufacturer || 'Não especificado';
-                const safeLot = item.lot || 'Não especificado';
-                const safeQuantity = item.quantity || 0;
-                const safeValidity = item.validity || new Date().toISOString();
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO inventory (id, reagent, manufacturer, lot, quantity, validity) VALUES (?, ?, ?, ?, ?, ?)',
-                    [item.id, safeReagent, safeManufacturer, safeLot, safeQuantity, safeValidity]
-                );
-            }
-        }
+        const startTime = performance.now();
+        console.log('[DB] Iniciando operação de salvamento...')
+    try {
+        // A execução de todas as operações dentro de uma única transação garante
+        // a atomicidade. Se qualquer etapa falhar, todas as alterações anteriores
+        // são revertidas (rollback), evitando dados inconsistentes.
+        await this.transaction(async (tx) => {
+            // Mapeamento de chaves de dados para funções de salvamento
+            const dataHandlers = {
+                inventory: () => this.saveInventory(tx, data.inventory),
+                historicalAssays: () => this.saveHistoricalAssays(tx, data.historicalAssays),
+                scheduledAssays: () => this.saveScheduledAssays(tx, data.scheduledAssays),
+                safetyScheduledAssays: () => this.saveSafetyScheduledAssays(tx, data.safetyScheduledAssays),
+                calibrations: () => this.saveCalibrations(tx, data.calibrations),
+                calibrationEquipments: () => this.saveCalibrationEquipments(tx, data.calibrationEquipments),
+                holidays: () => this.saveHolidays(tx, data.holidays),
+                settings: () => this.saveSettings(tx, data.settings),
+                efficiencyCategories: () => this.saveCategories(tx, 'efficiency_categories', data.efficiencyCategories),
+                safetyCategories: () => this.saveCategories(tx, 'safety_categories', data.safetyCategories),
+                systemUsers: () => this.saveSystemUsers(tx, data.systemUsers),
+            };
 
-        if (data.historicalAssays) {
-            for (const assay of data.historicalAssays) {
-                // Tratar valores NULL/undefined para campos obrigatórios
-                const safeProtocol = assay.protocol || 'Não especificado';
-                const safeOrcamento = assay.orcamento || 'Não especificado';
-                const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado';
-                const safeModel = assay.model || 'Não especificado';
-                const safeNominalLoad = assay.nominalLoad || 0;
-                const safeTensao = assay.tensao || 0;
-                const safeStartDate = assay.startDate || new Date().toISOString();
-                const safeEndDate = assay.endDate || new Date().toISOString();
-                const safeSetup = assay.setup || 1;
-                const safeStatus = assay.status || 'completed';
-                const safeType = assay.type || 'efficiency';
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO historical_assays (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, report, consumption, total_consumption) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [assay.id, safeProtocol, safeOrcamento, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, assay.report, JSON.stringify(assay.consumption) || null, assay.totalConsumption || null]
-                );
+            // Executa todas as funções de salvamento em paralelo dentro da transação
+            const savePromises = (Object.keys(data) as Array<keyof typeof dataHandlers>)
+                .filter(key => dataHandlers[key])
+                .map(key => dataHandlers[key]());
 
-                // Inserir lotes separadamente
-                if (assay.lots) {
-                    for (const [reagentType, lots] of Object.entries(assay.lots)) {
-                        for (const lot of lots as any[]) {
-                            // Verificar se o lote tem valores válidos antes de inserir
-                            const safeLot = lot.lot || 'N/A';
-                            const safeCycles = lot.cycles || 0;
-                            
-                            if (safeLot !== 'N/A') { // Só inserir se o lote for válido
-                                await this.runQuery(
-                                    'INSERT OR REPLACE INTO assay_lots (assay_id, reagent_type, lot, cycles) VALUES (?, ?, ?, ?)',
-                                    [assay.id, reagentType, safeLot, safeCycles]
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
+            await Promise.all(savePromises);
+        });
+        const transactionEndTime = performance.now();
+        const transactionDuration = ((transactionEndTime - startTime) / 1000).toFixed(2);
+        console.log(`[DB] ✅ Transação concluída em ${transactionDuration} segundos. Banco de dados liberado.`);
 
-        if (data.scheduledAssays) {
-            for (const assay of data.scheduledAssays) {
-                const safeProtocol = assay.protocol || 'Não especificado';
-                const safeOrcamento = assay.orcamento || 'Não especificado';
-                const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado';
-                const safeModel = assay.model || 'Não especificado';
-                const safeNominalLoad = assay.nominalLoad || 0;
-                const safeTensao = assay.tensao || 0;
-                const safeStartDate = assay.startDate || new Date().toISOString();
-                const safeEndDate = assay.endDate || new Date().toISOString();
-                const safeSetup = assay.setup || 1;
-                const safeStatus = assay.status || 'scheduled';
-                const safeType = assay.type || 'efficiency';
-                const safeReportDate = assay.reportDate || ''; // 1. Adiciona a data do relatório
-                const safePlannedSuppliers = JSON.stringify(assay.plannedSuppliers || null);
-                
-                await this.runQuery(
-            'INSERT OR REPLACE INTO scheduled_assays (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [assay.id, safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers]
-                );
-            }
-        }
-
-        if (data.safetyScheduledAssays) {
-            for (const assay of data.safetyScheduledAssays) {
-                const safeProtocol = assay.protocol || 'Não especificado';
-                const safeOrcamento = assay.orcamento || 'Não especificado';
-                const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado';
-                const safeModel = assay.model || 'Não especificado';
-                const safeNominalLoad = assay.nominalLoad || 0;
-                const safeTensao = assay.tensao || 0;
-                const safeStartDate = assay.startDate || new Date().toISOString();
-                const safeEndDate = assay.endDate || new Date().toISOString();
-                const safeSetup = assay.setup || 1;
-                const safeStatus = assay.status || 'scheduled';
-                const safeType = assay.type || 'safety';
-                const safeReportDate = assay.reportDate || ''; // 1. Adiciona a data do relatório
-                const safePlannedSuppliers = JSON.stringify(assay.plannedSuppliers || null);                
-                const safeSubRowIndex = assay.subRowIndex || assay.sub_row_index || 0;
-                
-                await this.runQuery(
-            'INSERT OR REPLACE INTO safety_scheduled_assays (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [assay.id, safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers]
-                );
-            }
-        }
-
-        if (data.calibrations) {
-            for (const calibration of data.calibrations) {
-                const safeProtocol = calibration.equipment || calibration.protocol || 'Não especificado';
-                const safeStartDate = calibration.startDate || new Date().toISOString();
-                const safeEndDate = calibration.endDate || new Date().toISOString();
-                const safeType = calibration.type || 'calibration';
-                const safeStatus = calibration.status || 'scheduled';
-                const safeAffectedTerminals = calibration.observacoes || calibration.affected_terminals || '';
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO calibrations (id, protocol, start_date, end_date, type, status, affected_terminals) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [calibration.id, safeProtocol, safeStartDate, safeEndDate, safeType, safeStatus, safeAffectedTerminals]
-                );
-            }
-        }
-
-        if (data.holidays) {
-            for (const holiday of data.holidays) {
-                const safeName = holiday.name || 'Feriado';
-                const safeStartDate = holiday.startDate || holiday.date || new Date().toISOString();
-                const safeEndDate = holiday.endDate || holiday.date || new Date().toISOString();
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO holidays (id, name, start_date, end_date) VALUES (?, ?, ?, ?)',
-                    [holiday.id, safeName, safeStartDate, safeEndDate]
-                );
-            }
-        }
-
-        if (data.settings) {
-            for (const [key, value] of Object.entries(data.settings)) {
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-                    [key, JSON.stringify(value)]
-                );
-            }
-        }
-
-        if (data.efficiencyCategories) {
-            for (const category of data.efficiencyCategories) {
-                const safeName = category.name || 'Categoria';
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO efficiency_categories (id, name) VALUES (?, ?)',
-                    [category.id, safeName]
-                );
-            }
-        }
-
-        if (data.safetyCategories) {
-            for (const category of data.safetyCategories) {
-                const safeName = category.name || 'Categoria';
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO safety_categories (id, name) VALUES (?, ?)',
-                    [category.id, safeName]
-                );
-            }
-        }
-
-        if (data.calibrationEquipments) {
-            console.log('🔧 Salvando equipamentos de calibração:', data.calibrationEquipments.length);
-            
-            // Filtrar equipamentos em calibração
-            const equipmentsInCalibration = data.calibrationEquipments.filter((eq: any) => eq.calibrationStatus === 'em_calibracao');
-            
-            for (const equipment of data.calibrationEquipments) {
-                const safeTag = equipment.tag || equipment.name || 'TAG-' + equipment.id;
-                const safeEquipment = equipment.equipment || equipment.name || 'Equipamento';
-                const safeValidity = equipment.validity || '';
-                const safeObservations = equipment.observations || '';
-                const safeCalibrationStatus = equipment.calibrationStatus || 'disponivel';
-                const safeCalibrationStartDate = equipment.calibrationStartDate || null;
-                
-                // Processando equipamento
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO calibration_equipments (id, tag, equipment, validity, observations, calibration_status, calibration_start_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [equipment.id, safeTag, safeEquipment, safeValidity, safeObservations, safeCalibrationStatus, safeCalibrationStartDate]
-                );
-            }
-        }
-
-        // VACUUM automático a cada 10 salvamentos para compactar o banco
-        this.saveCount = (this.saveCount || 0) + 1;
-        if (this.saveCount % 10 === 0) {
-            await this.runQuery('VACUUM');
-        }
-
-        if (data.systemUsers) {
-            await this.runQuery('DELETE FROM system_users');
-            for (const [userId, userData] of Object.entries(data.systemUsers)) {
-                const user = userData as any;
-                const safeType = user.type || 'user';
-                const safeDisplayName = user.display_name || user.displayName || userId;
-                const safePermissions = user.permissions || '[]';
-                
-                await this.runQuery(
-                    'INSERT OR REPLACE INTO system_users (username, type, display_name, permissions) VALUES (?, ?, ?, ?)',
-                    [userId, safeType, safeDisplayName, JSON.stringify(safePermissions)]
-                );
-            }
-        }
+    } catch (error) {
+        console.error('Falha ao salvar os dados. A transação foi revertida.', error);
+        // Lança o erro novamente para que o chamador saiba da falha
+        throw new Error('Não foi possível salvar os dados no banco de dados.');
     }
+
+
+    // O VACUUM pode ser uma operação lenta e deve ser executado fora da transação principal
+    // para não bloquear outras operações.
+    this.saveCount = (this.saveCount || 0) + 1;
+    if (this.saveCount % 10 === 0) {
+        console.log('Executando VACUUM para otimizar o banco de dados...');
+        await this.runQuery('VACUUM');
+        console.log('VACUUM concluído.');
+    }
+}
+
+// --- Funções Auxiliares ---
+
+/**
+ * Executa uma série de operações dentro de uma transação SQLite.
+ * Garante que `COMMIT` seja chamado em caso de sucesso e `ROLLBACK` em caso de erro.
+ */
+private async transaction(callback: (tx: { runQuery: (sql: string, params?: any[]) => Promise<any> }) => Promise<void>): Promise<void> {
+    if (!this.db) {
+        throw new Error('Banco de dados não inicializado');
+    }
+
+    // Inicia a transação
+    await new Promise<void>((resolve, reject) => {
+        this.db!.run('BEGIN TRANSACTION', (err) => err ? reject(err) : resolve());
+    });
+
+    try {
+        // Objeto de transação com um runQuery que opera dentro do contexto da transação
+        const tx = {
+            runQuery: (sql: string, params: any[] = []): Promise<any> => {
+                return new Promise((resolve, reject) => {
+                    this.db!.run(sql, params, function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve({ lastID: this.lastID, changes: this.changes });
+                        }
+                    });
+                });
+            }
+        };
+
+        // Executa o callback com as operações do banco
+        await callback(tx);
+
+        // Se tudo correu bem, confirma a transação
+        await new Promise<void>((resolve, reject) => {
+            this.db!.run('COMMIT', (err) => err ? reject(err) : resolve());
+        });
+    } catch (error) {
+        console.error('Erro na transação, revertendo alterações (ROLLBACK)...');
+        // Se ocorrer um erro, reverte a transação
+        await new Promise<void>((resolve) => {
+            this.db!.run('ROLLBACK', () => resolve());
+        });
+        // Re-lança o erro original para que a chamada superior saiba que algo deu errado
+        throw error;
+    }
+}
+
+
+private async bulkInsert(tx: any, table: string, columns: string[], data: any[], preprocessFn: (item: any) => any[], options?: { delete?: boolean }) {
+    const shouldDelete = options?.delete ?? true; // O padrão é deletar
+
+    // Se a exclusão for necessária, limpa a tabela.
+    if (shouldDelete) {
+        await tx.runQuery(`DELETE FROM ${table}`);
+    }
+
+    // Se não houver dados para inserir, retorna após a possível limpeza.
+    if (!data || data.length === 0) {
+        return;
+    }
+
+    // Prepara os dados e os placeholders para a inserção em massa
+    const values: any[] = [];
+    const placeholders: string[] = [];
+
+    for (const item of data) {
+        const processedValues = preprocessFn(item);
+        values.push(...processedValues);
+        placeholders.push(`(${new Array(columns.length).fill('?').join(',')})`);
+    }
+
+    // Monta e executa a query de inserção em massa
+    const sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`;
+    await tx.runQuery(sql, values);
+}
+
+private async saveInventory(tx: any, items: any[]) {
+    const columns = ['id', 'reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
+    await this.bulkInsert(tx, 'inventory', columns, items, item => [
+        item.id,
+        item.reagent || 'Não especificado',
+        item.manufacturer || 'Não especificado',
+        item.lot || 'Não especificado',
+        item.quantity || 0,
+        item.validity || new Date().toISOString(),
+    ]);
+}
+
+private async saveHistoricalAssays(tx: any, assays: any[]) {
+    // Limpa as tabelas manualmente para garantir a ordem correta por causa da chave estrangeira.
+    await tx.runQuery('DELETE FROM assay_lots');
+    await tx.runQuery('DELETE FROM historical_assays');
+
+    if (!assays || assays.length === 0) {
+        return;
+    }
+
+    const assayColumns = ['id', 'protocol', 'orcamento', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'report', 'consumption', 'total_consumption'];
+
+    // Inserção em massa para historical_assays, sem deletar novamente
+    await this.bulkInsert(tx, 'historical_assays', assayColumns, assays, assay => [
+        assay.id,
+        assay.protocol || 'Não especificado',
+        assay.orcamento || 'Não especificado',
+        assay.assayManufacturer || 'Não especificado',
+        assay.model || 'Não especificado',
+        assay.nominalLoad || 0,
+        assay.tensao || 0,
+        assay.startDate || new Date().toISOString(),
+        assay.endDate || new Date().toISOString(),
+        assay.setup || 1,
+        assay.status || 'completed',
+        assay.type || 'efficiency',
+        assay.observacoes,
+        assay.cycles,
+        assay.report,
+        JSON.stringify(assay.consumption) || null,
+        assay.totalConsumption || null,
+    ], { delete: false }); // Desativa a deleção automática
+
+    // Lida com a tabela aninhada `assay_lots`
+    const lotColumns = ['assay_id', 'reagent_type', 'lot', 'cycles'];
+    const allLots = assays.flatMap(assay => {
+        if (!assay.lots) return [];
+        return Object.entries(assay.lots).flatMap(([reagentType, lots]) =>
+            (lots as any[])
+            .filter(lot => lot.lot && lot.lot !== 'N/A')
+            .map(lot => ({
+                assay_id: assay.id,
+                reagent_type: reagentType,
+                lot: lot.lot,
+                cycles: lot.cycles || 0
+            }))
+        );
+    });
+
+    if (allLots.length > 0) {
+        await this.bulkInsert(tx, 'assay_lots', lotColumns, allLots, lot => [
+            lot.assay_id,
+            lot.reagent_type,
+            lot.lot,
+            lot.cycles,
+        ], { delete: false }); // Desativa a deleção automática
+    }
+}
+
+private async saveScheduledAssays(tx: any, assays: any[]) {
+    const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers'];
+    await this.bulkInsert(tx, 'scheduled_assays', columns, assays, assay => [
+        assay.id,
+        assay.protocol || 'Não especificado',
+        assay.orcamento || 'Não especificado',
+        assay.reportDate || '',
+        assay.assayManufacturer || 'Não especificado',
+        assay.model || 'Não especificado',
+        assay.nominalLoad || 0,
+        assay.tensao || 0,
+        assay.startDate || new Date().toISOString(),
+        assay.endDate || new Date().toISOString(),
+        assay.setup || 1,
+        assay.status || 'scheduled',
+        assay.type || 'efficiency',
+        assay.observacoes,
+        assay.cycles,
+        JSON.stringify(assay.plannedSuppliers || null),
+    ]);
+}
+
+private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
+    const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers'];
+    await this.bulkInsert(tx, 'safety_scheduled_assays', columns, assays, assay => [
+        assay.id,
+        assay.protocol || 'Não especificado',
+        assay.orcamento || 'Não especificado',
+        assay.reportDate || '',
+        assay.assayManufacturer || 'Não especificado',
+        assay.model || 'Não especificado',
+        assay.nominalLoad || 0,
+        assay.tensao || 0,
+        assay.startDate || new Date().toISOString(),
+        assay.endDate || new Date().toISOString(),
+        assay.setup || 1,
+        assay.status || 'scheduled',
+        assay.type || 'safety',
+        assay.observacoes,
+        assay.cycles,
+        assay.subRowIndex || assay.sub_row_index || 0,
+        JSON.stringify(assay.plannedSuppliers || null),
+    ]);
+}
+
+private async saveCalibrations(tx: any, calibrations: any[]) {
+    const columns = ['id', 'protocol', 'start_date', 'end_date', 'type', 'status', 'affected_terminals'];
+    await this.bulkInsert(tx, 'calibrations', columns, calibrations, cal => [
+        cal.id,
+        cal.equipment || cal.protocol || 'Não especificado',
+        cal.startDate || new Date().toISOString(),
+        cal.endDate || new Date().toISOString(),
+        cal.type || 'calibration',
+        cal.status || 'scheduled',
+        cal.observacoes || cal.affected_terminals || '',
+    ]);
+}
+
+private async saveCalibrationEquipments(tx: any, equipments: any[]) {
+    const columns = ['id', 'tag', 'equipment', 'validity', 'observations', 'calibration_status', 'calibration_start_date'];
+    await this.bulkInsert(tx, 'calibration_equipments', columns, equipments, eq => [
+        eq.id,
+        eq.tag || eq.name || `TAG-${eq.id}`,
+        eq.equipment || eq.name || 'Equipamento',
+        eq.validity || '',
+        eq.observations || '',
+        eq.calibrationStatus || 'disponivel',
+        eq.calibrationStartDate || null,
+    ]);
+}
+
+private async saveHolidays(tx: any, holidays: any[]) {
+    const columns = ['id', 'name', 'start_date', 'end_date'];
+    await this.bulkInsert(tx, 'holidays', columns, holidays, holiday => [
+        holiday.id,
+        holiday.name || 'Feriado',
+        holiday.startDate || holiday.date || new Date().toISOString(),
+        holiday.endDate || holiday.date || new Date().toISOString(),
+    ]);
+}
+
+private async saveSettings(tx: any, settings: Record<string, any>) {
+    const settingsData = Object.entries(settings);
+    const columns = ['key', 'value'];
+    await this.bulkInsert(tx, 'settings', columns, settingsData, ([key, value]) => [
+        key,
+        JSON.stringify(value),
+    ]);
+}
+
+private async saveCategories(tx: any, table: string, categories: any[]) {
+    const columns = ['id', 'name'];
+    await this.bulkInsert(tx, table, columns, categories, category => [
+        category.id,
+        category.name || 'Categoria',
+    ]);
+}
+
+private async saveSystemUsers(tx: any, users: Record<string, any>) {
+    const usersData = Object.entries(users);
+    const columns = ['username', 'type', 'display_name', 'permissions'];
+    await this.bulkInsert(tx, 'system_users', columns, usersData, ([userId, userData]) => [
+        userId,
+        userData.type || 'user',
+        userData.display_name || userData.displayName || userId,
+        JSON.stringify(userData.permissions || []),
+    ]);
+}
 
     /**
      * Fecha a conexão com o banco de dados
