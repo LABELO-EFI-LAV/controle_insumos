@@ -2472,6 +2472,511 @@ export async function activate(context: vscode.ExtensionContext) {
                         });
                     }
                     break;
+
+                // ==================== COMANDOS GRANULARES PARA ENSAIOS AGENDADOS ====================
+
+                case 'createScheduledAssay':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createScheduledAssay(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'createSafetyScheduledAssay':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createSafetyScheduledAssay(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getScheduledAssayById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const assay = await databaseManager.getScheduledAssayById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: assay
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllScheduledAssays':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const assays = await databaseManager.getAllScheduledAssays();
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: assays
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ENSAIOS AGENDADOS:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateScheduledAssay(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteScheduledAssay(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                // ==================== COMANDOS GRANULARES PARA INVENTÁRIO ====================
+
+                case 'createInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createInventoryItem(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getInventoryItemById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const item = await databaseManager.getInventoryItemById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: item
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllInventoryItemsGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const items = await databaseManager.getAllInventoryItems();
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: items
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITENS DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getLowStockItems':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const items = await databaseManager.getLowStockItems();
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getLowStock',
+                            data: items
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITENS COM ESTOQUE BAIXO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getLowStock',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateInventoryItemGranular(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateInventoryQuantity':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, quantity } = message.data;
+                        await databaseManager.updateInventoryQuantity(id, quantity);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'updateQuantity',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR QUANTIDADE DO INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'updateQuantity',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteInventoryItemGranular(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                // ==================== COMANDOS GRANULARES PARA CALIBRAÇÕES ====================
+
+                case 'createCalibration':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createCalibration(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getCalibrationById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const calibration = await databaseManager.getCalibrationById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: calibration
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllCalibrations':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const calibrations = await databaseManager.getAllCalibrations();
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: calibrations
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÕES:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getUpcomingCalibrations':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const daysAhead = message.data.daysAhead || 30;
+                        const calibrations = await databaseManager.getUpcomingCalibrations(daysAhead);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getUpcoming',
+                            data: calibrations
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÕES PRÓXIMAS:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getUpcoming',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateCalibrationGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateCalibrationGranular(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteCalibrationGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteCalibrationGranular(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
             }
         });
         

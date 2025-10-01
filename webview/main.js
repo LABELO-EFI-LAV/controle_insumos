@@ -5387,6 +5387,189 @@ const dataHandlers = {
         });
     },
 
+    // ==================== OPERAÇÕES GRANULARES PARA INVENTÁRIO ====================
+
+    /**
+     * Operações granulares para inventário
+     */
+    createInventoryItemGranular: (item) => {
+        console.log('[WEBVIEW] Criando item do inventário (granular):', item);
+        
+        if (!item || typeof item !== 'object') {
+            console.error('[WEBVIEW] Item inválido:', item);
+            notificationSystem.send('Erro', 'Dados do item são inválidos', 'error');
+            return;
+        }
+
+        const requiredFields = ['reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
+        const missingFields = requiredFields.filter(field => !item[field]);
+        
+        if (missingFields.length > 0) {
+            console.error('[WEBVIEW] Campos obrigatórios ausentes:', missingFields);
+            notificationSystem.send('Erro', `Campos obrigatórios ausentes: ${missingFields.join(', ')}`, 'error');
+            return;
+        }
+
+        vscode.postMessage({
+            command: 'createInventoryItemGranular',
+            data: item
+        });
+    },
+
+    getInventoryItemById: (itemId) => {
+        console.log('[WEBVIEW] Buscando item do inventário por ID:', itemId);
+        vscode.postMessage({
+            command: 'getInventoryItemById',
+            data: { id: itemId }
+        });
+    },
+
+    getAllInventoryItemsGranular: () => {
+        console.log('[WEBVIEW] Buscando todos os itens do inventário (granular)');
+        vscode.postMessage({
+            command: 'getAllInventoryItemsGranular',
+            data: {}
+        });
+    },
+
+    getLowStockItems: () => {
+        console.log('[WEBVIEW] Buscando itens com estoque baixo');
+        vscode.postMessage({
+            command: 'getLowStockItems',
+            data: {}
+        });
+    },
+
+    updateInventoryItemGranular: (itemId, updates) => {
+        console.log('[WEBVIEW] Atualizando item do inventário (granular):', itemId, updates);
+        vscode.postMessage({
+            command: 'updateInventoryItemGranular',
+            data: { id: itemId, updates: updates }
+        });
+    },
+
+    updateInventoryQuantity: (itemId, quantity) => {
+        console.log('[WEBVIEW] Atualizando quantidade do inventário:', itemId, quantity);
+        vscode.postMessage({
+            command: 'updateInventoryQuantity',
+            data: { id: itemId, quantity: quantity }
+        });
+    },
+
+    deleteInventoryItemGranular: (itemId) => {
+        console.log('[WEBVIEW] Removendo item do inventário (granular):', itemId);
+        vscode.postMessage({
+            command: 'deleteInventoryItemGranular',
+            data: { id: itemId }
+        });
+    },
+
+    // ==================== OPERAÇÕES GRANULARES PARA ENSAIOS AGENDADOS ====================
+
+    /**
+     * Operações granulares para ensaios agendados
+     */
+    createScheduledAssay: (assayData) => {
+        console.log('[WEBVIEW] Criando ensaio agendado:', assayData);
+        vscode.postMessage({
+            command: 'createScheduledAssay',
+            data: assayData
+        });
+    },
+
+    createSafetyScheduledAssay: (assayData) => {
+        console.log('[WEBVIEW] Criando ensaio de segurança agendado:', assayData);
+        vscode.postMessage({
+            command: 'createSafetyScheduledAssay',
+            data: assayData
+        });
+    },
+
+    getScheduledAssayById: (assayId) => {
+        console.log('[WEBVIEW] Buscando ensaio agendado por ID:', assayId);
+        vscode.postMessage({
+            command: 'getScheduledAssayById',
+            data: { id: assayId }
+        });
+    },
+
+    getAllScheduledAssays: () => {
+        console.log('[WEBVIEW] Buscando todos os ensaios agendados');
+        vscode.postMessage({
+            command: 'getAllScheduledAssays',
+            data: {}
+        });
+    },
+
+    updateScheduledAssayGranular: (assayId, updates) => {
+        console.log('[WEBVIEW] Atualizando ensaio agendado (granular):', assayId, updates);
+        vscode.postMessage({
+            command: 'updateScheduledAssayGranular',
+            data: { id: assayId, updates: updates }
+        });
+    },
+
+    deleteScheduledAssayGranular: (assayId) => {
+        console.log('[WEBVIEW] Removendo ensaio agendado (granular):', assayId);
+        vscode.postMessage({
+            command: 'deleteScheduledAssayGranular',
+            data: { id: assayId }
+        });
+    },
+
+    // ==================== OPERAÇÕES GRANULARES PARA CALIBRAÇÕES ====================
+
+    /**
+     * Operações granulares para calibrações
+     */
+    createCalibration: (calibrationData) => {
+        console.log('[WEBVIEW] Criando calibração:', calibrationData);
+        vscode.postMessage({
+            command: 'createCalibration',
+            data: calibrationData
+        });
+    },
+
+    getCalibrationById: (calibrationId) => {
+        console.log('[WEBVIEW] Buscando calibração por ID:', calibrationId);
+        vscode.postMessage({
+            command: 'getCalibrationById',
+            data: { id: calibrationId }
+        });
+    },
+
+    getAllCalibrations: () => {
+        console.log('[WEBVIEW] Buscando todas as calibrações');
+        vscode.postMessage({
+            command: 'getAllCalibrations',
+            data: {}
+        });
+    },
+
+    getUpcomingCalibrations: (daysAhead = 30) => {
+        console.log('[WEBVIEW] Buscando calibrações próximas:', daysAhead);
+        vscode.postMessage({
+            command: 'getUpcomingCalibrations',
+            data: { daysAhead: daysAhead }
+        });
+    },
+
+    updateCalibrationGranular: (calibrationId, updates) => {
+        console.log('[WEBVIEW] Atualizando calibração (granular):', calibrationId, updates);
+        vscode.postMessage({
+            command: 'updateCalibrationGranular',
+            data: { id: calibrationId, updates: updates }
+        });
+    },
+
+    deleteCalibrationGranular: (calibrationId) => {
+        console.log('[WEBVIEW] Removendo calibração (granular):', calibrationId);
+        vscode.postMessage({
+            command: 'deleteCalibrationGranular',
+            data: { id: calibrationId }
+        });
+    },
+
     /**
      * Função otimizada para operações de feriados
      */
@@ -9651,6 +9834,144 @@ assaysFilters.forEach(id => {
                     vscode.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro ao realizar exclusão em massa.', true);
+                }
+                break;
+
+            // ==================== HANDLERS PARA OPERAÇÕES GRANULARES ====================
+
+            case 'inventoryGranularOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Item de inventário criado com sucesso!',
+                        'update': 'Item de inventário atualizado com sucesso!',
+                        'updateQuantity': 'Quantidade do inventário atualizada com sucesso!',
+                        'delete': 'Item de inventário removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+                    vscode.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de inventário.', true);
+                }
+                break;
+
+            case 'inventoryGranularDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de inventário recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Item específico:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado do inventário
+                            state.inventory = message.data || [];
+                            renderers.renderInventory();
+                            break;
+                        case 'getLowStock':
+                            // Pode ser usado para alertas ou dashboards
+                            console.log('[WEBVIEW] Itens com estoque baixo:', message.data);
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de inventário.', true);
+                }
+                break;
+
+            case 'scheduledAssayOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Ensaio agendado criado com sucesso!',
+                        'update': 'Ensaio agendado atualizado com sucesso!',
+                        'delete': 'Ensaio agendado removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+                    vscode.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de ensaio agendado.', true);
+                }
+                break;
+
+            case 'safetyScheduledAssayOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Ensaio de segurança agendado criado com sucesso!',
+                        'update': 'Ensaio de segurança agendado atualizado com sucesso!',
+                        'delete': 'Ensaio de segurança agendado removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+                    vscode.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de ensaio de segurança agendado.', true);
+                }
+                break;
+
+            case 'scheduledAssayDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de ensaios agendados recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Ensaio específico:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado dos ensaios agendados
+                            state.scheduledAssays = message.data || [];
+                            renderers.renderGantt();
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de ensaios agendados.', true);
+                }
+                break;
+
+            case 'calibrationOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Calibração criada com sucesso!',
+                        'update': 'Calibração atualizada com sucesso!',
+                        'delete': 'Calibração removida com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+                    vscode.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de calibração.', true);
+                }
+                break;
+
+            case 'calibrationDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de calibrações recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Calibração específica:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado das calibrações
+                            state.calibrations = message.data || [];
+                            renderers.renderCalibrations();
+                            break;
+                        case 'getUpcoming':
+                            // Pode ser usado para alertas ou dashboards
+                            console.log('[WEBVIEW] Calibrações próximas:', message.data);
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de calibrações.', true);
                 }
                 break;
             

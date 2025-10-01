@@ -43,6 +43,8 @@ export interface Assay {
     cycles: number;
     lots: AssayLots;
     report?: string;
+    reportDate?: string;
+    plannedSuppliers?: string;
     subRowIndex?: number;
     affectedTerminals?: string;
 }
@@ -62,6 +64,17 @@ export interface Calibration {
     type: string;
     status: string;
     affectedTerminals: string;
+}
+
+export interface EquipmentCalibration {
+    id: number;
+    equipmentName: string;
+    calibrationDate: string;
+    nextCalibrationDate: string;
+    status: string;
+    certificateNumber?: string;
+    calibratedBy?: string;
+    notes?: string;
 }
 
 export interface Settings {
@@ -102,6 +115,9 @@ export class DatabaseManager {
     private dbPath: string;
     private saveCount: number = 0;
     private incrementalBackup: IncrementalBackup;
+    private operationQueue: Promise<any> = Promise.resolve();
+    private activeOperations: number = 0;
+    private maxConcurrentOperations: number = 3;
 
     constructor(workspaceRoot: string) {
         this.dbPath = path.join(workspaceRoot, 'database.sqlite');
@@ -127,7 +143,10 @@ export class DatabaseManager {
                     
                     // Configurar melhorias de concorrência
                     this.configureConcurrency().then(() => {
-                        this.createTables().then(resolve).catch(reject);
+                        this.createTables().then(() => {
+                            // Criar índices para melhorar performance
+                            this.createIndexes().then(resolve).catch(reject);
+                        }).catch(reject);
                     }).catch(reject);
                 }
             });
@@ -151,16 +170,16 @@ export class DatabaseManager {
                     if (err) {
                         console.error('❌ Erro ao configurar WAL mode:', err);
                     } else {
-                        // WAL mode habilitado
+                        console.log('✅ WAL mode habilitado');
                     }
                 });
 
-                // Configurar timeout para locks (5 segundos)
-                db.run("PRAGMA busy_timeout=5000;", (err) => {
+                // Configurar timeout para locks (10 segundos)
+                db.run("PRAGMA busy_timeout=10000;", (err) => {
                     if (err) {
                         console.error('❌ Erro ao configurar busy_timeout:', err);
                     } else {
-                        // Busy timeout configurado
+                        console.log('✅ Busy timeout configurado para 10s');
                     }
                 });
 
@@ -169,17 +188,44 @@ export class DatabaseManager {
                     if (err) {
                         console.error('❌ Erro ao configurar synchronous:', err);
                     } else {
-                        // Modo de sincronização configurado
+                        console.log('✅ Modo de sincronização NORMAL configurado');
                     }
                 });
 
-                // Configurar cache size para melhor performance
-                db.run("PRAGMA cache_size=10000;", (err) => {
+                // Configurar cache size maior para melhor performance (20MB)
+                db.run("PRAGMA cache_size=20000;", (err) => {
                     if (err) {
                         console.error('❌ Erro ao configurar cache_size:', err);
+                    } else {
+                        console.log('✅ Cache size configurado para 20MB');
+                    }
+                });
+
+                // Configurar temp_store para usar memória
+                db.run("PRAGMA temp_store=MEMORY;", (err) => {
+                    if (err) {
+                        console.error('❌ Erro ao configurar temp_store:', err);
+                    } else {
+                        console.log('✅ Temp store configurado para memória');
+                    }
+                });
+
+                // Configurar mmap_size para melhor I/O (256MB)
+                db.run("PRAGMA mmap_size=268435456;", (err) => {
+                    if (err) {
+                        console.error('❌ Erro ao configurar mmap_size:', err);
+                    } else {
+                        console.log('✅ Memory-mapped I/O configurado para 256MB');
+                    }
+                });
+
+                // Configurar WAL autocheckpoint para controlar o tamanho do WAL
+                db.run("PRAGMA wal_autocheckpoint=1000;", (err) => {
+                    if (err) {
+                        console.error('❌ Erro ao configurar wal_autocheckpoint:', err);
                         reject(err);
                     } else {
-                        // Cache size configurado
+                        console.log('✅ WAL autocheckpoint configurado para 1000 páginas');
                         resolve();
                     }
                 });
@@ -190,6 +236,80 @@ export class DatabaseManager {
     /**
      * Cria todas as tabelas necessárias
      */
+    private async createIndexes(): Promise<void> {
+        if (!this.db) {
+            throw new Error('Banco de dados não inicializado');
+        }
+
+        console.log('📊 Criando índices para melhorar performance...');
+
+        const indexes = [
+            // Índices para tabela inventory
+            'CREATE INDEX IF NOT EXISTS idx_inventory_reagent ON inventory(reagent)',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_validity ON inventory(validity)',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_quantity ON inventory(quantity)',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_manufacturer ON inventory(manufacturer)',
+            
+            // Índices para tabela scheduled_assays
+            'CREATE INDEX IF NOT EXISTS idx_scheduled_assays_status ON scheduled_assays(status)',
+            'CREATE INDEX IF NOT EXISTS idx_scheduled_assays_start_date ON scheduled_assays(start_date)',
+            'CREATE INDEX IF NOT EXISTS idx_scheduled_assays_end_date ON scheduled_assays(end_date)',
+            'CREATE INDEX IF NOT EXISTS idx_scheduled_assays_protocol ON scheduled_assays(protocol)',
+            
+            // Índices para tabela safety_scheduled_assays
+            'CREATE INDEX IF NOT EXISTS idx_safety_scheduled_assays_status ON safety_scheduled_assays(status)',
+            'CREATE INDEX IF NOT EXISTS idx_safety_scheduled_assays_start_date ON safety_scheduled_assays(start_date)',
+            'CREATE INDEX IF NOT EXISTS idx_safety_scheduled_assays_end_date ON safety_scheduled_assays(end_date)',
+            
+            // Índices para tabela historical_assays
+            'CREATE INDEX IF NOT EXISTS idx_historical_assays_status ON historical_assays(status)',
+            'CREATE INDEX IF NOT EXISTS idx_historical_assays_start_date ON historical_assays(start_date)',
+            'CREATE INDEX IF NOT EXISTS idx_historical_assays_protocol ON historical_assays(protocol)',
+            
+            // Índices para tabela calibration_equipments
+            'CREATE INDEX IF NOT EXISTS idx_calibration_equipments_status ON calibration_equipments(status)',
+            'CREATE INDEX IF NOT EXISTS idx_calibration_equipments_next_date ON calibration_equipments(next_calibration_date)',
+            'CREATE INDEX IF NOT EXISTS idx_calibration_equipments_equipment ON calibration_equipments(equipment_name)',
+            
+            // Índices para tabela holidays
+            'CREATE INDEX IF NOT EXISTS idx_holidays_start_date ON holidays(start_date)',
+            'CREATE INDEX IF NOT EXISTS idx_holidays_end_date ON holidays(end_date)',
+        ];
+
+        for (const indexSql of indexes) {
+            try {
+                await this.runQuery(indexSql);
+            } catch (error) {
+                console.warn(`⚠️ Erro ao criar índice: ${indexSql}`, error);
+            }
+        }
+
+        console.log('✅ Índices criados com sucesso');
+    }
+
+    /**
+     * Controla operações concorrentes para evitar sobrecarga do banco
+     */
+    private async queueOperation<T>(operation: () => Promise<T>): Promise<T> {
+        // Se há muitas operações ativas, aguarda na fila
+        if (this.activeOperations >= this.maxConcurrentOperations) {
+            await this.operationQueue;
+        }
+
+        this.activeOperations++;
+        
+        const currentOperation = this.operationQueue.then(async () => {
+            try {
+                return await operation();
+            } finally {
+                this.activeOperations--;
+            }
+        });
+
+        this.operationQueue = currentOperation.catch(() => {}); // Ignora erros na fila
+        return currentOperation;
+    }
+
     private async createTables(): Promise<void> {
         const tables = [
             // Tabela de inventário
@@ -706,46 +826,95 @@ export class DatabaseManager {
     }
 
     /**
-     * Salva dados no banco SQLite
+     * Salva dados no banco SQLite com controle de operações concorrentes
      */
     async saveData(data: any): Promise<void> {
-        const startTime = performance.now();
-        console.log('[DB] Iniciando operação de salvamento...')
-    try {
-        // A execução de todas as operações dentro de uma única transação garante
-        // a atomicidade. Se qualquer etapa falhar, todas as alterações anteriores
-        // são revertidas (rollback), evitando dados inconsistentes.
-        await this.transaction(async (tx) => {
-            // Mapeamento de chaves de dados para funções de salvamento
-            const dataHandlers = {
-                inventory: () => this.saveInventory(tx, data.inventory),
-                historicalAssays: () => this.saveHistoricalAssays(tx, data.historicalAssays),
-                scheduledAssays: () => this.saveScheduledAssays(tx, data.scheduledAssays),
-                safetyScheduledAssays: () => this.saveSafetyScheduledAssays(tx, data.safetyScheduledAssays),
-                calibrations: () => this.saveCalibrations(tx, data.calibrations),
-                calibrationEquipments: () => this.saveCalibrationEquipments(tx, data.calibrationEquipments),
-                holidays: () => this.saveHolidays(tx, data.holidays),
-                settings: () => this.saveSettings(tx, data.settings),
-                efficiencyCategories: () => this.saveCategories(tx, 'efficiency_categories', data.efficiencyCategories),
-                safetyCategories: () => this.saveCategories(tx, 'safety_categories', data.safetyCategories),
-                systemUsers: () => this.saveSystemUsers(tx, data.systemUsers),
-            };
+        return this.queueOperation(async () => {
+            if (!this.db) {
+                throw new Error('Banco de dados não inicializado');
+            }
 
-            // Executa todas as funções de salvamento em paralelo dentro da transação
-            const savePromises = (Object.keys(data) as Array<keyof typeof dataHandlers>)
-                .filter(key => dataHandlers[key])
-                .map(key => dataHandlers[key]());
+            console.log('💾 Iniciando salvamento de dados...');
+            const startTime = Date.now();
 
-            await Promise.all(savePromises);
+            try {
+                // Dividir o salvamento em transações menores para reduzir bloqueio
+                await this.saveDataInBatches(data);
+                
+                this.saveCount++;
+                const duration = Date.now() - startTime;
+                console.log(`✅ Dados salvos com sucesso em ${duration}ms (salvamento #${this.saveCount})`);
+
+                // Executar VACUUM periodicamente (a cada 10 salvamentos) fora da transação principal
+                if (this.saveCount % 10 === 0) {
+                    console.log('🧹 Executando limpeza do banco de dados...');
+                    try {
+                        await this.runQuery('VACUUM');
+                        console.log('✅ Limpeza do banco concluída');
+                    } catch (vacuumError) {
+                        console.warn('⚠️ Erro na limpeza do banco:', vacuumError);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Erro ao salvar dados:', error);
+                throw error;
+            }
         });
-        const transactionEndTime = performance.now();
-        const transactionDuration = ((transactionEndTime - startTime) / 1000).toFixed(2);
-        console.log(`[DB] ✅ Transação concluída em ${transactionDuration} segundos. Banco de dados liberado.`);
+    }
 
-    } catch (error) {
-        console.error('Falha ao salvar os dados. A transação foi revertida.', error);
-        // Lança o erro novamente para que o chamador saiba da falha
-        throw new Error('Não foi possível salvar os dados no banco de dados.');
+    private async saveDataInBatches(data: any): Promise<void> {
+        // Batch 1: Dados críticos (inventário e configurações)
+        await this.transaction(async (tx) => {
+            if (data.inventory) {
+                await this.saveInventoryOptimized(tx, data.inventory);
+            }
+            if (data.settings) {
+                await this.saveSettings(tx, data.settings);
+            }
+        });
+
+        // Batch 2: Ensaios históricos (podem ser grandes)
+        if (data.historicalAssays && data.historicalAssays.length > 0) {
+            await this.transaction(async (tx) => {
+                await this.saveHistoricalAssays(tx, data.historicalAssays);
+            });
+        }
+
+        // Batch 3: Ensaios agendados
+        await this.transaction(async (tx) => {
+            if (data.scheduledAssays) {
+                await this.saveScheduledAssays(tx, data.scheduledAssays);
+            }
+            if (data.safetyScheduledAssays) {
+                await this.saveSafetyScheduledAssays(tx, data.safetyScheduledAssays);
+            }
+        });
+
+        // Batch 4: Calibrações e outros dados
+        await this.transaction(async (tx) => {
+            if (data.calibrations) {
+                await this.saveCalibrations(tx, data.calibrations);
+            }
+            if (data.calibrationEquipments) {
+                await this.saveCalibrationEquipments(tx, data.calibrationEquipments);
+            }
+            if (data.holidays) {
+                await this.saveHolidays(tx, data.holidays);
+            }
+        });
+
+        // Batch 5: Dados de sistema (categorias e usuários)
+        await this.transaction(async (tx) => {
+            if (data.efficiencyCategories) {
+                await this.saveCategories(tx, 'efficiency_categories', data.efficiencyCategories);
+            }
+            if (data.safetyCategories) {
+                await this.saveCategories(tx, 'safety_categories', data.safetyCategories);
+            }
+            if (data.systemUsers) {
+                await this.saveSystemUsers(tx, data.systemUsers);
+            }
+        });
     }
 
 
@@ -757,15 +926,11 @@ export class DatabaseManager {
         await this.runQuery('VACUUM');
         console.log('VACUUM concluído.');
     }*/
-}
-
-// --- Funções Auxiliares ---
-
-/**
- * Executa uma série de operações dentro de uma transação SQLite.
- * Garante que `COMMIT` seja chamado em caso de sucesso e `ROLLBACK` em caso de erro.
- */
-private async transaction(callback: (tx: { runQuery: (sql: string, params?: any[]) => Promise<any> }) => Promise<void>): Promise<void> {
+    /**
+     * Executa uma série de operações dentro de uma transação SQLite.
+     * Garante que `COMMIT` seja chamado em caso de sucesso e `ROLLBACK` em caso de erro.
+     */
+    private async transaction(callback: (tx: { runQuery: (sql: string, params?: any[]) => Promise<any> }) => Promise<void>): Promise<void> {
     if (!this.db) {
         throw new Error('Banco de dados não inicializado');
     }
@@ -807,10 +972,9 @@ private async transaction(callback: (tx: { runQuery: (sql: string, params?: any[
         // Re-lança o erro original para que a chamada superior saiba que algo deu errado
         throw error;
     }
-}
+    }
 
-
-private async bulkInsert(tx: any, table: string, columns: string[], data: any[], preprocessFn: (item: any) => any[], options?: { delete?: boolean }) {
+    private async bulkInsert(tx: any, table: string, columns: string[], data: any[], preprocessFn: (item: any) => any[], options?: { delete?: boolean }) {
     const shouldDelete = options?.delete ?? true; // O padrão é deletar
 
     // Se a exclusão for necessária, limpa a tabela.
@@ -836,9 +1000,9 @@ private async bulkInsert(tx: any, table: string, columns: string[], data: any[],
     // Monta e executa a query de inserção em massa
     const sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES ${placeholders.join(', ')}`;
     await tx.runQuery(sql, values);
-}
+    }
 
-private async saveInventory(tx: any, items: any[]) {
+    private async saveInventory(tx: any, items: any[]) {
     const columns = ['id', 'reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
     await this.bulkInsert(tx, 'inventory', columns, items, item => [
         item.id,
@@ -848,9 +1012,40 @@ private async saveInventory(tx: any, items: any[]) {
         item.quantity || 0,
         item.validity || new Date().toISOString(),
     ]);
-}
+    }
 
-private async saveHistoricalAssays(tx: any, assays: any[]) {
+    private async saveInventoryOptimized(tx: any, items: any[]) {
+    if (!items || items.length === 0) {
+        return;
+    }
+
+    // Usar UPSERT (INSERT OR REPLACE) em vez de DELETE + INSERT
+    // Isso é mais eficiente pois não bloqueia a tabela inteira
+    const sql = `
+        INSERT OR REPLACE INTO inventory 
+        (id, reagent, manufacturer, lot, quantity, validity) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    `;
+
+    // Processar em lotes menores para reduzir bloqueio
+    const batchSize = 100;
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        
+        for (const item of batch) {
+            await tx.runQuery(sql, [
+                item.id,
+                item.reagent || 'Não especificado',
+                item.manufacturer || 'Não especificado',
+                item.lot || 'Não especificado',
+                item.quantity || 0,
+                item.validity || new Date().toISOString(),
+            ]);
+        }
+    }
+    }
+
+    private async saveHistoricalAssays(tx: any, assays: any[]) {
     // Limpa as tabelas manualmente para garantir a ordem correta por causa da chave estrangeira.
     await tx.runQuery('DELETE FROM assay_lots');
     await tx.runQuery('DELETE FROM historical_assays');
@@ -906,9 +1101,9 @@ private async saveHistoricalAssays(tx: any, assays: any[]) {
             lot.cycles,
         ], { delete: false }); // Desativa a deleção automática
     }
-}
+    }
 
-private async saveScheduledAssays(tx: any, assays: any[]) {
+    private async saveScheduledAssays(tx: any, assays: any[]) {
     const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers'];
     await this.bulkInsert(tx, 'scheduled_assays', columns, assays, assay => [
         assay.id,
@@ -928,9 +1123,9 @@ private async saveScheduledAssays(tx: any, assays: any[]) {
         assay.cycles,
         JSON.stringify(assay.plannedSuppliers || null),
     ]);
-}
+    }
 
-private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
+    private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
     const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers'];
     await this.bulkInsert(tx, 'safety_scheduled_assays', columns, assays, assay => [
         assay.id,
@@ -951,9 +1146,9 @@ private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
         assay.subRowIndex || assay.sub_row_index || 0,
         JSON.stringify(assay.plannedSuppliers || null),
     ]);
-}
+    }
 
-private async saveCalibrations(tx: any, calibrations: any[]) {
+    private async saveCalibrations(tx: any, calibrations: any[]) {
     const columns = ['id', 'protocol', 'start_date', 'end_date', 'type', 'status', 'affected_terminals'];
     await this.bulkInsert(tx, 'calibrations', columns, calibrations, cal => [
         cal.id,
@@ -964,9 +1159,9 @@ private async saveCalibrations(tx: any, calibrations: any[]) {
         cal.status || 'scheduled',
         cal.observacoes || cal.affected_terminals || '',
     ]);
-}
+    }
 
-private async saveCalibrationEquipments(tx: any, equipments: any[]) {
+    private async saveCalibrationEquipments(tx: any, equipments: any[]) {
     const columns = ['id', 'tag', 'equipment', 'validity', 'observations', 'calibration_status', 'calibration_start_date'];
     await this.bulkInsert(tx, 'calibration_equipments', columns, equipments, eq => [
         eq.id,
@@ -977,9 +1172,9 @@ private async saveCalibrationEquipments(tx: any, equipments: any[]) {
         eq.calibrationStatus || 'disponivel',
         eq.calibrationStartDate || null,
     ]);
-}
+    }
 
-private async saveHolidays(tx: any, holidays: any[]) {
+    private async saveHolidays(tx: any, holidays: any[]) {
     const columns = ['id', 'name', 'start_date', 'end_date'];
     await this.bulkInsert(tx, 'holidays', columns, holidays, holiday => [
         holiday.id,
@@ -987,26 +1182,26 @@ private async saveHolidays(tx: any, holidays: any[]) {
         holiday.startDate || holiday.date || new Date().toISOString(),
         holiday.endDate || holiday.date || new Date().toISOString(),
     ]);
-}
+    }
 
-private async saveSettings(tx: any, settings: Record<string, any>) {
+    private async saveSettings(tx: any, settings: Record<string, any>) {
     const settingsData = Object.entries(settings);
     const columns = ['key', 'value'];
     await this.bulkInsert(tx, 'settings', columns, settingsData, ([key, value]) => [
         key,
         JSON.stringify(value),
     ]);
-}
+    }
 
-private async saveCategories(tx: any, table: string, categories: any[]) {
+    private async saveCategories(tx: any, table: string, categories: any[]) {
     const columns = ['id', 'name'];
     await this.bulkInsert(tx, table, columns, categories, category => [
         category.id,
         category.name || 'Categoria',
     ]);
-}
+    }
 
-private async saveSystemUsers(tx: any, users: Record<string, any>) {
+    private async saveSystemUsers(tx: any, users: Record<string, any>) {
     const usersData = Object.entries(users);
     const columns = ['username', 'type', 'display_name', 'permissions'];
     await this.bulkInsert(tx, 'system_users', columns, usersData, ([userId, userData]) => [
@@ -1015,7 +1210,7 @@ private async saveSystemUsers(tx: any, users: Record<string, any>) {
         userData.display_name || userData.displayName || userId,
         JSON.stringify(userData.permissions || []),
     ]);
-}
+    }
 
     /**
      * Fecha a conexão com o banco de dados
@@ -1393,6 +1588,863 @@ private async saveSystemUsers(tx: any, users: Record<string, any>) {
             console.error('[BACKUP] Erro ao restaurar backup incremental:', error);
             throw error;
         }
+    }
+
+    // ==================== OPERAÇÕES GRANULARES PARA ENSAIOS AGENDADOS ====================
+
+    /**
+     * Cria um novo ensaio agendado
+     */
+    async createScheduledAssay(assay: Omit<Assay, 'id'>): Promise<number> {
+        const safeProtocol = assay.protocol || 'Não especificado';
+        const safeOrcamento = assay.orcamento || 'Não especificado';
+        const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado';
+        const safeModel = assay.model || 'Não especificado';
+        const safeNominalLoad = assay.nominalLoad || 0;
+        const safeTensao = assay.tensao || 0;
+        const safeStartDate = assay.startDate || new Date().toISOString();
+        const safeEndDate = assay.endDate || new Date().toISOString();
+        const safeSetup = assay.setup || 1;
+        const safeStatus = assay.status || 'scheduled';
+        const safeType = assay.type || 'efficiency';
+        const safeReportDate = (assay as any).reportDate || '';
+        const safePlannedSuppliers = JSON.stringify((assay as any).plannedSuppliers || null);
+
+        const result = await this.runQuery(
+            'INSERT INTO scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers]
+        );
+
+        return result.id;
+    }
+
+    /**
+     * Cria um novo ensaio de segurança agendado
+     */
+    async createSafetyScheduledAssay(assay: Omit<Assay, 'id'>): Promise<number> {
+        const safeProtocol = assay.protocol || 'Não especificado';
+        const safeOrcamento = assay.orcamento || 'Não especificado';
+        const safeAssayManufacturer = assay.assayManufacturer || 'Não especificado';
+        const safeModel = assay.model || 'Não especificado';
+        const safeNominalLoad = assay.nominalLoad || 0;
+        const safeTensao = assay.tensao || 0;
+        const safeStartDate = assay.startDate || new Date().toISOString();
+        const safeEndDate = assay.endDate || new Date().toISOString();
+        const safeSetup = assay.setup || 1;
+        const safeStatus = assay.status || 'scheduled';
+        const safeType = assay.type || 'safety';
+        const safeReportDate = (assay as any).reportDate || '';
+        const safePlannedSuppliers = JSON.stringify((assay as any).plannedSuppliers || null);
+        const safeSubRowIndex = assay.subRowIndex || 0;
+
+        const result = await this.runQuery(
+            'INSERT INTO safety_scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers]
+        );
+
+        return result.id;
+    }
+
+    /**
+     * Busca um ensaio agendado por ID
+     */
+    async getScheduledAssayById(id: number): Promise<Assay | null> {
+        const result = await this.selectQuery(
+            'SELECT * FROM scheduled_assays WHERE id = ?',
+            [id]
+        );
+
+        if (result.length === 0) {
+            return null;
+        }
+
+        const assay = result[0];
+        let plannedSuppliers = null;
+        try {
+            plannedSuppliers = JSON.parse(assay.planned_suppliers);
+        } catch (error) {
+            console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio ${assay.id}:`, error);
+            plannedSuppliers = null;
+        }
+
+        return {
+            id: assay.id,
+            protocol: assay.protocol,
+            orcamento: assay.orcamento,
+            assayManufacturer: assay.assay_manufacturer,
+            model: assay.model,
+            nominalLoad: assay.nominal_load,
+            tensao: assay.tensao,
+            startDate: assay.start_date,
+            endDate: assay.end_date,
+            setup: assay.setup,
+            status: assay.status,
+            type: assay.type,
+            observacoes: assay.observacoes,
+            cycles: assay.cycles,
+            reportDate: assay.report_date,
+            plannedSuppliers: plannedSuppliers,
+            lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+        };
+    }
+
+    /**
+     * Busca um ensaio de segurança agendado por ID
+     */
+    async getSafetyScheduledAssayById(id: number): Promise<Assay | null> {
+        const result = await this.selectQuery(
+            'SELECT * FROM safety_scheduled_assays WHERE id = ?',
+            [id]
+        );
+
+        if (result.length === 0) {
+            return null;
+        }
+
+        const assay = result[0];
+        let plannedSuppliers = null;
+        try {
+            plannedSuppliers = JSON.parse(assay.planned_suppliers);
+        } catch (error) {
+            console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio de segurança ${assay.id}:`, error);
+            plannedSuppliers = null;
+        }
+
+        return {
+            id: assay.id,
+            protocol: assay.protocol,
+            orcamento: assay.orcamento,
+            assayManufacturer: assay.assay_manufacturer,
+            model: assay.model,
+            nominalLoad: assay.nominal_load,
+            tensao: assay.tensao,
+            startDate: assay.start_date,
+            endDate: assay.end_date,
+            setup: assay.setup,
+            status: assay.status,
+            type: assay.type,
+            observacoes: assay.observacoes,
+            cycles: assay.cycles,
+            reportDate: assay.report_date,
+            plannedSuppliers: plannedSuppliers,
+            subRowIndex: assay.sub_row_index,
+            lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+        };
+    }
+
+    /**
+     * Busca todos os ensaios agendados
+     */
+    async getAllScheduledAssays(): Promise<Assay[]> {
+        const result = await this.selectQuery('SELECT * FROM scheduled_assays ORDER BY start_date');
+        
+        return result.map(assay => {
+            let plannedSuppliers = null;
+            try {
+                plannedSuppliers = JSON.parse(assay.planned_suppliers);
+            } catch (error) {
+                console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio ${assay.id}:`, error);
+                plannedSuppliers = null;
+            }
+
+            return {
+                id: assay.id,
+                protocol: assay.protocol,
+                orcamento: assay.orcamento,
+                assayManufacturer: assay.assay_manufacturer,
+                model: assay.model,
+                nominalLoad: assay.nominal_load,
+                tensao: assay.tensao,
+                startDate: assay.start_date,
+                endDate: assay.end_date,
+                setup: assay.setup,
+                status: assay.status,
+                type: assay.type,
+                observacoes: assay.observacoes,
+                cycles: assay.cycles,
+                reportDate: assay.report_date,
+                plannedSuppliers: plannedSuppliers,
+                lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+            };
+        });
+    }
+
+    /**
+     * Busca todos os ensaios de segurança agendados
+     */
+    async getAllSafetyScheduledAssays(): Promise<Assay[]> {
+        const result = await this.selectQuery('SELECT * FROM safety_scheduled_assays ORDER BY start_date');
+        
+        return result.map(assay => {
+            let plannedSuppliers = null;
+            try {
+                plannedSuppliers = JSON.parse(assay.planned_suppliers);
+            } catch (error) {
+                console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio de segurança ${assay.id}:`, error);
+                plannedSuppliers = null;
+            }
+
+            return {
+                id: assay.id,
+                protocol: assay.protocol,
+                orcamento: assay.orcamento,
+                assayManufacturer: assay.assay_manufacturer,
+                model: assay.model,
+                nominalLoad: assay.nominal_load,
+                tensao: assay.tensao,
+                startDate: assay.start_date,
+                endDate: assay.end_date,
+                setup: assay.setup,
+                status: assay.status,
+                type: assay.type,
+                observacoes: assay.observacoes,
+                cycles: assay.cycles,
+                reportDate: assay.report_date,
+                plannedSuppliers: plannedSuppliers,
+                subRowIndex: assay.sub_row_index,
+                lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+            };
+        });
+    }
+
+    /**
+     * Atualiza um ensaio agendado específico
+     */
+    async updateScheduledAssay(id: number, updates: Partial<Assay>): Promise<void> {
+        const fields = [];
+        const values = [];
+
+        if (updates.protocol !== undefined) {
+            fields.push('protocol = ?');
+            values.push(updates.protocol);
+        }
+        if (updates.orcamento !== undefined) {
+            fields.push('orcamento = ?');
+            values.push(updates.orcamento);
+        }
+        if ((updates as any).reportDate !== undefined) {
+            fields.push('report_date = ?');
+            values.push((updates as any).reportDate);
+        }
+        if (updates.assayManufacturer !== undefined) {
+            fields.push('assay_manufacturer = ?');
+            values.push(updates.assayManufacturer);
+        }
+        if (updates.model !== undefined) {
+            fields.push('model = ?');
+            values.push(updates.model);
+        }
+        if (updates.nominalLoad !== undefined) {
+            fields.push('nominal_load = ?');
+            values.push(updates.nominalLoad);
+        }
+        if (updates.tensao !== undefined) {
+            fields.push('tensao = ?');
+            values.push(updates.tensao);
+        }
+        if (updates.startDate !== undefined) {
+            fields.push('start_date = ?');
+            values.push(updates.startDate);
+        }
+        if (updates.endDate !== undefined) {
+            fields.push('end_date = ?');
+            values.push(updates.endDate);
+        }
+        if (updates.setup !== undefined) {
+            fields.push('setup = ?');
+            values.push(updates.setup);
+        }
+        if (updates.status !== undefined) {
+            fields.push('status = ?');
+            values.push(updates.status);
+        }
+        if (updates.type !== undefined) {
+            fields.push('type = ?');
+            values.push(updates.type);
+        }
+        if (updates.observacoes !== undefined) {
+            fields.push('observacoes = ?');
+            values.push(updates.observacoes);
+        }
+        if (updates.cycles !== undefined) {
+            fields.push('cycles = ?');
+            values.push(updates.cycles);
+        }
+        if ((updates as any).plannedSuppliers !== undefined) {
+            fields.push('planned_suppliers = ?');
+            values.push(JSON.stringify((updates as any).plannedSuppliers));
+        }
+
+        if (fields.length === 0) {
+            return; // Nenhum campo para atualizar
+        }
+
+        values.push(id);
+        const sql = `UPDATE scheduled_assays SET ${fields.join(', ')} WHERE id = ?`;
+        
+        await this.runQuery(sql, values);
+    }
+
+    /**
+     * Atualiza um ensaio de segurança agendado específico
+     */
+    async updateSafetyScheduledAssay(id: number, updates: Partial<Assay>): Promise<void> {
+        const fields = [];
+        const values = [];
+
+        if (updates.protocol !== undefined) {
+            fields.push('protocol = ?');
+            values.push(updates.protocol);
+        }
+        if (updates.orcamento !== undefined) {
+            fields.push('orcamento = ?');
+            values.push(updates.orcamento);
+        }
+        if ((updates as any).reportDate !== undefined) {
+            fields.push('report_date = ?');
+            values.push((updates as any).reportDate);
+        }
+        if (updates.assayManufacturer !== undefined) {
+            fields.push('assay_manufacturer = ?');
+            values.push(updates.assayManufacturer);
+        }
+        if (updates.model !== undefined) {
+            fields.push('model = ?');
+            values.push(updates.model);
+        }
+        if (updates.nominalLoad !== undefined) {
+            fields.push('nominal_load = ?');
+            values.push(updates.nominalLoad);
+        }
+        if (updates.tensao !== undefined) {
+            fields.push('tensao = ?');
+            values.push(updates.tensao);
+        }
+        if (updates.startDate !== undefined) {
+            fields.push('start_date = ?');
+            values.push(updates.startDate);
+        }
+        if (updates.endDate !== undefined) {
+            fields.push('end_date = ?');
+            values.push(updates.endDate);
+        }
+        if (updates.setup !== undefined) {
+            fields.push('setup = ?');
+            values.push(updates.setup);
+        }
+        if (updates.status !== undefined) {
+            fields.push('status = ?');
+            values.push(updates.status);
+        }
+        if (updates.type !== undefined) {
+            fields.push('type = ?');
+            values.push(updates.type);
+        }
+        if (updates.observacoes !== undefined) {
+            fields.push('observacoes = ?');
+            values.push(updates.observacoes);
+        }
+        if (updates.cycles !== undefined) {
+            fields.push('cycles = ?');
+            values.push(updates.cycles);
+        }
+        if (updates.subRowIndex !== undefined) {
+            fields.push('sub_row_index = ?');
+            values.push(updates.subRowIndex);
+        }
+        if ((updates as any).plannedSuppliers !== undefined) {
+            fields.push('planned_suppliers = ?');
+            values.push(JSON.stringify((updates as any).plannedSuppliers));
+        }
+
+        if (fields.length === 0) {
+            return; // Nenhum campo para atualizar
+        }
+
+        values.push(id);
+        const sql = `UPDATE safety_scheduled_assays SET ${fields.join(', ')} WHERE id = ?`;
+        
+        await this.runQuery(sql, values);
+    }
+
+    /**
+     * Remove um ensaio agendado
+     */
+    async deleteScheduledAssay(id: number): Promise<void> {
+        await this.runQuery('DELETE FROM scheduled_assays WHERE id = ?', [id]);
+    }
+
+    /**
+     * Remove um ensaio de segurança agendado
+     */
+    async deleteSafetyScheduledAssay(id: number): Promise<void> {
+        await this.runQuery('DELETE FROM safety_scheduled_assays WHERE id = ?', [id]);
+    }
+
+    /**
+     * Busca ensaios agendados por status
+     */
+    async getScheduledAssaysByStatus(status: string): Promise<Assay[]> {
+        const result = await this.selectQuery(
+            'SELECT * FROM scheduled_assays WHERE status = ? ORDER BY start_date',
+            [status]
+        );
+        
+        return result.map(assay => {
+            let plannedSuppliers = null;
+            try {
+                plannedSuppliers = JSON.parse(assay.planned_suppliers);
+            } catch (error) {
+                console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio ${assay.id}:`, error);
+                plannedSuppliers = null;
+            }
+
+            return {
+                id: assay.id,
+                protocol: assay.protocol,
+                orcamento: assay.orcamento,
+                assayManufacturer: assay.assay_manufacturer,
+                model: assay.model,
+                nominalLoad: assay.nominal_load,
+                tensao: assay.tensao,
+                startDate: assay.start_date,
+                endDate: assay.end_date,
+                setup: assay.setup,
+                status: assay.status,
+                type: assay.type,
+                observacoes: assay.observacoes,
+                cycles: assay.cycles,
+                reportDate: assay.report_date,
+                plannedSuppliers: plannedSuppliers,
+                lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+            };
+        });
+    }
+
+    /**
+     * Busca ensaios agendados por intervalo de datas
+     */
+    async getScheduledAssaysByDateRange(startDate: string, endDate: string): Promise<Assay[]> {
+        const result = await this.selectQuery(
+            'SELECT * FROM scheduled_assays WHERE start_date >= ? AND end_date <= ? ORDER BY start_date',
+            [startDate, endDate]
+        );
+        
+        return result.map(assay => {
+            let plannedSuppliers = null;
+            try {
+                plannedSuppliers = JSON.parse(assay.planned_suppliers);
+            } catch (error) {
+                console.warn(`Erro ao fazer parse do plannedSuppliers para ensaio ${assay.id}:`, error);
+                plannedSuppliers = null;
+            }
+
+            return {
+                id: assay.id,
+                protocol: assay.protocol,
+                orcamento: assay.orcamento,
+                assayManufacturer: assay.assay_manufacturer,
+                model: assay.model,
+                nominalLoad: assay.nominal_load,
+                tensao: assay.tensao,
+                startDate: assay.start_date,
+                endDate: assay.end_date,
+                setup: assay.setup,
+                status: assay.status,
+                type: assay.type,
+                observacoes: assay.observacoes,
+                cycles: assay.cycles,
+                reportDate: assay.report_date,
+                plannedSuppliers: plannedSuppliers,
+                lots: { poBase: [], perborato: [], taed: [], tiras: [] }
+            };
+        });
+    }
+
+    // ==================== OPERAÇÕES GRANULARES PARA INVENTÁRIO ====================
+
+    /**
+     * Cria um novo item de inventário
+     */
+    async createInventoryItem(item: Omit<InventoryItem, 'id'>): Promise<number> {
+        const result = await this.runQuery(
+            'INSERT INTO inventory (reagent, manufacturer, lot, quantity, validity) VALUES (?, ?, ?, ?, ?) RETURNING id',
+            [
+                item.reagent,
+                item.manufacturer,
+                item.lot,
+                item.quantity,
+                item.validity
+            ]
+        );
+
+        return result.id;
+    }
+
+    /**
+     * Busca um item de inventário por ID
+     */
+    async getInventoryItemById(id: number): Promise<InventoryItem | null> {
+        const result = await this.selectQuery(
+            'SELECT * FROM inventory WHERE id = ?',
+            [id]
+        );
+
+        if (result.length === 0) {
+            return null;
+        }
+
+        const item = result[0];
+        return {
+            id: item.id,
+            reagent: item.reagent,
+            manufacturer: item.manufacturer,
+            lot: item.lot,
+            quantity: item.quantity,
+            validity: item.validity
+        };
+    }
+
+    /**
+     * Busca todos os itens de inventário
+     */
+    async getAllInventoryItems(): Promise<InventoryItem[]> {
+        const result = await this.selectQuery('SELECT * FROM inventory ORDER BY reagent');
+        
+        return result.map(item => ({
+            id: item.id,
+            reagent: item.reagent,
+            manufacturer: item.manufacturer,
+            lot: item.lot,
+            quantity: item.quantity,
+            validity: item.validity
+        }));
+    }
+
+    /**
+     * Busca itens de inventário por tipo
+     */
+    async getInventoryItemsByType(type: string): Promise<InventoryItem[]> {
+        const result = await this.selectQuery(
+            'SELECT * FROM inventory WHERE reagent LIKE ? ORDER BY reagent',
+            [`%${type}%`]
+        );
+        
+        return result.map(item => ({
+            id: item.id,
+            reagent: item.reagent,
+            manufacturer: item.manufacturer,
+            lot: item.lot,
+            quantity: item.quantity,
+            validity: item.validity
+        }));
+    }
+
+    /**
+     * Busca itens de inventário com estoque baixo
+     */
+    async getLowStockItems(): Promise<InventoryItem[]> {
+        const result = await this.selectQuery(
+            'SELECT * FROM inventory WHERE quantity <= 10 ORDER BY reagent'
+        );
+        
+        return result.map(item => ({
+            id: item.id,
+            reagent: item.reagent,
+            manufacturer: item.manufacturer,
+            lot: item.lot,
+            quantity: item.quantity,
+            validity: item.validity
+        }));
+    }
+
+    /**
+     * Busca itens de inventário próximos ao vencimento
+     */
+    async getExpiringItems(daysAhead: number = 30): Promise<InventoryItem[]> {
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + daysAhead);
+        const futureDateString = futureDate.toISOString().split('T')[0];
+
+        const result = await this.selectQuery(
+            'SELECT * FROM inventory WHERE validity <= ? AND validity != "" ORDER BY validity',
+            [futureDateString]
+        );
+        
+        return result.map(item => ({
+            id: item.id,
+            reagent: item.reagent,
+            manufacturer: item.manufacturer,
+            lot: item.lot,
+            quantity: item.quantity,
+            validity: item.validity
+        }));
+    }
+
+    /**
+     * Atualiza um item de inventário específico
+     */
+    async updateInventoryItemGranular(id: number, updates: Partial<InventoryItem>): Promise<void> {
+        const fields = [];
+        const values = [];
+
+        if (updates.reagent !== undefined) {
+            fields.push('reagent = ?');
+            values.push(updates.reagent);
+        }
+        if (updates.manufacturer !== undefined) {
+            fields.push('manufacturer = ?');
+            values.push(updates.manufacturer);
+        }
+        if (updates.lot !== undefined) {
+            fields.push('lot = ?');
+            values.push(updates.lot);
+        }
+        if (updates.quantity !== undefined) {
+            fields.push('quantity = ?');
+            values.push(updates.quantity);
+        }
+        if (updates.validity !== undefined) {
+            fields.push('validity = ?');
+            values.push(updates.validity);
+        }
+
+        if (fields.length === 0) {
+            return; // Nenhum campo para atualizar
+        }
+
+        values.push(id);
+        const sql = `UPDATE inventory SET ${fields.join(', ')} WHERE id = ?`;
+        
+        await this.runQuery(sql, values);
+    }
+
+    /**
+     * Atualiza a quantidade de um item de inventário
+     */
+    async updateInventoryQuantity(id: number, newQuantity: number): Promise<void> {
+        const currentDate = new Date().toISOString();
+        await this.runQuery(
+            'UPDATE inventory SET quantity = ?, last_updated = ? WHERE id = ?',
+            [newQuantity, currentDate, id]
+        );
+    }
+
+    /**
+     * Adiciona quantidade a um item de inventário
+     */
+    async addInventoryQuantity(id: number, quantityToAdd: number): Promise<void> {
+        const currentDate = new Date().toISOString();
+        await this.runQuery(
+            'UPDATE inventory SET quantity = quantity + ?, last_updated = ? WHERE id = ?',
+            [quantityToAdd, currentDate, id]
+        );
+    }
+
+    /**
+     * Remove quantidade de um item de inventário
+     */
+    async removeInventoryQuantity(id: number, quantityToRemove: number): Promise<void> {
+        const currentDate = new Date().toISOString();
+        await this.runQuery(
+            'UPDATE inventory SET quantity = MAX(0, quantity - ?), last_updated = ? WHERE id = ?',
+            [quantityToRemove, currentDate, id]
+        );
+    }
+
+    /**
+     * Remove um item de inventário
+     */
+    async deleteInventoryItemGranular(id: number): Promise<void> {
+        await this.runQuery('DELETE FROM inventory WHERE id = ?', [id]);
+    }
+
+    // ==================== OPERAÇÕES GRANULARES PARA CALIBRAÇÕES ====================
+
+    /**
+     * Cria uma nova calibração
+     */
+    async createCalibration(calibration: Omit<EquipmentCalibration, 'id'>): Promise<number> {
+        const result = await this.runQuery(
+            'INSERT INTO calibrations (equipment_name, calibration_date, next_calibration_date, status, certificate_number, calibrated_by, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            [
+                calibration.equipmentName,
+                calibration.calibrationDate,
+                calibration.nextCalibrationDate,
+                calibration.status,
+                calibration.certificateNumber,
+                calibration.calibratedBy,
+                calibration.notes
+            ]
+        );
+
+        return result.id;
+    }
+
+    /**
+     * Busca uma calibração por ID
+     */
+    async getCalibrationById(id: number): Promise<EquipmentCalibration | null> {
+        const result = await this.selectQuery(
+            'SELECT * FROM calibrations WHERE id = ?',
+            [id]
+        );
+
+        if (result.length === 0) {
+            return null;
+        }
+
+        const calibration = result[0];
+        return {
+            id: calibration.id,
+            equipmentName: calibration.equipment_name,
+            calibrationDate: calibration.calibration_date,
+            nextCalibrationDate: calibration.next_calibration_date,
+            status: calibration.status,
+            certificateNumber: calibration.certificate_number,
+            calibratedBy: calibration.calibrated_by,
+            notes: calibration.notes
+        };
+    }
+
+    /**
+     * Busca todas as calibrações
+     */
+    async getAllCalibrations(): Promise<EquipmentCalibration[]> {
+        const result = await this.selectQuery('SELECT * FROM calibrations ORDER BY next_calibration_date');
+        
+        return result.map(calibration => ({
+            id: calibration.id,
+            equipmentName: calibration.equipment_name,
+            calibrationDate: calibration.calibration_date,
+            nextCalibrationDate: calibration.next_calibration_date,
+            status: calibration.status,
+            certificateNumber: calibration.certificate_number,
+            calibratedBy: calibration.calibrated_by,
+            notes: calibration.notes
+        }));
+    }
+
+    /**
+     * Busca calibrações por status
+     */
+    async getCalibrationsByStatus(status: string): Promise<EquipmentCalibration[]> {
+        const result = await this.selectQuery(
+            'SELECT * FROM calibrations WHERE status = ? ORDER BY next_calibration_date',
+            [status]
+        );
+        
+        return result.map(calibration => ({
+            id: calibration.id,
+            equipmentName: calibration.equipment_name,
+            calibrationDate: calibration.calibration_date,
+            nextCalibrationDate: calibration.next_calibration_date,
+            status: calibration.status,
+            certificateNumber: calibration.certificate_number,
+            calibratedBy: calibration.calibrated_by,
+            notes: calibration.notes
+        }));
+    }
+
+    /**
+     * Busca calibrações próximas ao vencimento
+     */
+    async getUpcomingCalibrations(daysAhead: number = 30): Promise<EquipmentCalibration[]> {
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + daysAhead);
+        const futureDateString = futureDate.toISOString().split('T')[0];
+
+        const result = await this.selectQuery(
+            'SELECT * FROM calibrations WHERE next_calibration_date <= ? ORDER BY next_calibration_date',
+            [futureDateString]
+        );
+        
+        return result.map(calibration => ({
+            id: calibration.id,
+            equipmentName: calibration.equipment_name,
+            calibrationDate: calibration.calibration_date,
+            nextCalibrationDate: calibration.next_calibration_date,
+            status: calibration.status,
+            certificateNumber: calibration.certificate_number,
+            calibratedBy: calibration.calibrated_by,
+            notes: calibration.notes
+        }));
+    }
+
+    /**
+     * Busca calibrações vencidas
+     */
+    async getOverdueCalibrations(): Promise<EquipmentCalibration[]> {
+        const today = new Date().toISOString().split('T')[0];
+
+        const result = await this.selectQuery(
+            'SELECT * FROM calibrations WHERE next_calibration_date < ? ORDER BY next_calibration_date',
+            [today]
+        );
+        
+        return result.map(calibration => ({
+            id: calibration.id,
+            equipmentName: calibration.equipment_name,
+            calibrationDate: calibration.calibration_date,
+            nextCalibrationDate: calibration.next_calibration_date,
+            status: calibration.status,
+            certificateNumber: calibration.certificate_number,
+            calibratedBy: calibration.calibrated_by,
+            notes: calibration.notes
+        }));
+    }
+
+    /**
+     * Atualiza uma calibração específica
+     */
+    async updateCalibrationGranular(id: number, updates: Partial<EquipmentCalibration>): Promise<void> {
+        const fields = [];
+        const values = [];
+
+        if (updates.equipmentName !== undefined) {
+            fields.push('equipment_name = ?');
+            values.push(updates.equipmentName);
+        }
+        if (updates.calibrationDate !== undefined) {
+            fields.push('calibration_date = ?');
+            values.push(updates.calibrationDate);
+        }
+        if (updates.nextCalibrationDate !== undefined) {
+            fields.push('next_calibration_date = ?');
+            values.push(updates.nextCalibrationDate);
+        }
+        if (updates.status !== undefined) {
+            fields.push('status = ?');
+            values.push(updates.status);
+        }
+        if (updates.certificateNumber !== undefined) {
+            fields.push('certificate_number = ?');
+            values.push(updates.certificateNumber);
+        }
+        if (updates.calibratedBy !== undefined) {
+            fields.push('calibrated_by = ?');
+            values.push(updates.calibratedBy);
+        }
+        if (updates.notes !== undefined) {
+            fields.push('notes = ?');
+            values.push(updates.notes);
+        }
+
+        if (fields.length === 0) {
+            return; // Nenhum campo para atualizar
+        }
+
+        values.push(id);
+        const sql = `UPDATE calibrations SET ${fields.join(', ')} WHERE id = ?`;
+        
+        await this.runQuery(sql, values);
+    }
+
+    /**
+     * Remove uma calibração
+     */
+    async deleteCalibrationGranular(id: number): Promise<void> {
+        await this.runQuery('DELETE FROM calibrations WHERE id = ?', [id]);
     }
 
 }
