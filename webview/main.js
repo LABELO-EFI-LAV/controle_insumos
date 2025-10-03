@@ -1721,6 +1721,10 @@ const state = {
     },
     systemUsers: {},
     charts: {},
+    // Controle de repetição de toast de atualização automática
+    lastForceRefreshToastAt: 0,
+    lastForceRefreshSignature: '',
+    forceRefreshToastCooldownMs: 3000,
     selectedAssayId: null,
     selectedReagentId: null,
     ganttStart: new Date(),
@@ -9376,8 +9380,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Redesenha toda a interface
                     renderers.renderAll();
 
-                    // Notifica o usuário de forma sutil
-                    utils.showToast("Os dados foram atualizados automaticamente.", false);
+                    // Notifica o usuário de forma sutil, apenas 1x por ação
+                    const now = Date.now();
+                    const signature = JSON.stringify({
+                        invLen: (data.inventory || []).length,
+                        histLen: (data.historicalAssays || []).length,
+                        schLen: (data.scheduledAssays || []).length,
+                        safSchLen: (data.safetyScheduledAssays || []).length,
+                        holLen: (data.holidays || []).length,
+                        calLen: (data.calibrations || []).length
+                    });
+                    const withinCooldown = (now - state.lastForceRefreshToastAt) < state.forceRefreshToastCooldownMs;
+                    const isDuplicateAction = signature === state.lastForceRefreshSignature;
+                    if (!withinCooldown || !isDuplicateAction) {
+                        utils.showToast("Os dados foram atualizados automaticamente.", false);
+                        state.lastForceRefreshToastAt = now;
+                        state.lastForceRefreshSignature = signature;
+                    }
 
                 } catch (error) {
                     console.error("Erro durante o processamento de 'forceDataRefresh':", error);

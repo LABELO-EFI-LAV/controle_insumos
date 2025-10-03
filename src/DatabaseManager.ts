@@ -191,6 +191,16 @@ export class DatabaseManager {
                                 } else {
                                     console.log('✅ Busy timeout configurado para 10s na conexão RO');
                                 }
+                                // Em modo rede, desativar mmap na conexão somente leitura
+                                if (this.networkMode) {
+                                    this.roDb!.run("PRAGMA mmap_size=0;", (mmErr) => {
+                                        if (mmErr) {
+                                            console.warn('⚠️ Falha ao desativar mmap_size na conexão RO:', mmErr);
+                                        } else {
+                                            console.log('✅ mmap_size=0 aplicado na conexão RO (modo rede)');
+                                        }
+                                    });
+                                }
                             });
                         }
                     });
@@ -303,7 +313,7 @@ export class DatabaseManager {
                                             console.log('✅ Temp store configurado para memória');
                                         }
 
-                                        db.run("PRAGMA mmap_size=268435456;", (mmErr) => {
+                                        db.run("PRAGMA mmap_size=0;", (mmErr) => {
                                             if (mmErr) {
                                                 const msg = String(mmErr?.message || '').toLowerCase();
                                                 if (msg.includes('busy') || msg.includes('locked')) {
@@ -313,7 +323,7 @@ export class DatabaseManager {
                                                     console.error('❌ Erro ao configurar mmap_size:', mmErr);
                                                 }
                                             } else {
-                                                console.log('✅ Memory-mapped I/O configurado para 256MB');
+                                                console.log('✅ Memory-mapped I/O desativado (mmap_size=0) em modo rede');
                                             }
                                             // Finaliza configuração em modo rede
                                             resolve();
@@ -404,8 +414,8 @@ export class DatabaseManager {
                     }
                 });
 
-                // Configurar mmap_size para melhor I/O (256MB)
-                db.run("PRAGMA mmap_size=268435456;", (err) => {
+                // Configurar mmap_size para melhor I/O (256MB) apenas quando não estiver em modo rede
+                db.run(`PRAGMA mmap_size=${this.networkMode ? 0 : 268435456};`, (err) => {
                     if (err) {
                         const msg = String(err?.message || '').toLowerCase();
                         if (msg.includes('busy') || msg.includes('locked')) {
@@ -415,7 +425,7 @@ export class DatabaseManager {
                             console.error('❌ Erro ao configurar mmap_size:', err);
                         }
                     } else {
-                        console.log('✅ Memory-mapped I/O configurado para 256MB');
+                        console.log(`✅ mmap_size configurado para ${this.networkMode ? '0 (desativado em rede)' : '256MB'}`);
                     }
                 });
 
@@ -1951,6 +1961,24 @@ export class DatabaseManager {
                         // Fecha conexão somente leitura e limpa timers
                         closeReadOnly();
                         cleanupTimers();
+
+                        // Em modo rede, remover arquivos -wal e -shm para evitar resíduos que causam IOERR
+                        if (this.networkMode) {
+                            try {
+                                const walPath = `${this.dbPath}-wal`;
+                                const shmPath = `${this.dbPath}-shm`;
+                                if (fs.existsSync(walPath)) {
+                                    fs.unlinkSync(walPath);
+                                    console.log('🧹 Removido arquivo WAL residual:', walPath);
+                                }
+                                if (fs.existsSync(shmPath)) {
+                                    fs.unlinkSync(shmPath);
+                                    console.log('🧹 Removido arquivo SHM residual:', shmPath);
+                                }
+                            } catch (cleanupErr) {
+                                console.warn('⚠️ Falha ao limpar arquivos -wal/-shm residuais:', cleanupErr);
+                            }
+                        }
 
                         resolve();
                     });
