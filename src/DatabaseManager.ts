@@ -112,12 +112,18 @@ export interface SafetyCategory {
 
 export class DatabaseManager {
     private db: sqlite3.Database | null = null;
+    private roDb: sqlite3.Database | null = null;
     private dbPath: string;
     private saveCount: number = 0;
     private incrementalBackup: IncrementalBackup;
     private operationQueue: Promise<any> = Promise.resolve();
     private activeOperations: number = 0;
     private maxConcurrentOperations: number = 3;
+    private vacuumTimer: NodeJS.Timeout | null = null;
+    private vacuumDelayMs: number = 30000; // 30s de inatividade antes de VACUUM
+    private enableAutoVacuum: boolean = false; // Flag para desativar VACUUM automático por padrão
+    private fullSyncMode: boolean = false; // Flag para escolher entre sincronização completa ou por delta
+    private initBusy: boolean = false; // Marca se encontrou SQLITE_BUSY/locked na inicialização
 
     constructor(workspaceRoot: string) {
         this.dbPath = path.join(workspaceRoot, 'database.sqlite');
@@ -127,6 +133,22 @@ export class DatabaseManager {
             compressionLevel: 6,
             incrementalThreshold: 10
         });
+    }
+
+    wasBusyOnInit(): boolean {
+        return this.initBusy;
+    }
+
+    /**
+     * Habilita ou desabilita o VACUUM automático durante períodos de inatividade.
+     * Quando desabilitado, cancela qualquer VACUUM já agendado.
+     */
+    setAutoVacuum(enable: boolean): void {
+        this.enableAutoVacuum = enable;
+        if (!enable && this.vacuumTimer) {
+            clearTimeout(this.vacuumTimer);
+            this.vacuumTimer = null;
+        }
     }
 
     /**
@@ -141,13 +163,49 @@ export class DatabaseManager {
                 } else {
                     // Conectado ao banco SQLite
                     
+                    // Abre conexão somente leitura para SELECTs
+                    this.roDb = new sqlite3.Database(this.dbPath, sqlite3.OPEN_READONLY, (roErr) => {
+                        if (roErr) {
+                            console.warn('⚠️ Falha ao abrir conexão somente leitura. SELECTs usarão conexão principal.', roErr);
+                            this.roDb = null;
+                        } else {
+                            // Conexão RO aberta
+                            // Configurar timeout para locks também na conexão somente leitura
+                            this.roDb!.run("PRAGMA busy_timeout=10000;", (busyErr) => {
+                                if (busyErr) {
+                                    const msg = String(busyErr?.message || '').toLowerCase();
+                                    if (msg.includes('busy') || msg.includes('locked')) {
+                                        this.initBusy = true;
+                                        console.warn('⚠️ Banco ocupado ao configurar busy_timeout (RO); mantendo padrão.');
+                                    } else {
+                                        console.error('❌ Erro ao configurar busy_timeout na conexão RO:', busyErr);
+                                    }
+                                } else {
+                                    console.log('✅ Busy timeout configurado para 10s na conexão RO');
+                                }
+                            });
+                        }
+                    });
+
                     // Configurar melhorias de concorrência
                     this.configureConcurrency().then(() => {
                         this.createTables().then(() => {
                             // Criar índices para melhorar performance
                             this.createIndexes().then(resolve).catch(reject);
                         }).catch(reject);
-                    }).catch(reject);
+                    }).catch((e) => {
+                        // Se falhar por busy/locked, marcar e seguir
+                        const msg = String(e?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar concorrência; seguindo com padrões.');
+                            this.createTables().then(() => {
+                                this.createIndexes().then(resolve).catch(reject);
+                            }).catch(reject);
+                        } else {
+                            reject(e);
+                        }
+                    });
                 }
             });
         });
@@ -168,7 +226,13 @@ export class DatabaseManager {
                 // Habilitar WAL mode para melhor concorrência
                 db.run("PRAGMA journal_mode=WAL;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar WAL mode:', err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar WAL; seguindo sem alterar.');
+                        } else {
+                            console.error('❌ Erro ao configurar WAL mode:', err);
+                        }
                     } else {
                         console.log('✅ WAL mode habilitado');
                     }
@@ -177,7 +241,13 @@ export class DatabaseManager {
                 // Configurar timeout para locks (10 segundos)
                 db.run("PRAGMA busy_timeout=10000;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar busy_timeout:', err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar busy_timeout; mantendo padrão.');
+                        } else {
+                            console.error('❌ Erro ao configurar busy_timeout:', err);
+                        }
                     } else {
                         console.log('✅ Busy timeout configurado para 10s');
                     }
@@ -186,7 +256,16 @@ export class DatabaseManager {
                 // Configurar sincronização para melhor performance
                 db.run("PRAGMA synchronous=NORMAL;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar synchronous:', err);
+                        const raw = err?.message || '';
+                        const msg = raw.toLowerCase();
+                        const isBusy = msg.includes('busy') || msg.includes('locked') || raw.includes('SQLITE_BUSY') || raw.includes('database is locked');
+                        if (isBusy) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar synchronous; mantendo configuração atual.', err);
+                            return;
+                        }
+                        // Outros erros de PRAGMA synchronous não devem travar inicialização
+                        console.warn('⚠️ Aviso ao configurar synchronous (não crítico):', err);
                     } else {
                         console.log('✅ Modo de sincronização NORMAL configurado');
                     }
@@ -195,7 +274,13 @@ export class DatabaseManager {
                 // Configurar cache size maior para melhor performance (20MB)
                 db.run("PRAGMA cache_size=20000;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar cache_size:', err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar cache_size; mantendo configuração atual.');
+                        } else {
+                            console.error('❌ Erro ao configurar cache_size:', err);
+                        }
                     } else {
                         console.log('✅ Cache size configurado para 20MB');
                     }
@@ -204,7 +289,13 @@ export class DatabaseManager {
                 // Configurar temp_store para usar memória
                 db.run("PRAGMA temp_store=MEMORY;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar temp_store:', err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar temp_store; mantendo configuração atual.');
+                        } else {
+                            console.error('❌ Erro ao configurar temp_store:', err);
+                        }
                     } else {
                         console.log('✅ Temp store configurado para memória');
                     }
@@ -213,7 +304,13 @@ export class DatabaseManager {
                 // Configurar mmap_size para melhor I/O (256MB)
                 db.run("PRAGMA mmap_size=268435456;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar mmap_size:', err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar mmap_size; mantendo configuração atual.');
+                        } else {
+                            console.error('❌ Erro ao configurar mmap_size:', err);
+                        }
                     } else {
                         console.log('✅ Memory-mapped I/O configurado para 256MB');
                     }
@@ -222,8 +319,15 @@ export class DatabaseManager {
                 // Configurar WAL autocheckpoint para controlar o tamanho do WAL
                 db.run("PRAGMA wal_autocheckpoint=1000;", (err) => {
                     if (err) {
-                        console.error('❌ Erro ao configurar wal_autocheckpoint:', err);
-                        reject(err);
+                        const msg = String(err?.message || '').toLowerCase();
+                        if (msg.includes('busy') || msg.includes('locked')) {
+                            this.initBusy = true;
+                            console.warn('⚠️ Banco ocupado ao configurar wal_autocheckpoint; seguindo sem alterar.');
+                            resolve(); // não bloquear inicialização
+                        } else {
+                            console.error('❌ Erro ao configurar wal_autocheckpoint:', err);
+                            resolve(); // suavizar erro de PRAGMA para não travar init
+                        }
                     } else {
                         console.log('✅ WAL autocheckpoint configurado para 1000 páginas');
                         resolve();
@@ -303,6 +407,21 @@ export class DatabaseManager {
                 return await operation();
             } finally {
                 this.activeOperations--;
+                // Se ficou ocioso, agenda VACUUM (se habilitado)
+                if (this.activeOperations === 0 && this.enableAutoVacuum) {
+                    if (this.vacuumTimer) {
+                        clearTimeout(this.vacuumTimer);
+                    }
+                    this.vacuumTimer = setTimeout(async () => {
+                        try {
+                            // Executa VACUUM fora de transação e em momento ocioso
+                            await this.runQuery('VACUUM');
+                            console.log('✅ VACUUM executado durante período ocioso');
+                        } catch (vacErr) {
+                            console.warn('⚠️ Falha ao executar VACUUM:', vacErr);
+                        }
+                    }, this.vacuumDelayMs);
+                }
             }
         });
 
@@ -630,8 +749,8 @@ export class DatabaseManager {
         const maxRetries = 3;
         const retryDelay = 100; // 100ms
 
-        return new Promise((resolve, reject) => {
-            this.db!.all(sql, params, (err, rows) => {
+        const execSelect = (dbConn: sqlite3.Database, resolve: (rows: any[]) => void, reject: (err: any) => void) => {
+            dbConn.all(sql, params, (err, rows) => {
                 if (err) {
                     // Verificar se é erro de lock e se ainda pode tentar novamente
                     const errorMessage = err.message || '';
@@ -655,6 +774,24 @@ export class DatabaseManager {
                     resolve(rows || []);
                 }
             });
+        };
+
+        return new Promise((resolve, reject) => {
+            // Preferir conexão somente leitura se disponível
+            if (this.roDb) {
+                execSelect(this.roDb, resolve, (err) => {
+                    // Se falhar por estar ocupada ou não disponível, tenta conexão principal
+                    const msg = (err && err.message) || '';
+                    if (msg.includes('SQLITE_BUSY') || msg.includes('database is locked')) {
+                        execSelect(this.db!, resolve, reject);
+                    } else {
+                        // Erros genéricos também tentam conexão principal como fallback
+                        execSelect(this.db!, resolve, reject);
+                    }
+                });
+            } else {
+                execSelect(this.db!, resolve, reject);
+            }
         });
     }
 
@@ -834,18 +971,22 @@ export class DatabaseManager {
                 throw new Error('Banco de dados não inicializado');
             }
 
-            console.log('💾 Iniciando salvamento de dados...');
+            console.log(`💾 Iniciando salvamento de dados (modo: ${this.fullSyncMode ? 'FULL' : 'DELTA'})...`);
             const startTime = Date.now();
 
             try {
-                // Dividir o salvamento em transações menores para reduzir bloqueio
-                await this.saveDataInBatches(data);
+                // Escolher entre FULL (com deleções) ou DELTA (UPSERT sem deleções globais)
+                if (this.fullSyncMode) {
+                    await this.saveDataInBatches(data);
+                } else {
+                    await this.saveDataInBatchesDelta(data);
+                }
                 
                 this.saveCount++;
                 const duration = Date.now() - startTime;
                 console.log(`✅ Dados salvos com sucesso em ${duration}ms (salvamento #${this.saveCount})`);
 
-                // Executar VACUUM periodicamente (a cada 10 salvamentos) fora da transação principal
+                /* Executar VACUUM periodicamente (a cada 10 salvamentos) fora da transação principal
                 if (this.saveCount % 10 === 0) {
                     console.log('🧹 Executando limpeza do banco de dados...');
                     try {
@@ -854,9 +995,44 @@ export class DatabaseManager {
                     } catch (vacuumError) {
                         console.warn('⚠️ Erro na limpeza do banco:', vacuumError);
                     }
-                }
+                }*/
             } catch (error) {
                 console.error('❌ Erro ao salvar dados:', error);
+                throw error;
+            }
+        });
+    }
+
+    /**
+     * Define o modo de sincronização padrão para operações de salvamento.
+     * Quando true, utiliza sincronização completa com deleções globais; quando false, utiliza DELTA.
+     */
+    setFullSyncMode(enabled: boolean): void {
+        this.fullSyncMode = enabled;
+        console.log(`[SYNC MODE] Modo de sincronização padrão definido para: ${enabled ? 'FULL' : 'DELTA'}`);
+    }
+
+    /**
+     * Salva dados no modo DELTA: apenas as coleções presentes em `data` são upsertadas
+     * usando operações mais curtas e sem deleções globais de tabelas.
+     */
+    async saveDataDelta(data: any): Promise<void> {
+        return this.queueOperation(async () => {
+            if (!this.db) {
+                throw new Error('Banco de dados não inicializado');
+            }
+
+            console.log('💾 Iniciando salvamento de dados (DELTA)...');
+            const startTime = Date.now();
+
+            try {
+                await this.saveDataInBatchesDelta(data);
+
+                this.saveCount++;
+                const duration = Date.now() - startTime;
+                console.log(`✅ Dados (DELTA) salvos em ${duration}ms (salvamento #${this.saveCount})`);
+            } catch (error) {
+                console.error('❌ Erro ao salvar dados (DELTA):', error);
                 throw error;
             }
         });
@@ -917,6 +1093,64 @@ export class DatabaseManager {
         });
     }
 
+    /**
+     * Versão DELTA do salvamento em lotes: não executa deleções globais e usa UPSERT.
+     */
+    private async saveDataInBatchesDelta(data: any): Promise<void> {
+        // Batch 1: Dados críticos (inventário e configurações)
+        await this.transaction(async (tx) => {
+            if (data.inventory) {
+                await this.saveInventoryOptimized(tx, data.inventory);
+            }
+            if (data.settings) {
+                await this.upsertSettings(tx, data.settings);
+            }
+        });
+
+        // Batch 2: Ensaios históricos (podem ser grandes)
+        if (data.historicalAssays && data.historicalAssays.length > 0) {
+            await this.transaction(async (tx) => {
+                await this.saveHistoricalAssaysDelta(tx, data.historicalAssays);
+            });
+        }
+
+        // Batch 3: Ensaios agendados
+        await this.transaction(async (tx) => {
+            if (data.scheduledAssays) {
+                await this.upsertScheduledAssays(tx, data.scheduledAssays);
+            }
+            if (data.safetyScheduledAssays) {
+                await this.upsertSafetyScheduledAssays(tx, data.safetyScheduledAssays);
+            }
+        });
+
+        // Batch 4: Calibrações e outros dados
+        await this.transaction(async (tx) => {
+            if (data.calibrations) {
+                await this.upsertCalibrations(tx, data.calibrations);
+            }
+            if (data.calibrationEquipments) {
+                await this.upsertCalibrationEquipments(tx, data.calibrationEquipments);
+            }
+            if (data.holidays) {
+                await this.upsertHolidays(tx, data.holidays);
+            }
+        });
+
+        // Batch 5: Dados de sistema (categorias e usuários)
+        await this.transaction(async (tx) => {
+            if (data.efficiencyCategories) {
+                await this.upsertCategories(tx, 'efficiency_categories', data.efficiencyCategories);
+            }
+            if (data.safetyCategories) {
+                await this.upsertCategories(tx, 'safety_categories', data.safetyCategories);
+            }
+            if (data.systemUsers) {
+                await this.upsertSystemUsers(tx, data.systemUsers);
+            }
+        });
+    }
+
 
     // O VACUUM pode ser uma operação lenta e deve ser executado fora da transação principal
     /* para não bloquear outras operações.
@@ -973,6 +1207,7 @@ export class DatabaseManager {
         throw error;
     }
     }
+    
 
     private async bulkInsert(tx: any, table: string, columns: string[], data: any[], preprocessFn: (item: any) => any[], options?: { delete?: boolean }) {
     const shouldDelete = options?.delete ?? true; // O padrão é deletar
@@ -1046,159 +1281,391 @@ export class DatabaseManager {
     }
 
     private async saveHistoricalAssays(tx: any, assays: any[]) {
-    // Limpa as tabelas manualmente para garantir a ordem correta por causa da chave estrangeira.
-    await tx.runQuery('DELETE FROM assay_lots');
-    await tx.runQuery('DELETE FROM historical_assays');
+        // Limpa as tabelas manualmente para garantir a ordem correta por causa da chave estrangeira.
+        await tx.runQuery('DELETE FROM assay_lots');
+        await tx.runQuery('DELETE FROM historical_assays');
 
-    if (!assays || assays.length === 0) {
-        return;
-    }
+        if (!assays || assays.length === 0) {
+            return;
+        }
 
-    const assayColumns = ['id', 'protocol', 'orcamento', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'report', 'consumption', 'total_consumption'];
-
-    // Inserção em massa para historical_assays, sem deletar novamente
-    await this.bulkInsert(tx, 'historical_assays', assayColumns, assays, assay => [
-        assay.id,
-        assay.protocol || 'Não especificado',
-        assay.orcamento || 'Não especificado',
-        assay.assayManufacturer || 'Não especificado',
-        assay.model || 'Não especificado',
-        assay.nominalLoad || 0,
-        assay.tensao || 0,
-        assay.startDate || new Date().toISOString(),
-        assay.endDate || new Date().toISOString(),
-        assay.setup || 1,
-        assay.status || 'completed',
-        assay.type || 'efficiency',
-        assay.observacoes,
-        assay.cycles,
-        assay.report,
-        JSON.stringify(assay.consumption) || null,
-        assay.totalConsumption || null,
-    ], { delete: false }); // Desativa a deleção automática
-
-    // Lida com a tabela aninhada `assay_lots`
-    const lotColumns = ['assay_id', 'reagent_type', 'lot', 'cycles'];
-    const allLots = assays.flatMap(assay => {
-        if (!assay.lots) return [];
-        return Object.entries(assay.lots).flatMap(([reagentType, lots]) =>
-            (lots as any[])
-            .filter(lot => lot.lot && lot.lot !== 'N/A')
-            .map(lot => ({
-                assay_id: assay.id,
-                reagent_type: reagentType,
-                lot: lot.lot,
-                cycles: lot.cycles || 0
-            }))
-        );
-    });
-
-    if (allLots.length > 0) {
-        await this.bulkInsert(tx, 'assay_lots', lotColumns, allLots, lot => [
-            lot.assay_id,
-            lot.reagent_type,
-            lot.lot,
-            lot.cycles,
+        // Inserção em massa para historical_assays, sem deletar novamente
+        const assayColumns = ['id', 'protocol', 'orcamento', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'report', 'consumption', 'total_consumption'];
+        await this.bulkInsert(tx, 'historical_assays', assayColumns, assays, assay => [
+            assay.id,
+            assay.protocol || 'Não especificado',
+            assay.orcamento || 'Não especificado',
+            assay.assayManufacturer || 'Não especificado',
+            assay.model || 'Não especificado',
+            assay.nominalLoad || 0,
+            assay.tensao || 0,
+            assay.startDate || new Date().toISOString(),
+            assay.endDate || new Date().toISOString(),
+            assay.setup || 1,
+            assay.status || 'completed',
+            assay.type || 'efficiency',
+            assay.observacoes,
+            assay.cycles,
+            assay.report,
+            JSON.stringify(assay.consumption) || null,
+            assay.totalConsumption || null,
         ], { delete: false }); // Desativa a deleção automática
+
+        // Lida com a tabela aninhada `assay_lots`
+        const lotColumns = ['assay_id', 'reagent_type', 'lot', 'cycles'];
+        const allLots = assays.flatMap(assay => {
+            if (!assay.lots) return [];
+            return Object.entries(assay.lots).flatMap(([reagentType, lots]) =>
+                (lots as any[])
+                    .filter(lot => lot.lot && lot.lot !== 'N/A')
+                    .map(lot => ({
+                        assay_id: assay.id,
+                        reagent_type: reagentType,
+                        lot: lot.lot,
+                        cycles: lot.cycles || 0
+                    }))
+            );
+        });
+
+        if (allLots.length > 0) {
+            await this.bulkInsert(tx, 'assay_lots', lotColumns, allLots, lot => [
+                lot.assay_id,
+                lot.reagent_type,
+                lot.lot,
+                lot.cycles,
+            ], { delete: false }); // Desativa a deleção automática
+        }
     }
+
+    /**
+     * Versão DELTA: UPSERT de ensaios históricos e substituição de lots por assay
+     */
+    private async saveHistoricalAssaysDelta(tx: any, assays: any[]) {
+        if (!assays || assays.length === 0) {
+            return;
+        }
+
+        const assaySql = `
+            INSERT OR REPLACE INTO historical_assays 
+            (id, protocol, orcamento, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, report, consumption, total_consumption)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const batchSize = 100;
+        for (let i = 0; i < assays.length; i += batchSize) {
+            const batch = assays.slice(i, i + batchSize);
+            for (const assay of batch) {
+                await tx.runQuery(assaySql, [
+                    assay.id,
+                    assay.protocol || 'Não especificado',
+                    assay.orcamento || 'Não especificado',
+                    assay.assayManufacturer || 'Não especificado',
+                    assay.model || 'Não especificado',
+                    assay.nominalLoad || 0,
+                    assay.tensao || 0,
+                    assay.startDate || new Date().toISOString(),
+                    assay.endDate || new Date().toISOString(),
+                    assay.setup || 1,
+                    assay.status || 'completed',
+                    assay.type || 'efficiency',
+                    assay.observacoes,
+                    assay.cycles,
+                    assay.report,
+                    JSON.stringify(assay.consumption) || null,
+                    assay.totalConsumption || null,
+                ]);
+
+                // Log para backup incremental
+                this.incrementalBackup.logChange('historical_assays', 'UPDATE', assay.id, undefined, assay);
+
+                // Atualizar lots deste assay: limpa existentes e insere os novos
+                await tx.runQuery('DELETE FROM assay_lots WHERE assay_id = ?', [assay.id]);
+                if (assay.lots) {
+                    const lotSql = `INSERT OR REPLACE INTO assay_lots (assay_id, reagent_type, lot, cycles) VALUES (?, ?, ?, ?)`;
+                    for (const [reagentType, lots] of Object.entries(assay.lots)) {
+                        for (const lot of (lots as any[])) {
+                            if (lot.lot && lot.lot !== 'N/A') {
+                                await tx.runQuery(lotSql, [assay.id, reagentType, lot.lot, lot.cycles || 0]);
+                                this.incrementalBackup.logChange('assay_lots', 'UPDATE', `${assay.id}-${reagentType}-${lot.lot}`, undefined, lot);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    
 
     private async saveScheduledAssays(tx: any, assays: any[]) {
-    const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers'];
-    await this.bulkInsert(tx, 'scheduled_assays', columns, assays, assay => [
-        assay.id,
-        assay.protocol || 'Não especificado',
-        assay.orcamento || 'Não especificado',
-        assay.reportDate || '',
-        assay.assayManufacturer || 'Não especificado',
-        assay.model || 'Não especificado',
-        assay.nominalLoad || 0,
-        assay.tensao || 0,
-        assay.startDate || new Date().toISOString(),
-        assay.endDate || new Date().toISOString(),
-        assay.setup || 1,
-        assay.status || 'scheduled',
-        assay.type || 'efficiency',
-        assay.observacoes,
-        assay.cycles,
-        JSON.stringify(assay.plannedSuppliers || null),
-    ]);
+        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers'];
+        await this.bulkInsert(tx, 'scheduled_assays', columns, assays, assay => [
+            assay.id,
+            assay.protocol || 'Não especificado',
+            assay.orcamento || 'Não especificado',
+            assay.reportDate || '',
+            assay.assayManufacturer || 'Não especificado',
+            assay.model || 'Não especificado',
+            assay.nominalLoad || 0,
+            assay.tensao || 0,
+            assay.startDate || new Date().toISOString(),
+            assay.endDate || new Date().toISOString(),
+            assay.setup || 1,
+            assay.status || 'scheduled',
+            assay.type || 'efficiency',
+            assay.observacoes,
+            assay.cycles,
+            JSON.stringify(assay.plannedSuppliers || null),
+        ]);
+    }
+
+    /**
+     * Versão DELTA: UPSERT de ensaios agendados
+     */
+    private async upsertScheduledAssays(tx: any, assays: any[]) {
+        if (!assays || assays.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO scheduled_assays 
+            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const batchSize = 100;
+        for (let i = 0; i < assays.length; i += batchSize) {
+            const batch = assays.slice(i, i + batchSize);
+            for (const assay of batch) {
+                await tx.runQuery(sql, [
+                    assay.id,
+                    assay.protocol || 'Não especificado',
+                    assay.orcamento || 'Não especificado',
+                    assay.reportDate || '',
+                    assay.assayManufacturer || 'Não especificado',
+                    assay.model || 'Não especificado',
+                    assay.nominalLoad || 0,
+                    assay.tensao || 0,
+                    assay.startDate || new Date().toISOString(),
+                    assay.endDate || new Date().toISOString(),
+                    assay.setup || 1,
+                    assay.status || 'scheduled',
+                    assay.type || 'efficiency',
+                    assay.observacoes,
+                    assay.cycles,
+                    JSON.stringify(assay.plannedSuppliers || null),
+                ]);
+
+                // Log para backup incremental
+                this.incrementalBackup.logChange('scheduled_assays', 'UPDATE', assay.id, undefined, assay);
+            }
+        }
     }
 
     private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
-    const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers'];
-    await this.bulkInsert(tx, 'safety_scheduled_assays', columns, assays, assay => [
-        assay.id,
-        assay.protocol || 'Não especificado',
-        assay.orcamento || 'Não especificado',
-        assay.reportDate || '',
-        assay.assayManufacturer || 'Não especificado',
-        assay.model || 'Não especificado',
-        assay.nominalLoad || 0,
-        assay.tensao || 0,
-        assay.startDate || new Date().toISOString(),
-        assay.endDate || new Date().toISOString(),
-        assay.setup || 1,
-        assay.status || 'scheduled',
-        assay.type || 'safety',
-        assay.observacoes,
-        assay.cycles,
-        assay.subRowIndex || assay.sub_row_index || 0,
-        JSON.stringify(assay.plannedSuppliers || null),
-    ]);
+        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers'];
+        await this.bulkInsert(tx, 'safety_scheduled_assays', columns, assays, assay => [
+            assay.id,
+            assay.protocol || 'Não especificado',
+            assay.orcamento || 'Não especificado',
+            assay.reportDate || '',
+            assay.assayManufacturer || 'Não especificado',
+            assay.model || 'Não especificado',
+            assay.nominalLoad || 0,
+            assay.tensao || 0,
+            assay.startDate || new Date().toISOString(),
+            assay.endDate || new Date().toISOString(),
+            assay.setup || 1,
+            assay.status || 'scheduled',
+            assay.type || 'safety',
+            assay.observacoes,
+            assay.cycles,
+            assay.subRowIndex || assay.sub_row_index || 0,
+            JSON.stringify(assay.plannedSuppliers || null),
+        ]);
+    }
+
+    /**
+     * Versão DELTA: UPSERT de ensaios agendados de segurança
+     */
+    private async upsertSafetyScheduledAssays(tx: any, assays: any[]) {
+        if (!assays || assays.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO safety_scheduled_assays 
+            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const batchSize = 100;
+        for (let i = 0; i < assays.length; i += batchSize) {
+            const batch = assays.slice(i, i + batchSize);
+            for (const assay of batch) {
+                await tx.runQuery(sql, [
+                    assay.id,
+                    assay.protocol || 'Não especificado',
+                    assay.orcamento || 'Não especificado',
+                    assay.reportDate || '',
+                    assay.assayManufacturer || 'Não especificado',
+                    assay.model || 'Não especificado',
+                    assay.nominalLoad || 0,
+                    assay.tensao || 0,
+                    assay.startDate || new Date().toISOString(),
+                    assay.endDate || new Date().toISOString(),
+                    assay.setup || 1,
+                    assay.status || 'scheduled',
+                    assay.type || 'safety',
+                    assay.observacoes,
+                    assay.cycles,
+                    assay.subRowIndex || assay.sub_row_index || 0,
+                    JSON.stringify(assay.plannedSuppliers || null),
+                ]);
+
+                // Log para backup incremental
+                this.incrementalBackup.logChange('safety_scheduled_assays', 'UPDATE', assay.id, undefined, assay);
+            }
+        }
     }
 
     private async saveCalibrations(tx: any, calibrations: any[]) {
-    const columns = ['id', 'protocol', 'start_date', 'end_date', 'type', 'status', 'affected_terminals'];
-    await this.bulkInsert(tx, 'calibrations', columns, calibrations, cal => [
-        cal.id,
-        cal.equipment || cal.protocol || 'Não especificado',
-        cal.startDate || new Date().toISOString(),
-        cal.endDate || new Date().toISOString(),
-        cal.type || 'calibration',
-        cal.status || 'scheduled',
-        cal.observacoes || cal.affected_terminals || '',
-    ]);
+        const columns = ['id', 'protocol', 'start_date', 'end_date', 'type', 'status', 'affected_terminals'];
+        await this.bulkInsert(tx, 'calibrations', columns, calibrations, cal => [
+            cal.id,
+            cal.equipment || cal.protocol || 'Não especificado',
+            cal.startDate || new Date().toISOString(),
+            cal.endDate || new Date().toISOString(),
+            cal.type || 'calibration',
+            cal.status || 'scheduled',
+            cal.observacoes || cal.affected_terminals || '',
+        ]);
+    }
+
+    private async upsertCalibrations(tx: any, calibrations: any[]) {
+        if (!calibrations || calibrations.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO calibrations 
+            (id, protocol, start_date, end_date, type, status, affected_terminals)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+        for (const cal of calibrations) {
+            await tx.runQuery(sql, [
+                cal.id,
+                cal.equipment || cal.protocol || 'Não especificado',
+                cal.startDate || new Date().toISOString(),
+                cal.endDate || new Date().toISOString(),
+                cal.type || 'calibration',
+                cal.status || 'scheduled',
+                cal.observacoes || cal.affected_terminals || '',
+            ]);
+
+            // Log para backup incremental
+            this.incrementalBackup.logChange('calibrations', 'UPDATE', cal.id, undefined, cal);
+        }
     }
 
     private async saveCalibrationEquipments(tx: any, equipments: any[]) {
-    const columns = ['id', 'tag', 'equipment', 'validity', 'observations', 'calibration_status', 'calibration_start_date'];
-    await this.bulkInsert(tx, 'calibration_equipments', columns, equipments, eq => [
-        eq.id,
-        eq.tag || eq.name || `TAG-${eq.id}`,
-        eq.equipment || eq.name || 'Equipamento',
-        eq.validity || '',
-        eq.observations || '',
-        eq.calibrationStatus || 'disponivel',
-        eq.calibrationStartDate || null,
-    ]);
+        const columns = ['id', 'tag', 'equipment', 'validity', 'observations', 'calibration_status', 'calibration_start_date'];
+        await this.bulkInsert(tx, 'calibration_equipments', columns, equipments, eq => [
+            eq.id,
+            eq.tag || eq.name || `TAG-${eq.id}`,
+            eq.equipment || eq.name || 'Equipamento',
+            eq.validity || '',
+            eq.observations || '',
+            eq.calibrationStatus || 'disponivel',
+            eq.calibrationStartDate || null,
+        ]);
+    }
+
+    private async upsertCalibrationEquipments(tx: any, equipments: any[]) {
+        if (!equipments || equipments.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO calibration_equipments 
+            (id, tag, equipment, validity, observations, calibration_status, calibration_start_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+        for (const eq of equipments) {
+            await tx.runQuery(sql, [
+                eq.id,
+                eq.tag || eq.name || `TAG-${eq.id}`,
+                eq.equipment || eq.name || 'Equipamento',
+                eq.validity || '',
+                eq.observations || '',
+                eq.calibrationStatus || 'disponivel',
+                eq.calibrationStartDate || null,
+            ]);
+
+            // Log para backup incremental
+            this.incrementalBackup.logChange('calibration_equipments', 'UPDATE', eq.id, undefined, eq);
+        }
     }
 
     private async saveHolidays(tx: any, holidays: any[]) {
-    const columns = ['id', 'name', 'start_date', 'end_date'];
-    await this.bulkInsert(tx, 'holidays', columns, holidays, holiday => [
-        holiday.id,
-        holiday.name || 'Feriado',
-        holiday.startDate || holiday.date || new Date().toISOString(),
-        holiday.endDate || holiday.date || new Date().toISOString(),
-    ]);
+        const columns = ['id', 'name', 'start_date', 'end_date'];
+        await this.bulkInsert(tx, 'holidays', columns, holidays, holiday => [
+            holiday.id,
+            holiday.name || 'Feriado',
+            holiday.startDate || holiday.date || new Date().toISOString(),
+            holiday.endDate || holiday.date || new Date().toISOString(),
+        ]);
+    }
+
+    private async upsertHolidays(tx: any, holidays: any[]) {
+        if (!holidays || holidays.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO holidays (id, name, start_date, end_date) VALUES (?, ?, ?, ?)
+        `;
+        for (const holiday of holidays) {
+            await tx.runQuery(sql, [
+                holiday.id,
+                holiday.name || 'Feriado',
+                holiday.startDate || holiday.date || new Date().toISOString(),
+                holiday.endDate || holiday.date || new Date().toISOString(),
+            ]);
+
+            // Log para backup incremental
+            this.incrementalBackup.logChange('holidays', 'UPDATE', holiday.id, undefined, holiday);
+        }
     }
 
     private async saveSettings(tx: any, settings: Record<string, any>) {
-    const settingsData = Object.entries(settings);
-    const columns = ['key', 'value'];
-    await this.bulkInsert(tx, 'settings', columns, settingsData, ([key, value]) => [
-        key,
-        JSON.stringify(value),
-    ]);
+        const settingsData = Object.entries(settings);
+        const columns = ['key', 'value'];
+        await this.bulkInsert(tx, 'settings', columns, settingsData, ([key, value]) => [
+            key,
+            JSON.stringify(value),
+        ]);
+    }
+
+    private async upsertSettings(tx: any, settings: Record<string, any>) {
+        const settingsData = Object.entries(settings);
+        const sql = 'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)';
+        for (const [key, value] of settingsData) {
+            await tx.runQuery(sql, [key, JSON.stringify(value)]);
+            this.incrementalBackup.logChange('settings', 'UPDATE', key, undefined, value);
+        }
     }
 
     private async saveCategories(tx: any, table: string, categories: any[]) {
-    const columns = ['id', 'name'];
-    await this.bulkInsert(tx, table, columns, categories, category => [
-        category.id,
-        category.name || 'Categoria',
-    ]);
+        const columns = ['id', 'name'];
+        await this.bulkInsert(tx, table, columns, categories, category => [
+            category.id,
+            category.name || 'Categoria',
+        ]);
+        }
+
+    private async upsertCategories(tx: any, table: string, categories: any[]) {
+        if (!categories || categories.length === 0) {
+            return;
+        }
+        const sql = `INSERT OR REPLACE INTO ${table} (id, name) VALUES (?, ?)`;
+        for (const category of categories) {
+            await tx.runQuery(sql, [category.id, category.name || 'Categoria']);
+            this.incrementalBackup.logChange(table, 'UPDATE', category.id, undefined, category);
+        }
     }
 
     private async saveSystemUsers(tx: any, users: Record<string, any>) {
@@ -1210,6 +1677,20 @@ export class DatabaseManager {
         userData.display_name || userData.displayName || userId,
         JSON.stringify(userData.permissions || []),
     ]);
+    }
+
+    private async upsertSystemUsers(tx: any, users: Record<string, any>) {
+        const usersData = Object.entries(users);
+        const sql = 'INSERT OR REPLACE INTO system_users (username, type, display_name, permissions) VALUES (?, ?, ?, ?)';
+        for (const [userId, userData] of usersData) {
+            await tx.runQuery(sql, [
+                userId,
+                userData.type || 'user',
+                userData.display_name || userData.displayName || userId,
+                JSON.stringify(userData.permissions || []),
+            ]);
+            this.incrementalBackup.logChange('system_users', 'UPDATE', userId, undefined, userData);
+        }
     }
 
     /**
@@ -1225,6 +1706,22 @@ export class DatabaseManager {
                     } else {
                         console.log('✅ Conexão com banco de dados fechada');
                         this.db = null;
+                        // Fecha conexão somente leitura
+                        if (this.roDb) {
+                            this.roDb.close((roErr) => {
+                                if (roErr) {
+                                    console.warn('⚠️ Erro ao fechar conexão somente leitura:', roErr);
+                                } else {
+                                    console.log('✅ Conexão somente leitura fechada');
+                                }
+                                this.roDb = null;
+                            });
+                        }
+                        // Cancela VACUUM agendado
+                        if (this.vacuumTimer) {
+                            clearTimeout(this.vacuumTimer);
+                            this.vacuumTimer = null;
+                        }
                         resolve();
                     }
                 });
@@ -1487,16 +1984,25 @@ export class DatabaseManager {
         // Usar dados sanitizados
         const sanitizedSettings = validation.sanitizedData;
         
-        // Atualiza apenas os campos específicos das configurações sanitizadas
-        const updates = Object.keys(sanitizedSettings).map(key => 
-            `UPDATE settings SET value = ? WHERE key = ?`
-        );
-        
-        for (let i = 0; i < updates.length; i++) {
-            const key = Object.keys(sanitizedSettings)[i];
-            const value = typeof sanitizedSettings[key] === 'object' ? 
-                JSON.stringify(sanitizedSettings[key]) : sanitizedSettings[key];
-            await this.runQuery(updates[i], [value, key]);
+        // Atualiza campos específicos e registra mudanças incrementalmente por chave
+        const keys = Object.keys(sanitizedSettings);
+        for (const key of keys) {
+            const newValueRaw = sanitizedSettings[key];
+            const newValue = typeof newValueRaw === 'object' ? JSON.stringify(newValueRaw) : newValueRaw;
+
+            // Obter valor antigo para log (se existir)
+            const existing = await this.selectQuery('SELECT value FROM settings WHERE key = ?', [key]);
+            const oldValue = existing.length > 0 ? existing[0].value : undefined;
+
+            // Atualiza ou insere a configuração
+            await this.runQuery('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, newValue]);
+
+            // Registrar mudança incremental por chave
+            try {
+                this.incrementalBackup.logChange('settings', 'UPDATE', key, oldValue, newValue);
+            } catch (err) {
+                // Falha no log não deve interromper atualização de configurações
+            }
         }
     }
 

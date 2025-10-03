@@ -37,6 +37,8 @@ out/
 
 # Excluir arquivos de documentação do template
 vsc-extension-quickstart.md
+database.sqlite
+
 
 # Excluir arquivos temporários
 temp_vsix/
@@ -48,3 +50,4 @@ temp_vsix/
 !dist/
 !dist/**
 !dist/pdfkit/**
+

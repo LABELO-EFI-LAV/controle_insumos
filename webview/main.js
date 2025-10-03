@@ -5662,7 +5662,7 @@ const dataHandlers = {
     updateSystemSettings: (settings) => {
         console.log('[WEBVIEW] Atualizando configurações do sistema:', settings);
         vscode.postMessage({
-            command: 'updateSystemSettings',
+            command: 'updateSettings',
             data: settings
         });
     },
@@ -7008,42 +7008,72 @@ handleUpdateCalibration: (e) => {
         state.selectedAssayId = null;
     },
 
-    /** Salva as configurações. */
+    /** Salva as configurações com atualização granular. */
     saveSettings: () => {
         const form = document.querySelector('#settings-form');
         if (!form) {
-            // Fallback para salvar sem validação se o formulário não for encontrado
-            dataHandlers.saveData();
+            // Fallback: envia todas as configurações atuais
+            dataHandlers.updateSystemSettings(state.settings);
+            notificationSystem.send(
+                'Configurações Atualizadas',
+                `✅ Configurações aplicadas (fallback sem validação).`,
+                'success'
+            );
             return;
         }
-        
-        // Coleta dados do formulário
+
+        // Coleta dados do formulário com tolerância a diferentes nomes/ids
+        const calibrationDaysInput = form.querySelector('[name="calibrationAlertDays"]') || document.getElementById('setting-calibration-threshold');
+        const alertThresholdInput = form.alertThreshold || document.getElementById('setting-threshold');
+
         const formData = {
             notificationEmail: form.notificationEmail?.value?.trim() || state.settings.notificationEmail,
-            alertThreshold: form.alertThreshold?.value || state.settings.alertThreshold,
+            alertThreshold: alertThresholdInput?.value ?? state.settings.alertThreshold,
+            calibrationAlertDays: calibrationDaysInput?.value ?? state.settings.calibrationAlertDays,
             schedulePassword: form.schedulePassword?.value || state.settings.schedulePassword
         };
-        
-        // Valida os dados
+
+        // Validação
         const errors = validator.validateSettings(formData);
-        
         if (errors.length > 0) {
             validator.displayErrors(errors, form);
             return;
         }
-        
-        // Salva as configurações
-        state.settings = {
-            ...state.settings,
-            notificationEmail: formData.notificationEmail,
-            alertThreshold: parseInt(formData.alertThreshold),
-            schedulePassword: formData.schedulePassword
-        };
-        
-        dataHandlers.saveData();
+
+        // Calcula apenas chaves alteradas
+        const changes = {};
+        const prev = { ...state.settings };
+        const parsedAlertThreshold = parseInt(formData.alertThreshold, 10);
+        const parsedCalibrationDays = parseInt(formData.calibrationAlertDays, 10);
+
+        if (formData.notificationEmail !== prev.notificationEmail) {
+            changes.notificationEmail = formData.notificationEmail;
+        }
+        if (!Number.isNaN(parsedAlertThreshold) && parsedAlertThreshold !== prev.alertThreshold) {
+            changes.alertThreshold = parsedAlertThreshold;
+        }
+        if (!Number.isNaN(parsedCalibrationDays) && parsedCalibrationDays !== prev.calibrationAlertDays) {
+            changes.calibrationAlertDays = parsedCalibrationDays;
+        }
+        if (formData.schedulePassword !== prev.schedulePassword) {
+            changes.schedulePassword = formData.schedulePassword;
+        }
+
+        // Se nada mudou, evita envio desnecessário
+        if (Object.keys(changes).length === 0) {
+            utils.showToast('Nenhuma alteração nas configurações para salvar.');
+            return;
+        }
+
+        // Envia apenas alterações
+        dataHandlers.updateSystemSettings(changes);
+
+        // Atualiza estado local após envio
+        state.settings = { ...state.settings, ...changes };
+
         notificationSystem.send(
             'Configurações Atualizadas com Sucesso',
-            `✅ OPERAÇÃO CONCLUÍDA: Todas as configurações do sistema foram salvas e aplicadas.`,
+            `✅ OPERAÇÃO CONCLUÍDA: Configurações alteradas foram salvas e aplicadas.`,
             'success'
         );
     },
@@ -9436,7 +9466,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newPassword = DOM.settingSchedulePasswordInput.value;
         if (newPassword && newPassword.length >= 4) {
             state.settings.schedulePassword = newPassword;
-            dataHandlers.updateSystemSettings(state.settings);
+            dataHandlers.updateSystemSettings({ schedulePassword: newPassword });
             utils.showToast("Senha do cronograma atualizada com sucesso!");
             DOM.settingSchedulePasswordInput.value = '';
         } else {

@@ -38,6 +38,7 @@ class BackupManager {
     private backupDir: string;
     private maxBackups: number = 30; // Manter 30 backups
     private backupInterval: NodeJS.Timeout | null = null;
+    private initialBackupTimeout: NodeJS.Timeout | null = null;
 
     constructor(workspaceRoot: string) {
         this.backupDir = path.join(workspaceRoot, '.labcontrol-backups');
@@ -224,9 +225,13 @@ class BackupManager {
         if (this.backupInterval) {
             clearInterval(this.backupInterval);
         }
-
-        // Backup imediato
-        this.createBackup(dbPath);
+        // Atrasar backup inicial para evitar I/O pesado no startup
+        if (this.initialBackupTimeout) {
+            clearTimeout(this.initialBackupTimeout);
+        }
+        this.initialBackupTimeout = setTimeout(() => {
+            this.createBackup(dbPath);
+        }, 5 * 60 * 1000); // 5 minutos
 
         // Backup a cada 6 horas (21600000 ms)
         this.backupInterval = setInterval(() => {
@@ -245,12 +250,19 @@ class BackupManager {
             this.backupInterval = null;
             // Sistema de backup automático parado
         }
+        if (this.initialBackupTimeout) {
+            clearTimeout(this.initialBackupTimeout);
+            this.initialBackupTimeout = null;
+        }
     }
 }
 
 let backupManager: BackupManager | null = null;
 let databaseManager: DatabaseManager | null = null;
 let isCommandRegistered = false;
+let readonlyMode: boolean = false;
+// Mantém o último conjunto de dados carregado com sucesso
+let lastKnownData: any | null = null;
 
 // --- FUNÇÕES DE CÁLCULO OTIMIZADAS ---
 // Calcula o número de tiras de sujidade com base na carga nominal
@@ -1540,10 +1552,26 @@ export async function activate(context: vscode.ExtensionContext) {
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
             await databaseManager.initialize();
+            // Se a inicialização encontrou busy/locked, abrir em modo leitura
+            if (databaseManager.wasBusyOnInit && typeof databaseManager.wasBusyOnInit === 'function') {
+                const initBusy = databaseManager.wasBusyOnInit();
+                if (initBusy) {
+                    readonlyMode = true;
+                    vscode.window.showWarningMessage('Banco ocupado/bloqueado na inicialização. Abrindo extensão em modo somente leitura.');
+                }
+            }
             
             // Banco de dados SQLite inicializado com sucesso
             return true;
         } catch (error) {
+            const message = (error as Error)?.message?.toLowerCase() || '';
+            const isBusy = message.includes('sqlite_busy') || message.includes('busy') || message.includes('locked');
+            if (isBusy) {
+                // Banco ocupado/bloqueado: seguir em modo somente leitura
+                readonlyMode = true;
+                vscode.window.showWarningMessage('Banco ocupado/bloqueado. Abrindo extensão em modo somente leitura.');
+                return true; // permitir abertura do painel
+            }
             handleError(error, 'ERRO ao inicializar banco de dados SQLite:');
             return false;
         }
@@ -1567,8 +1595,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // Inicializa o banco de dados SQLite
         const dbInitialized = await initializeDatabase();
         if (!dbInitialized) {
-            vscode.window.showErrorMessage('Erro ao inicializar banco de dados. A extensão pode não funcionar corretamente.');
-            return;
+            // Não bloquear abertura do painel; permitir modo leitura mesmo em erro
+            readonlyMode = true;
+            vscode.window.showWarningMessage('Falha ao inicializar banco de dados. Abrindo em modo somente leitura.');
         }
         
         // Inicializa o sistema de backup
@@ -1613,6 +1642,17 @@ export async function activate(context: vscode.ExtensionContext) {
         const dbPath = getDbPath();
         if (!dbPath) return;
 
+        // Guarda simples para evitar consultas concorrentes
+        let isFetchingData = false;
+
+        // Define baseline do mtime do banco para evitar disparo imediato do watcher
+        try {
+            const initialStats = fs.statSync(dbPath);
+            lastDbUpdateTime = initialStats.mtime.getTime();
+        } catch (e) {
+            console.warn('[File Watcher] Não foi possível obter mtime inicial do banco.', e);
+        }
+
         // Inicia o "vigia" do arquivo
         const fileWatcherInterval = setInterval(async () => {
             try {
@@ -1620,17 +1660,26 @@ export async function activate(context: vscode.ExtensionContext) {
                 const mtimeMs = stats.mtime.getTime();
 
                 // Se o arquivo foi modificado desde a última verificação
-                if (mtimeMs > lastDbUpdateTime) {
+                if (mtimeMs > lastDbUpdateTime && !isFetchingData) {
                     console.log('[File Watcher] Mudança detectada no banco de dados. Recarregando...');
                     lastDbUpdateTime = mtimeMs; // Atualiza o tempo
 
                     if (databaseManager) {
-                        const updatedData = await databaseManager.getAllData();
-                        // Envia uma mensagem para o frontend forçar a atualização
-                        panel.webview.postMessage({
-                            command: 'forceDataRefresh',
-                            data: updatedData
-                        });
+                        isFetchingData = true;
+                        try {
+                            const updatedData = await databaseManager.getAllData();
+                            // Atualiza cache de dados para fallback
+                            lastKnownData = updatedData;
+                            // Envia uma mensagem para o frontend forçar a atualização
+                            panel.webview.postMessage({
+                                command: 'forceDataRefresh',
+                                data: updatedData
+                            });
+                        } catch (err) {
+                            console.error('[File Watcher] Erro ao recarregar dados:', err);
+                        } finally {
+                            isFetchingData = false;
+                        }
                     }
                 }
             } catch (err) {
@@ -1663,6 +1712,8 @@ export async function activate(context: vscode.ExtensionContext) {
                         
                         // Carregando dados do banco
                         const database = await databaseManager.getAllData();
+                        // Cacheia último dado válido para fallback futuro
+                        lastKnownData = database;
                         // Dados carregados do banco
                         
                         // Obtém o nome do usuário do sistema operacional
@@ -1713,10 +1764,94 @@ export async function activate(context: vscode.ExtensionContext) {
                         panel.webview.postMessage({
                             command: 'loadData',
                             data: database,
-                            currentUser: currentUser
+                            currentUser: currentUser,
+                            readonly: readonlyMode
                         });
                     } catch (err) {
-                        handleError(err, 'ERRO AO LER/ENVIAR DADOS DO SQLITE:');
+                        // Fallback suave quando o banco estiver ocupado/bloqueado ou ocorrer erro
+                        const isBusy = err instanceof Error && (err.message.includes('SQLITE_BUSY') || err.message.toLowerCase().includes('locked'));
+                        console.warn('[EXT] Falha ao carregar dados iniciais.', isBusy ? 'Banco ocupado/bloqueado.' : err);
+                        
+                        // Define um conjunto mínimo de dados ou usa o último cache válido
+                        const defaultUsers = {
+                            '10088141': {
+                                username: '10088141',
+                                type: 'administrador',
+                                displayName: 'Administrador',
+                                permissions: {
+                                    editHistory: true,
+                                    addEditSupplies: true,
+                                    accessSettings: true,
+                                    editSchedule: true,
+                                    dragAndDrop: true,
+                                    editCompletedAssays: true,
+                                    addAssays: true
+                                }
+                            }
+                        };
+                        const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                        const fallbackData = lastKnownData || {
+                            inventory: [],
+                            historicalAssays: [],
+                            scheduledAssays: [],
+                            safetyScheduledAssays: [],
+                            holidays: [],
+                            calibrations: [],
+                            calibrationEquipments: [],
+                            settings: {},
+                            systemUsers: defaultUsers,
+                            efficiencyCategories: [],
+                            safetyCategories: []
+                        };
+                        const systemUsers = fallbackData.systemUsers || defaultUsers;
+                        const currentUser = systemUsers[systemUsername] || {
+                            username: systemUsername,
+                            type: 'visualizador',
+                            displayName: 'Visualizador',
+                            permissions: {
+                                editHistory: false,
+                                addEditSupplies: false,
+                                accessSettings: false,
+                                editSchedule: false,
+                                dragAndDrop: false,
+                                editCompletedAssays: false,
+                                addAssays: false
+                            }
+                        };
+
+                        // Entrega dados de fallback para permitir que a interface carregue
+                        panel.webview.postMessage({
+                            command: 'loadData',
+                            data: fallbackData,
+                            currentUser,
+                            readonly: true
+                        });
+
+                        // Tenta atualização em segundo plano com backoff exponencial limitado
+                        let attempt = 0;
+                        const maxAttempts = 5;
+                        const tryRefresh = async () => {
+                            attempt++;
+                            try {
+                                if (!databaseManager) return;
+                                const refreshed = await databaseManager.getAllData();
+                                lastKnownData = refreshed;
+                                panel.webview.postMessage({
+                                    command: 'forceDataRefresh',
+                                    data: refreshed
+                                });
+                                console.log('[EXT] Atualização em segundo plano concluída.');
+                            } catch (e) {
+                                if (attempt < maxAttempts) {
+                                    const delay = Math.min(3000 * Math.pow(2, attempt - 1), 30000); // até 30s
+                                    console.log(`[EXT] Retentando atualização em ${delay}ms (tentativa ${attempt}/${maxAttempts})...`);
+                                    setTimeout(tryRefresh, delay);
+                                } else {
+                                    console.warn('[EXT] Falha ao atualizar em segundo plano após várias tentativas.', e);
+                                }
+                            }
+                        };
+                        setTimeout(tryRefresh, 3000);
                     }
                     break;
 
@@ -2086,30 +2221,13 @@ export async function activate(context: vscode.ExtensionContext) {
                         if (!databaseManager) {
                             throw new Error('DatabaseManager não inicializado');
                         }
-
-                        // Obtém dados atuais do banco
-                        const currentDatabase = await databaseManager.getAllData();
-                        
-                        // Mescla com os novos dados
-                        const dataToSave = {
-                            ...currentDatabase,
-                            ...message.data
-                        };
-
-                        // Salva no SQLite
-                        await databaseManager.saveData(dataToSave);
+                        // Salva apenas o delta recebido, usando UPSERTs curtos
+                        await databaseManager.saveDataDelta(message.data);
                         
                         // Dados salvos com sucesso no SQLite
                         
-                        // Cria backup do SQLite
-                        if (backupManager) {
-                            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                            if (workspaceRoot) {
-                                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                                const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
-                                await databaseManager.createBackup(backupPath);
-                            }
-                        }
+                        // Cria backup incremental das mudanças para evitar cópia pesada do SQLite
+                        await databaseManager.createIncrementalBackup();
                     } catch (err) {
                         handleError(err, 'ERRO AO SALVAR DADOS NO SQLITE:');
                     }
@@ -2140,26 +2258,11 @@ export async function activate(context: vscode.ExtensionContext) {
                         if (!databaseManager) {
                             throw new Error('DatabaseManager não inicializado');
                         }
+                        // Salva apenas o delta do cronograma
+                        await databaseManager.saveDataDelta(message.data);
 
-                        // Obtém dados atuais do banco
-                        const currentDatabase = await databaseManager.getAllData();
-                        
-                        // Mescla com os novos dados do cronograma
-                        const dataToSave = {
-                            ...currentDatabase,
-                            ...message.data
-                        };
-
-                        // Salva no SQLite
-                        await databaseManager.saveData(dataToSave);
-                        
-                        // Cria backup do banco de dados
-                        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                        if (workspaceRoot) {
-                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                            const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
-                            await databaseManager.createBackup(backupPath);
-                        }
+                        // Cria backup incremental das mudanças para evitar cópia pesada do SQLite
+                        await databaseManager.createIncrementalBackup();
                         
                         console.log('[EXTENSION] Dados do cronograma salvos com sucesso no SQLite');
                         
@@ -2343,15 +2446,10 @@ export async function activate(context: vscode.ExtensionContext) {
                             });
                             return;
                         }
-                        
-                        // Obtém dados atuais
-                        const database = await databaseManager.getAllData();
-                        
-                        // Atualiza os usuários do sistema
-                        database.systemUsers = message.data.systemUsers;
-                        
-                        // Salva no SQLite
-                        await databaseManager.saveData(database);
+                        // Salva apenas o delta de usuários do sistema
+                        await databaseManager.saveDataDelta({ systemUsers: message.data.systemUsers });
+                        // Cria backup incremental das mudanças
+                        await databaseManager.createIncrementalBackup();
                         
                         panel.webview.postMessage({
                             command: 'saveSystemUsersResult',
@@ -2359,7 +2457,7 @@ export async function activate(context: vscode.ExtensionContext) {
                             message: 'Usuários do sistema salvos com sucesso!'
                         });
                         
-                        console.log('✅ Usuários do sistema salvos:', Object.keys(message.data.systemUsers));
+                        console.log('✅ Usuários do sistema salvos (delta):', Object.keys(message.data.systemUsers));
                     } catch (err) {
                         handleError(err, 'ERRO AO SALVAR USUÁRIOS DO SISTEMA:');
                         panel.webview.postMessage({
@@ -2448,8 +2546,15 @@ export async function activate(context: vscode.ExtensionContext) {
                         database.holidays = (database.holidays || []).filter((item: any) => !isInRange(item.startDate));
                         database.calibrations = (database.calibrations || []).filter((item: any) => !isInRange(item.startDate));
                         
-                        // Salva no SQLite
-                        await databaseManager.saveData(database);
+                        // Ativa modo de sincronização FULL para garantir deleções efetivas
+                        databaseManager.setFullSyncMode(true);
+                        try {
+                            // Salva no SQLite com FULL sync (deleções globais controladas)
+                            await databaseManager.saveData(database);
+                        } finally {
+                            // Retorna ao modo DELTA para operações cotidianas rápidas
+                            databaseManager.setFullSyncMode(false);
+                        }
 
                         const newStats = fs.statSync(dbPath);
                         lastDbUpdateTime = newStats.mtime.getTime()
