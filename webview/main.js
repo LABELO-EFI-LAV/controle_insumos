@@ -9263,6 +9263,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     console.log("Dados recebidos da extensão:", message.data);
                     const data = message.data && typeof message.data === 'object' ? message.data : {};
+                    // Captura página corrente antes de atualizar estado
+                    const currentVisiblePage = document.querySelector('.page:not(.hidden)')?.id || 'page-dashboard';
                     
                     // Verifica se há informações de usuário para login automático
                       if (message.currentUser) {
@@ -9347,7 +9349,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.hasUnsavedChanges = false;
                     ui.toggleScheduleActions(false);
                     renderers.renderAll();
-                    renderers.switchPage('page-dashboard');
+                    // Mantém página corrente se solicitado e se não for restrita para visualizador
+                    if (message.preservePage) {
+                        const restrictedPages = ['page-inventory', 'page-assays', 'page-calibrations', 'page-settings'];
+                        const isViewer = message.readonly || (state.currentUser && state.currentUser.type === 'visualizador');
+                        if (isViewer && restrictedPages.includes(currentVisiblePage)) {
+                            renderers.switchPage('page-dashboard');
+                        } else {
+                            renderers.switchPage(currentVisiblePage);
+                        }
+                    } else {
+                        renderers.switchPage('page-dashboard');
+                    }
                 } catch (error) {
                     console.error("Erro durante o processamento de 'loadData':", error);
                     utils.showToast("Ocorreu um erro ao carregar os dados.", true);
@@ -9798,16 +9811,31 @@ assaysFilters.forEach(id => {
         const itemId = parseInt(button.dataset.assayId, 10);
         const isDashboard = button.closest('.dashboard-card') !== null;
         if (isNaN(itemId)) return utils.showToast("Erro: ID inválido.", true);
-        
-        if (isDashboard || (state.currentUser && ((state.currentUser.permissions && state.currentUser.permissions.viewOnly) || state.currentUser.type === 'visualizador'))) {
-            // Modal apenas para visualização (sem botões de ação) - usado no dashboard e para visualizadores
+
+        // No dashboard, manter modal somente visualização
+        if (isDashboard) {
             if (isCalibration) modalHandlers.openViewOnlyCalibrationModal(itemId);
             else modalHandlers.openViewOnlyAssayModal(itemId);
-        } else {
-            // Modal completo com botões de ação
+            return;
+        }
+
+        // Visualizadores devem ver o modal completo no cronograma
+        if (state.currentUser && state.currentUser.type === 'visualizador') {
             if (isCalibration) modalHandlers.openViewGanttCalibrationModal(itemId);
             else modalHandlers.openViewGanttAssayModal(itemId);
+            return;
         }
+
+        // Usuários em modo somente visualização (não visualizadores) continuam com modal de visualização
+        if (state.currentUser && state.currentUser.permissions && state.currentUser.permissions.viewOnly) {
+            if (isCalibration) modalHandlers.openViewOnlyCalibrationModal(itemId);
+            else modalHandlers.openViewOnlyAssayModal(itemId);
+            return;
+        }
+
+        // Caso padrão: modal completo com botões de ação
+        if (isCalibration) modalHandlers.openViewGanttCalibrationModal(itemId);
+        else modalHandlers.openViewGanttAssayModal(itemId);
     } else if (button.classList.contains('btn-edit-reagent')) {
         modalHandlers.openEditReagentModal(parseInt(button.dataset.id, 10));
     } else if (button.classList.contains('btn-edit-gantt-assay')) {
@@ -9846,6 +9874,7 @@ assaysFilters.forEach(id => {
                 try {
                     console.log("Dados recebidos da extensão:", message.data);
                     const data = message.data && typeof message.data === 'object' ? message.data : {};
+                    const currentVisiblePage = document.querySelector('.page:not(.hidden)')?.id || 'page-dashboard';
                     state.inventory = data.inventory || [];
                     state.historicalAssays = data.historicalAssays || [];
                     state.scheduledAssays = data.scheduledAssays || [];
@@ -9859,7 +9888,18 @@ assaysFilters.forEach(id => {
                     if(data.efficiencyCategories) state.efficiencyCategories = data.efficiencyCategories;
                     if(data.safetyCategories) state.safetyCategories = data.safetyCategories;
                     renderers.renderAll();
-                    renderers.switchPage('page-dashboard');
+                    // Mantém página corrente se solicitado e se não for restrita para visualizador
+                    if (message.preservePage) {
+                        const restrictedPages = ['page-inventory', 'page-assays', 'page-calibrations', 'page-settings'];
+                        const isViewer = message.readonly || (state.currentUser && state.currentUser.type === 'visualizador');
+                        if (isViewer && restrictedPages.includes(currentVisiblePage)) {
+                            renderers.switchPage('page-dashboard');
+                        } else {
+                            renderers.switchPage(currentVisiblePage);
+                        }
+                    } else {
+                        renderers.switchPage('page-dashboard');
+                    }
                 } catch (error) {
                     console.error("Erro durante o processamento de 'loadData':", error);
                     utils.showToast("Ocorreu um erro ao carregar os dados.", true);

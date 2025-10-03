@@ -1701,6 +1701,15 @@ export async function activate(context: vscode.ExtensionContext) {
                     console.log('[File Watcher] Mudança detectada no banco de dados. Recarregando...');
                     lastDbUpdateTime = mtimeMs; // Atualiza o tempo
 
+                    // Garante que o gerenciador esteja pronto mesmo se tiver sido desalocado
+                    if (!databaseManager) {
+                        try {
+                            await initializeDatabase();
+                        } catch (e) {
+                            console.warn('[File Watcher] Falha ao re-inicializar DatabaseManager após mudança de arquivo.', e);
+                        }
+                    }
+
                     if (databaseManager) {
                         isFetchingData = true;
                         try {
@@ -2270,18 +2279,60 @@ export async function activate(context: vscode.ExtensionContext) {
                     break;
                     case 'requestManualRefresh':
                         try {
+                            // Garante que o gerenciador de banco esteja pronto antes de sincronizar
                             if (!databaseManager) {
-                                throw new Error('DatabaseManager não inicializado');
+                                const dbOk = await initializeDatabase();
+                                if (!dbOk || !databaseManager) {
+                                    throw new Error('DatabaseManager não inicializado');
+                                }
                             }
                             console.log('[EXTENSION] Recebida solicitação de sincronização manual.');
 
                             // Lê todos os dados mais recentes do arquivo SQLite
                             const updatedData = await databaseManager.getAllData();
+                            lastKnownData = updatedData; // atualiza cache
 
-                            // Envia os dados atualizados de volta para a interface
+                            // Determina usuário atual (mesma lógica usada em 'webviewReady')
+                            const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                            const defaultUsers = {
+                                '10088141': {
+                                    username: '10088141',
+                                    type: 'administrador',
+                                    displayName: 'Administrador',
+                                    permissions: {
+                                        editHistory: true,
+                                        addEditSupplies: true,
+                                        accessSettings: true,
+                                        editSchedule: true,
+                                        dragAndDrop: true,
+                                        editCompletedAssays: true,
+                                        addAssays: true
+                                    }
+                                }
+                            };
+                            const systemUsers = updatedData.systemUsers || defaultUsers;
+                            const currentUser = systemUsers[systemUsername] || {
+                                username: systemUsername,
+                                type: 'visualizador',
+                                displayName: 'Visualizador',
+                                permissions: {
+                                    editHistory: false,
+                                    addEditSupplies: false,
+                                    accessSettings: false,
+                                    editSchedule: false,
+                                    dragAndDrop: false,
+                                    editCompletedAssays: false,
+                                    addAssays: false
+                                }
+                            };
+
+                            // Recarrega a interface como um F5: envia loadData completo
                             panel.webview.postMessage({
-                                command: 'forceDataRefresh', // Reutiliza o comando que a interface já sabe como tratar
-                                data: updatedData
+                                command: 'loadData',
+                                data: updatedData,
+                                currentUser: currentUser,
+                                readonly: readonlyMode,
+                                preservePage: true
                             });
 
                         } catch (err) {
