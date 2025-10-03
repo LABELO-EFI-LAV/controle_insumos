@@ -9,6 +9,28 @@ const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 
 let lastDbUpdateTime: number = 0;
 const POLLING_INTERVAL = 5000;
+
+// Helper: detect latest modification time among DB, WAL and SHM files
+function getDbAuxPaths(dbPath: string): { wal: string; shm: string } {
+    return { wal: `${dbPath}-wal`, shm: `${dbPath}-shm` };
+}
+
+function safeMtimeMs(filePath: string): number {
+    try {
+        const stats = fs.statSync(filePath);
+        return stats.mtime.getTime();
+    } catch {
+        return 0;
+    }
+}
+
+function getLatestDbMTime(dbPath: string): number {
+    const base = safeMtimeMs(dbPath);
+    const { wal, shm } = getDbAuxPaths(dbPath);
+    const walM = safeMtimeMs(wal);
+    const shmM = safeMtimeMs(shm);
+    return Math.max(base, walM, shmM);
+}
 // ========================================================================
 // START: Added Utility Functions
 // ========================================================================
@@ -1647,8 +1669,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Define baseline do mtime do banco para evitar disparo imediato do watcher
         try {
-            const initialStats = fs.statSync(dbPath);
-            lastDbUpdateTime = initialStats.mtime.getTime();
+            lastDbUpdateTime = getLatestDbMTime(dbPath);
         } catch (e) {
             console.warn('[File Watcher] Não foi possível obter mtime inicial do banco.', e);
         }
@@ -1656,8 +1677,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Inicia o "vigia" do arquivo
         const fileWatcherInterval = setInterval(async () => {
             try {
-                const stats = fs.statSync(dbPath);
-                const mtimeMs = stats.mtime.getTime();
+                const mtimeMs = getLatestDbMTime(dbPath);
 
                 // Se o arquivo foi modificado desde a última verificação
                 if (mtimeMs > lastDbUpdateTime && !isFetchingData) {
@@ -1756,8 +1776,7 @@ export async function activate(context: vscode.ExtensionContext) {
                             }
                         };
 
-                        const dbStats = fs.statSync(dbPath);
-                        lastDbUpdateTime = dbStats.mtime.getTime();
+                        lastDbUpdateTime = getLatestDbMTime(dbPath);
                         
                         // Usuário mapeado e dados preparados para webview
                         
@@ -2556,8 +2575,7 @@ export async function activate(context: vscode.ExtensionContext) {
                             databaseManager.setFullSyncMode(false);
                         }
 
-                        const newStats = fs.statSync(dbPath);
-                        lastDbUpdateTime = newStats.mtime.getTime()
+                        lastDbUpdateTime = getLatestDbMTime(dbPath)
                         
                         panel.webview.postMessage({
                             command: 'bulkDeleteResult',
