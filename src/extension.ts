@@ -34,6 +34,18 @@ function getLatestDbMTime(dbPath: string): number {
 // ========================================================================
 // START: Added Utility Functions
 // ========================================================================
+/**
+ * Decide se devemos usar "modo rede" (journal=DELETE, sem WAL).
+ * Critérios:
+ * - Caminho do workspace é UNC (\\servidor\compartilhamento)
+ * - Variável de ambiente LABCONTROL_NETWORK_MODE = 1/true/yes
+ */
+function shouldUseNetworkMode(workspaceRoot: string): boolean {
+    const env = (process.env.LABCONTROL_NETWORK_MODE || '').toLowerCase();
+    const forced = env === '1' || env === 'true' || env === 'yes';
+    const isUNC = workspaceRoot.startsWith('\\\\');
+    return forced || isUNC;
+}
 
 /**
  * Função segura para obter chaves de objetos, evitando erros com null/undefined.
@@ -1573,6 +1585,11 @@ export async function activate(context: vscode.ExtensionContext) {
         try {
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
+            // Ativa automaticamente o modo rede quando apropriado
+            if (shouldUseNetworkMode(rootPath)) {
+                databaseManager.setNetworkMode(true);
+                console.log('[EXTENSION] Modo rede ativado automaticamente (journal=DELETE, synchronous=FULL).');
+            }
             await databaseManager.initialize();
             // Se a inicialização encontrou busy/locked, abrir em modo leitura
             if (databaseManager.wasBusyOnInit && typeof databaseManager.wasBusyOnInit === 'function') {

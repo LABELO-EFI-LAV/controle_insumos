@@ -123,7 +123,15 @@ export class DatabaseManager {
     private vacuumDelayMs: number = 30000; // 30s de inatividade antes de VACUUM
     private enableAutoVacuum: boolean = false; // Flag para desativar VACUUM automático por padrão
     private fullSyncMode: boolean = false; // Flag para escolher entre sincronização completa ou por delta
+    private networkMode: boolean = false; // Quando true, usa PRAGMAs seguros para rede (journal DELETE)
     private initBusy: boolean = false; // Marca se encontrou SQLITE_BUSY/locked na inicialização
+    // Estado para checkpoints WAL
+    private transactionDepth: number = 0; // Suprime checkpoints automáticos durante transações
+    private writesSinceCheckpoint: number = 0; // Número de escritas desde último checkpoint
+    private lastCheckpointTime: number = 0; // Timestamp do último checkpoint
+    private checkpointMinIntervalMs: number = 2000; // Intervalo mínimo entre checkpoints automáticos
+    private checkpointWriteThreshold: number = 20; // Checkpoint após N escritas
+    private walSizeThresholdBytes: number = 512 * 1024; // Checkpoint se WAL exceder 512KB
 
     constructor(workspaceRoot: string) {
         this.dbPath = path.join(workspaceRoot, 'database.sqlite');
@@ -223,6 +231,100 @@ export class DatabaseManager {
 
         return new Promise((resolve, reject) => {
             db.serialize(() => {
+                // Se estiver em modo rede, preferir journal_mode=DELETE e suprimir lógica de WAL
+                if (this.networkMode) {
+                    db.run("PRAGMA journal_mode=DELETE;", (jmErr) => {
+                        if (jmErr) {
+                            const msg = String(jmErr?.message || '').toLowerCase();
+                            if (msg.includes('busy') || msg.includes('locked')) {
+                                this.initBusy = true;
+                                console.warn('⚠️ Banco ocupado ao configurar DELETE journal; seguindo sem alterar.');
+                            } else {
+                                console.error('❌ Erro ao configurar DELETE journal_mode:', jmErr);
+                            }
+                        } else {
+                            console.log('✅ journal_mode=DELETE habilitado (modo rede)');
+                        }
+
+                        // busy_timeout para evitar bloqueios longos
+                        db.run("PRAGMA busy_timeout=10000;", (btErr) => {
+                            if (btErr) {
+                                const msg = String(btErr?.message || '').toLowerCase();
+                                if (msg.includes('busy') || msg.includes('locked')) {
+                                    this.initBusy = true;
+                                    console.warn('⚠️ Banco ocupado ao configurar busy_timeout; mantendo padrão.');
+                                } else {
+                                    console.error('❌ Erro ao configurar busy_timeout:', btErr);
+                                }
+                            } else {
+                                console.log('✅ Busy timeout configurado para 10s');
+                            }
+
+                            // Sincronização FULL para maior durabilidade em rede
+                            db.run("PRAGMA synchronous=FULL;", (syncErr) => {
+                                if (syncErr) {
+                                    const raw = syncErr?.message || '';
+                                    const msg = raw.toLowerCase();
+                                    const isBusy = msg.includes('busy') || msg.includes('locked') || raw.includes('SQLITE_BUSY') || raw.includes('database is locked');
+                                    if (isBusy) {
+                                        this.initBusy = true;
+                                        console.warn('⚠️ Banco ocupado ao configurar synchronous; mantendo configuração atual.', syncErr);
+                                    } else {
+                                        console.warn('⚠️ Aviso ao configurar synchronous (não crítico):', syncErr);
+                                    }
+                                } else {
+                                    console.log('✅ Modo de sincronização FULL configurado');
+                                }
+
+                                // Demais ajustes de performance (idênticos entre modos)
+                                db.run("PRAGMA cache_size=20000;", (csErr) => {
+                                    if (csErr) {
+                                        const msg = String(csErr?.message || '').toLowerCase();
+                                        if (msg.includes('busy') || msg.includes('locked')) {
+                                            this.initBusy = true;
+                                            console.warn('⚠️ Banco ocupado ao configurar cache_size; mantendo configuração atual.');
+                                        } else {
+                                            console.error('❌ Erro ao configurar cache_size:', csErr);
+                                        }
+                                    } else {
+                                        console.log('✅ Cache size configurado para 20MB');
+                                    }
+
+                                    db.run("PRAGMA temp_store=MEMORY;", (tsErr) => {
+                                        if (tsErr) {
+                                            const msg = String(tsErr?.message || '').toLowerCase();
+                                            if (msg.includes('busy') || msg.includes('locked')) {
+                                                this.initBusy = true;
+                                                console.warn('⚠️ Banco ocupado ao configurar temp_store; mantendo configuração atual.');
+                                            } else {
+                                                console.error('❌ Erro ao configurar temp_store:', tsErr);
+                                            }
+                                        } else {
+                                            console.log('✅ Temp store configurado para memória');
+                                        }
+
+                                        db.run("PRAGMA mmap_size=268435456;", (mmErr) => {
+                                            if (mmErr) {
+                                                const msg = String(mmErr?.message || '').toLowerCase();
+                                                if (msg.includes('busy') || msg.includes('locked')) {
+                                                    this.initBusy = true;
+                                                    console.warn('⚠️ Banco ocupado ao configurar mmap_size; mantendo configuração atual.');
+                                                } else {
+                                                    console.error('❌ Erro ao configurar mmap_size:', mmErr);
+                                                }
+                                            } else {
+                                                console.log('✅ Memory-mapped I/O configurado para 256MB');
+                                            }
+                                            // Finaliza configuração em modo rede
+                                            resolve();
+                                        });
+                                    });
+                                });
+                            });
+                        });
+                    });
+                    return; // evitar executar bloco de WAL abaixo
+                }
                 // Habilitar WAL mode para melhor concorrência
                 db.run("PRAGMA journal_mode=WAL;", (err) => {
                     if (err) {
@@ -253,8 +355,9 @@ export class DatabaseManager {
                     }
                 });
 
-                // Configurar sincronização para melhor performance
-                db.run("PRAGMA synchronous=NORMAL;", (err) => {
+                // Configurar sincronização para maior durabilidade em ambientes compartilhados
+                // FULL força flush mais agressivo, melhorando visibilidade entre máquinas em rede
+                db.run("PRAGMA synchronous=FULL;", (err) => {
                     if (err) {
                         const raw = err?.message || '';
                         const msg = raw.toLowerCase();
@@ -267,7 +370,7 @@ export class DatabaseManager {
                         // Outros erros de PRAGMA synchronous não devem travar inicialização
                         console.warn('⚠️ Aviso ao configurar synchronous (não crítico):', err);
                     } else {
-                        console.log('✅ Modo de sincronização NORMAL configurado');
+                        console.log('✅ Modo de sincronização FULL configurado');
                     }
                 });
 
@@ -317,7 +420,8 @@ export class DatabaseManager {
                 });
 
                 // Configurar WAL autocheckpoint para controlar o tamanho do WAL
-                db.run("PRAGMA wal_autocheckpoint=1000;", (err) => {
+                // Reduzido para 100 páginas (~400KB) para checkpoints mais frequentes
+                db.run("PRAGMA wal_autocheckpoint=100;", (err) => {
                     if (err) {
                         const msg = String(err?.message || '').toLowerCase();
                         if (msg.includes('busy') || msg.includes('locked')) {
@@ -329,8 +433,23 @@ export class DatabaseManager {
                             resolve(); // suavizar erro de PRAGMA para não travar init
                         }
                     } else {
-                        console.log('✅ WAL autocheckpoint configurado para 1000 páginas');
-                        resolve();
+                        console.log('✅ WAL autocheckpoint configurado para 100 páginas');
+                        // Em alguns sistemas, habilitar fullfsync no checkpoint pode melhorar a visibilidade imediata
+                        db.run("PRAGMA checkpoint_fullfsync=ON;", (fsErr) => {
+                            if (fsErr) {
+                                const msg = String(fsErr?.message || '').toLowerCase();
+                                if (msg.includes('busy') || msg.includes('locked')) {
+                                    this.initBusy = true;
+                                    console.warn('⚠️ Banco ocupado ao configurar checkpoint_fullfsync; mantendo padrão.');
+                                } else {
+                                    console.warn('⚠️ Aviso ao configurar checkpoint_fullfsync (não crítico):', fsErr);
+                                }
+                                resolve();
+                            } else {
+                                console.log('✅ checkpoint_fullfsync habilitado');
+                                resolve();
+                            }
+                        });
                     }
                 });
             });
@@ -729,6 +848,21 @@ export class DatabaseManager {
                     if (retryCount > 0) {
                         console.log(`✅ Query executada com sucesso após ${retryCount + 1} tentativas`);
                     }
+                    // Após uma escrita fora de transação, verificar se devemos executar checkpoint
+                    try {
+                        const trimmed = (sql || '').trim().toUpperCase();
+                        const isWrite = /^(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|VACUUM)/.test(trimmed) || (trimmed.startsWith('PRAGMA') && !trimmed.includes('QUERY_ONLY'));
+                        if (isWrite) {
+                            // Incrementa contador de escritas
+                            self.writesSinceCheckpoint++;
+                            // Agenda verificação de checkpoint sem bloquear a resposta
+                            setImmediate(() => {
+                                self.maybeCheckpoint('write').catch((e) => {
+                                    console.warn('⚠️ Falha no checkpoint pós-escrita:', e);
+                                });
+                            });
+                        }
+                    } catch {}
                     resolve({
                         lastID: this.lastID,
                         changes: this.changes
@@ -793,6 +927,54 @@ export class DatabaseManager {
                 execSelect(this.db!, resolve, reject);
             }
         });
+    }
+
+    /**
+     * Decide se deve executar um checkpoint WAL com base em:
+     * - transação ativa (suprime);
+     * - número de escritas desde o último checkpoint;
+     * - intervalo mínimo desde o último checkpoint;
+     * - tamanho atual do arquivo WAL.
+     */
+    private async maybeCheckpoint(reason: string = 'write'): Promise<void> {
+        try {
+            if (!this.db) return;
+            if (this.networkMode) return; // no WAL em modo rede
+            if (this.transactionDepth > 0) return; // evitar durante transação
+
+            const now = Date.now();
+            const sinceLast = now - (this.lastCheckpointTime || 0);
+
+            let walSize = 0;
+            try {
+                const walPath = `${this.dbPath}-wal`;
+                if (fs.existsSync(walPath)) {
+                    walSize = fs.statSync(walPath).size;
+                }
+            } catch {}
+
+            const byWrites = this.writesSinceCheckpoint >= this.checkpointWriteThreshold;
+            const byTime = sinceLast >= this.checkpointMinIntervalMs;
+            const bySize = walSize >= this.walSizeThresholdBytes;
+
+            if (byWrites || byTime || bySize) {
+                await new Promise<void>((resolve) => {
+                    if (this.networkMode) return resolve();
+                    this.db!.run('PRAGMA wal_checkpoint(TRUNCATE);', () => resolve());
+                });
+                this.lastCheckpointTime = Date.now();
+                this.writesSinceCheckpoint = 0;
+                if (bySize) {
+                    console.log(`✅ Checkpoint WAL por tamanho (${walSize} bytes)`);
+                } else if (byWrites) {
+                    console.log(`✅ Checkpoint WAL por quantidade de escritas (${reason})`);
+                } else {
+                    console.log(`✅ Checkpoint WAL por intervalo (${this.checkpointMinIntervalMs}ms)`);
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️ maybeCheckpoint falhou:', e);
+        }
     }
 
     /**
@@ -1013,6 +1195,15 @@ export class DatabaseManager {
     }
 
     /**
+     * Define o modo rede (journal DELETE, sem WAL), melhor para compartilhamento em SMB/NFS.
+     * Deve ser chamado ANTES de initialize() para surtir efeito na configuração inicial.
+     */
+    setNetworkMode(enabled: boolean): void {
+        this.networkMode = enabled;
+        console.log(`[NETWORK MODE] ${enabled ? 'Ativado (journal=DELETE, synchronous=FULL)' : 'Desativado (journal=WAL, com checkpoints)'}`);
+    }
+
+    /**
      * Salva dados no modo DELTA: apenas as coleções presentes em `data` são upsertadas
      * usando operações mais curtas e sem deleções globais de tabelas.
      */
@@ -1173,6 +1364,8 @@ export class DatabaseManager {
     await new Promise<void>((resolve, reject) => {
         this.db!.run('BEGIN TRANSACTION', (err) => err ? reject(err) : resolve());
     });
+    // Marca transação ativa para suprimir checkpoints automáticos
+    this.transactionDepth++;
 
     try {
         // Objeto de transação com um runQuery que opera dentro do contexto da transação
@@ -1194,15 +1387,29 @@ export class DatabaseManager {
         await callback(tx);
 
         // Se tudo correu bem, confirma a transação
-        await new Promise<void>((resolve, reject) => {
-            this.db!.run('COMMIT', (err) => err ? reject(err) : resolve());
+    await new Promise<void>((resolve, reject) => {
+        this.db!.run('COMMIT', (err) => err ? reject(err) : resolve());
+    });
+
+    // Realiza checkpoint para aplicar páginas do WAL ao banco principal
+    // Usamos TRUNCATE para reduzir tamanho do arquivo -wal rapidamente
+    if (!this.networkMode) {
+        await new Promise<void>((resolve) => {
+            this.db!.run('PRAGMA wal_checkpoint(TRUNCATE);', () => resolve());
         });
+    }
+    // Atualiza estado dos checkpoints
+    this.lastCheckpointTime = Date.now();
+    this.writesSinceCheckpoint = 0;
+    this.transactionDepth = Math.max(0, this.transactionDepth - 1);
     } catch (error) {
         console.error('Erro na transação, revertendo alterações (ROLLBACK)...');
         // Se ocorrer um erro, reverte a transação
         await new Promise<void>((resolve) => {
             this.db!.run('ROLLBACK', () => resolve());
         });
+        // Libera estado de transação
+        this.transactionDepth = Math.max(0, this.transactionDepth - 1);
         // Re-lança o erro original para que a chamada superior saiba que algo deu errado
         throw error;
     }
@@ -1697,36 +1904,66 @@ export class DatabaseManager {
      * Fecha a conexão com o banco de dados
      */
     async close(): Promise<void> {
-        if (this.db) {
-            return new Promise((resolve, reject) => {
-                this.db!.close((err) => {
-                    if (err) {
-                        console.error('Erro ao fechar banco de dados:', err);
-                        reject(err);
+        // Função auxiliar para fechar a conexão somente leitura, se existir
+        const closeReadOnly = (): void => {
+            if (this.roDb) {
+                this.roDb.close((roErr) => {
+                    if (roErr) {
+                        console.warn('⚠️ Erro ao fechar conexão somente leitura:', roErr);
                     } else {
+                        console.log('✅ Conexão somente leitura fechada');
+                    }
+                    this.roDb = null;
+                });
+            }
+        };
+
+        // Função auxiliar para limpar timers agendados
+        const cleanupTimers = (): void => {
+            if (this.vacuumTimer) {
+                clearTimeout(this.vacuumTimer);
+                this.vacuumTimer = null;
+            }
+        };
+
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (this.db) {
+                    // Executa checkpoint WAL para truncar o arquivo -wal antes de fechar (somente se não for modo rede)
+                    if (!this.networkMode) {
+                        try {
+                            await this.runQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+                            console.log('✅ PRAGMA wal_checkpoint(TRUNCATE) executado com sucesso');
+                        } catch (chkErr) {
+                            console.warn('⚠️ Falha ao executar wal_checkpoint(TRUNCATE):', chkErr);
+                        }
+                    }
+
+                    this.db.close((err) => {
+                        if (err) {
+                            console.error('Erro ao fechar banco de dados:', err);
+                            reject(err);
+                            return;
+                        }
                         console.log('✅ Conexão com banco de dados fechada');
                         this.db = null;
-                        // Fecha conexão somente leitura
-                        if (this.roDb) {
-                            this.roDb.close((roErr) => {
-                                if (roErr) {
-                                    console.warn('⚠️ Erro ao fechar conexão somente leitura:', roErr);
-                                } else {
-                                    console.log('✅ Conexão somente leitura fechada');
-                                }
-                                this.roDb = null;
-                            });
-                        }
-                        // Cancela VACUUM agendado
-                        if (this.vacuumTimer) {
-                            clearTimeout(this.vacuumTimer);
-                            this.vacuumTimer = null;
-                        }
+
+                        // Fecha conexão somente leitura e limpa timers
+                        closeReadOnly();
+                        cleanupTimers();
+
                         resolve();
-                    }
-                });
-            });
-        }
+                    });
+                } else {
+                    // Mesmo sem conexão principal, garantir fechamento da somente leitura e limpar timers
+                    closeReadOnly();
+                    cleanupTimers();
+                    resolve();
+                }
+            } catch (fatalErr) {
+                reject(fatalErr);
+            }
+        });
     }
 
     /**
