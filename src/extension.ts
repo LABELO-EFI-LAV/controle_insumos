@@ -1585,11 +1585,9 @@ export async function activate(context: vscode.ExtensionContext) {
         try {
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
-            // Ativa automaticamente o modo rede quando apropriado
-            if (shouldUseNetworkMode(rootPath)) {
-                databaseManager.setNetworkMode(true);
-                console.log('[EXTENSION] Modo rede ativado automaticamente (journal=DELETE, synchronous=FULL).');
-            }
+            // Força modo rede permanentemente (journal=DELETE, synchronous=FULL)
+            databaseManager.setNetworkMode(true);
+            console.log('[EXTENSION] Modo rede ativado permanentemente (journal=DELETE, synchronous=FULL).');
             await databaseManager.initialize();
             // Se a inicialização encontrou busy/locked, abrir em modo leitura
             if (databaseManager.wasBusyOnInit && typeof databaseManager.wasBusyOnInit === 'function') {
