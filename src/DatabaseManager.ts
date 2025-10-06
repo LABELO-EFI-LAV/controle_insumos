@@ -123,7 +123,7 @@ export class DatabaseManager {
     private vacuumDelayMs: number = 30000; // 30s de inatividade antes de VACUUM
     private enableAutoVacuum: boolean = false; // Flag para desativar VACUUM automático por padrão
     private fullSyncMode: boolean = false; // Flag para escolher entre sincronização completa ou por delta
-    private networkMode: boolean = false; // Quando true, usa PRAGMAs seguros para rede (journal DELETE)
+    private networkMode: boolean = true; // Quando true, usa PRAGMAs seguros para rede (journal DELETE)
     private initBusy: boolean = false; // Marca se encontrou SQLITE_BUSY/locked na inicialização
     // Estado para checkpoints WAL
     private transactionDepth: number = 0; // Suprime checkpoints automáticos durante transações
