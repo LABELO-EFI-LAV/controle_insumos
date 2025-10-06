@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as sqlite3 from 'sqlite3';
 import { SourceTextModule } from 'vm';
 import { DatabaseManager } from './DatabaseManager';
 const PDFKit = require('pdfkit');
@@ -30,6 +31,61 @@ function getLatestDbMTime(dbPath: string): number {
     const walM = safeMtimeMs(wal);
     const shmM = safeMtimeMs(shm);
     return Math.max(base, walM, shmM);
+}
+/**
+ * Pré-limpa arquivos WAL/SHM caso existam, realizando checkpoint e exclusão.
+ * Objetivo: aplicar páginas pendentes do WAL ao banco e remover resíduos.
+ */
+async function preflightCleanWalShm(dbPath: string): Promise<void> {
+    try {
+        const { wal, shm } = getDbAuxPaths(dbPath);
+        const walExists = fs.existsSync(wal);
+        const shmExists = fs.existsSync(shm);
+        if (!walExists && !shmExists) {
+            return; // nada a fazer
+        }
+
+        console.warn(`[PRE-LIMPEZA] Detectados arquivos auxiliares: ${walExists ? 'WAL' : ''} ${shmExists ? 'SHM' : ''}. Iniciando limpeza...`);
+
+        // Abre conexão temporária para garantir checkpoint e troca para DELETE
+        await new Promise<void>((resolve) => {
+            const tempDb = new sqlite3.Database(dbPath, (err) => {
+                if (err) {
+                    console.warn('[PRE-LIMPEZA] Falha ao abrir conexão temporária para limpeza:', err?.message || err);
+                    return resolve();
+                }
+                tempDb.run('PRAGMA busy_timeout=10000;', () => {
+                    // Tenta forçar journal DELETE, o que deve executar checkpoint interno
+                    tempDb.run('PRAGMA journal_mode=DELETE;', () => {
+                        // Executa checkpoint explícito por segurança
+                        tempDb.run('PRAGMA wal_checkpoint(TRUNCATE);', () => {
+                            tempDb.close(() => resolve());
+                        });
+                    });
+                });
+            });
+        });
+
+        // Após checkpoint, remove arquivos residuais WAL/SHM se ainda existirem
+        try {
+            if (fs.existsSync(wal)) {
+                fs.unlinkSync(wal);
+                console.log('🧹 [PRE-LIMPEZA] Arquivo WAL removido:', wal);
+            }
+        } catch (e) {
+            console.warn('⚠️ [PRE-LIMPEZA] Falha ao remover WAL:', e);
+        }
+        try {
+            if (fs.existsSync(shm)) {
+                fs.unlinkSync(shm);
+                console.log('🧹 [PRE-LIMPEZA] Arquivo SHM removido:', shm);
+            }
+        } catch (e) {
+            console.warn('⚠️ [PRE-LIMPEZA] Falha ao remover SHM:', e);
+        }
+    } catch (fatal) {
+        console.warn('⚠️ [PRE-LIMPEZA] Rotina de limpeza WAL/SHM encontrou erro:', fatal);
+    }
 }
 // ========================================================================
 // START: Added Utility Functions
@@ -1581,8 +1637,12 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         
         const rootPath = workspaceFolders[0].uri.fsPath;
+        const dbPath = path.join(rootPath, 'database.sqlite');
         
         try {
+            // Pré-limpeza de arquivos WAL/SHM antes de iniciar o gerenciador
+            await preflightCleanWalShm(dbPath);
+
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
             // Força modo rede permanentemente (journal=DELETE, synchronous=FULL)
