@@ -4,6 +4,13 @@
   box-sizing: border-box;
 }
 body { font-family: 'Inter', sans-serif; }
+/* Escala global de UI para compensar zoom do VS Code */
+:root {
+  --ui-scale: 1;
+}
+html {
+  font-size: calc(16px * var(--ui-scale, 1));
+}
         /* Estilos personalizados para animações e transições */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
@@ -992,15 +999,15 @@ aside:hover .nav-link span {
     overflow: visible; /* evitar recorte quando houver wrap */
   }
   #page-schedule h1 {
-    font-size: 1.5rem; /* ~24px */
+    font-size: calc(1.5rem * var(--gantt-text-scale, 1)); /* ~24px base */
   }
   #page-schedule #gantt-filter-count {
     display: none; /* economiza espaço horizontal */
   }
   #page-schedule #gantt-global-search {
     width: 10rem; /* reduzir largura do campo de busca */
-    padding: 0.3rem 0.5rem;
-    font-size: 0.875rem; /* ~14px */
+    padding: calc(0.3rem * var(--gantt-text-scale, 1)) calc(0.5rem * var(--gantt-text-scale, 1));
+    font-size: calc(0.875rem * var(--gantt-text-scale, 1)); /* ~14px */
   }
   #page-schedule #efficiency-assay-menu button,
   #page-schedule #btn-open-add-safety-assay-modal,
@@ -1029,8 +1036,8 @@ aside:hover .nav-link span {
   }
   /* Diminuir altura do sticky header da coluna esquerda para caber melhor */
   #page-schedule #gantt-left-sticky-header {
-    height: 52px;
-    font-size: 0.85rem;
+    height: calc(52px * var(--gantt-text-scale, 1));
+    font-size: calc(0.85rem * var(--gantt-text-scale, 1));
   }
   /* Em telas 1366x768, reduzir padding e espaçamentos gerais da página schedule */
   #page-schedule.page-schedule {
@@ -1141,4 +1148,20 @@ aside:hover .nav-link span {
   flex: 0 1 auto !important;      /* permitir encolher no eixo principal */
   min-width: 0 !important;        /* permitir largura menor que o conteúdo */
   max-width: clamp(8rem, 16vw, 14rem) !important; /* limitar largura para forçar wrap quando apertado */
+  /* Reverter escala aplicada via --gantt-text-scale; manter responsivo via media queries */
+  font-size: 0.875rem !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Botões de "Adicionar ensaios" não devem quebrar texto */
+/* Aumentamos a especificidade para prevalecer sobre a regra geral em #schedule-header .schedule-actions */
+#page-schedule #schedule-header .schedule-actions #btn-toggle-efficiency-menu,
+#page-schedule #schedule-header .schedule-actions #btn-open-add-safety-assay-modal,
+#page-schedule #schedule-header .schedule-actions #efficiency-assay-menu button {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  text-align: left;
+  max-width: none !important;
+  flex: 0 0 auto !important;
 }

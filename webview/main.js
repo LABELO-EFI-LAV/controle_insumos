@@ -3380,6 +3380,31 @@ const renderers = {
                 eventDiv.title = `${assay.protocol} (${assay.startDate} a ${assay.endDate})`;
                 eventDiv.dataset.assayId = assay.id;
                 foregroundGrid.appendChild(eventDiv);
+
+                // Ajuste automático de tamanho do texto dentro do evento (shrink-to-fit)
+                (function autoFitEventText() {
+                    const contentEl = eventDiv.querySelector('.gantt-event-content');
+                    const textEl = contentEl ? contentEl.querySelector('.gantt-text') : null;
+                    if (!contentEl || !textEl) return;
+                    // Remover override local para ler a escala herdada do contêiner
+                    contentEl.style.removeProperty('--gantt-text-scale');
+                    const inherited = getComputedStyle(contentEl).getPropertyValue('--gantt-text-scale');
+                    const baseScale = Math.max(0.6, parseFloat(inherited) || 1);
+                    let scale = baseScale;
+                    let iter = 0;
+                    const maxIter = 8;
+                    const minScale = baseScale * 0.6; // não encolher abaixo de 60% da escala base
+                    const fits = () => (
+                        textEl.scrollWidth <= contentEl.clientWidth &&
+                        textEl.scrollHeight <= contentEl.clientHeight
+                    );
+                    while (!fits() && iter < maxIter) {
+                        scale = Math.max(minScale, scale - 0.08);
+                        contentEl.style.setProperty('--gantt-text-scale', String(scale));
+                        iter++;
+                        if (scale === minScale) break;
+                    }
+                })();
             });
 
             rowContainer.appendChild(backgroundGrid);
@@ -3510,6 +3535,31 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
 
             calibDiv.setAttribute('data-tooltip', calibrationInfo);
             calibrationContainer.appendChild(calibDiv);
+
+            // Ajuste automático para texto de calibração (vertical): shrink-to-fit respeitando a escala herdada
+            (function autoFitCalibrationText() {
+                const target = calibDiv; // aplica escala no contêiner para herdar na .gantt-text
+                const textEl = target.querySelector('.gantt-text');
+                if (!textEl) return;
+                // Remover override local para ler a escala herdada do contêiner
+                target.style.removeProperty('--gantt-text-scale');
+                const inherited = getComputedStyle(target).getPropertyValue('--gantt-text-scale');
+                const baseScale = Math.max(0.6, parseFloat(inherited) || 1);
+                let scale = baseScale;
+                let iter = 0;
+                const maxIter = 8;
+                const minScale = baseScale * 0.6; // não encolher abaixo de 60% da escala base
+                const fits = () => (
+                    textEl.scrollWidth <= target.clientWidth &&
+                    textEl.scrollHeight <= target.clientHeight
+                );
+                while (!fits() && iter < maxIter) {
+                    scale = Math.max(minScale, scale - 0.08);
+                    target.style.setProperty('--gantt-text-scale', String(scale));
+                    iter++;
+                    if (scale === minScale) break;
+                }
+            })();
         });
 
         // adiciona css tooltip apenas 1x
@@ -10226,6 +10276,29 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         
         document.addEventListener('click', (e) => {
             if (!efficiencyAssayMenu.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    // Lógica do menu dropdown para agendamentos (calibração e férias)
+    const scheduleMenu = document.getElementById('schedule-menu');
+    if (scheduleMenu) {
+        const toggleButton = document.getElementById('btn-toggle-schedule-menu');
+        const dropdown = document.getElementById('schedule-dropdown');
+
+        toggleButton?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            // Ignora cliques durante drag and drop
+            if (state.isDragging) {
+                return;
+            }
+
+            if (!scheduleMenu.contains(e.target)) {
                 dropdown.classList.add('hidden');
             }
         });
