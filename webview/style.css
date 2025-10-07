@@ -485,11 +485,50 @@ body { font-family: 'Inter', sans-serif; }
             opacity: 0;
             transition: all 0.3s ease;
         }
-     .gantt-text {
+.gantt-text {
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
     line-height: 1.2;
+    /* Base de tamanho 0.7rem multiplicada pela escala dinâmica */
+    font-size: calc(0.7rem * var(--gantt-text-scale, 1)) !important;
+}
+
+/* Variável de escala aplicada ao contêiner do Gantt */
+#gantt-scroll-container {
+    --gantt-text-scale: 1;
+}
+
+/* Escalar utilitários de texto do Tailwind dentro do Gantt */
+#gantt-scroll-container .text-xs {
+    font-size: calc(0.75rem * var(--gantt-text-scale, 1)) !important;
+}
+
+#gantt-scroll-container .text-sm {
+    font-size: calc(0.875rem * var(--gantt-text-scale, 1)) !important;
+}
+
+#gantt-scroll-container .text-base {
+    font-size: calc(1rem * var(--gantt-text-scale, 1)) !important;
+}
+
+/* Garantir que o conteúdo dos eventos escale mesmo sem utilitários de texto */
+#gantt-scroll-container .gantt-event-content {
+    font-size: calc(1rem * var(--gantt-text-scale, 1)) !important;
+}
+
+/* Escala dos textos do cabeçalho de dias/meses */
+.gantt-days-header-row span {
+    font-size: calc(0.75rem * var(--gantt-text-scale, 1)) !important;
+}
+
+.gantt-month-header-row {
+    font-size: calc(0.85rem * var(--gantt-text-scale, 1)) !important;
+}
+
+/* Escala dos rótulos das linhas do Gantt */
+.gantt-label {
+    font-size: calc(0.875rem * var(--gantt-text-scale, 1)) !important;
 }
 
 .gantt-event-content {
@@ -510,7 +549,7 @@ body { font-family: 'Inter', sans-serif; }
 }
 /* Menu lateral */
 aside {
-    width: 64px;
+    width: clamp(56px, 8vw, 64px);
     transition: width 0.3s;
     overflow: hidden;
     display: flex;
@@ -518,7 +557,7 @@ aside {
 }
 
 aside:hover {
-    width: 256px;
+    width: clamp(200px, 30vw, 256px);
 }
 
 /* Logo no topo */
@@ -596,9 +635,16 @@ aside:hover .nav-link span {
 }
 /* Estilos para garantir que os gráficos ocupem toda a largura dos cards sem overflow */
 /* Estilos corrigidos para os gráficos */
+.responsive-grid {
+    display: grid;
+}
+
+.responsive-card {
+    min-width: 0;
+}
 .chart-container {
     width: 100%;
-    height: 320px;
+    height: clamp(240px, 35vh, 400px);
     position: relative;
     display: block;
     overflow: hidden;
@@ -671,15 +717,6 @@ aside:hover .nav-link span {
     }
 }
 
-/* Melhorias de usabilidade para mobile */
-.mobile-optimized {
-    touch-action: manipulation;
-}
-
-.mobile-optimized button {
-    min-height: 44px;
-    min-width: 44px;
-}
 
 /* Melhorias gerais de responsividade */
 @media (max-width: 480px) {
@@ -710,25 +747,15 @@ aside:hover .nav-link span {
     }
 }
 
-/* Melhorias para tablets */
-@media (min-width: 768px) and (max-width: 1024px) {
+/* Melhorias para telas grandes */
+@media (min-width: 1440px) {
+    /* Manter 2 colunas por linha em telas grandes conforme comportamento anterior */
     .responsive-grid {
         grid-template-columns: repeat(2, 1fr);
     }
     
     .chart-container {
-        height: 300px;
-    }
-}
-
-/* Melhorias para telas grandes */
-@media (min-width: 1440px) {
-    .responsive-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-    
-    .chart-container {
-        height: 400px;
+        height: clamp(360px, 40vh, 480px);
     }
     
     .container {

@@ -3038,13 +3038,20 @@ const renderers = {
 
     renderGanttChart: function(callback = null) {
         if (!DOM.ganttLabelsContainer || !DOM.ganttHeaderContainer ||
-            !DOM.ganttGridContainer || !DOM.ganttPeriodLabel) return;
+            !DOM.ganttGridContainer) return;
    
 
         // Limpa os contêineres principais
         DOM.ganttLabelsContainer.innerHTML = '';
         DOM.ganttHeaderContainer.innerHTML = '';
         DOM.ganttGridContainer.innerHTML = '';
+        
+        // Atualiza a variável de escala de texto baseada no nível de zoom atual
+        const _baseZoom = 25;
+        const _textScale = Math.max(0.6, Math.min(1.6, (state.ganttZoomLevel || _baseZoom) / _baseZoom));
+        if (DOM.ganttScrollContainer) {
+            DOM.ganttScrollContainer.style.setProperty('--gantt-text-scale', String(_textScale));
+        }
 
         const fixedRowHeight = state.ganttRowHeightLevel || 80;
         const subRowHeight = state.ganttRowHeightLevel || 80; // Altura padrão
@@ -3148,7 +3155,9 @@ const renderers = {
         DOM.ganttHeaderContainer.innerHTML = `<div class="gantt-month-header-row grid bg-white z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${monthsHtml.join('')}</div><div class="gantt-days-header-row grid bg-gray-50 z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${daysHtml.join('')}</div>`;
         DOM.ganttHeaderContainer.style.width = `${totalGanttWidth}px`;
         DOM.ganttHeaderContainer.classList.add('border-b-2', 'border-black');
-        DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
+        if (DOM.ganttPeriodLabel) {
+            DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
+        }
 
         // Agrupa os ensaios por categoria
         const groupedAssays = {};
@@ -3324,7 +3333,7 @@ const renderers = {
                             </div>
                         </div>` :
                         `<div class="flex flex-col items-center justify-center w-full h-full p-1 text-center z-10">
-                            <span class="gantt-text text-xs font-bold" style="font-size: 0.7rem;">
+                            <span class="gantt-text text-xs font-bold">
                                 ${[assay.protocol || 'N/A',
                                 assay.orcamento || 'N/A', assay.assayManufacturer || 'N/A',
                                 assay.model || 'N/A', assay.tensao || 'N/A',
@@ -3485,7 +3494,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
             const isMatchCalib = searchUtils.matchesCalibration(calib, state.ganttSearchQuery);
             calibDiv.innerHTML = `
                 <div class="relative w-full h-full flex items-center justify-center p-1 text-center text-white" style="writing-mode: vertical-rl; text-orientation: mixed;">
-                    <span class="gantt-text font-semibold" style="font-size: 0.8rem;">${displayText}</span>
+                    <span class="gantt-text font-semibold">${displayText}</span>
                     <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${calib.id}" data-is-calibration="true">
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none">
                             <circle cx="12" cy="12" r="10"></circle>
@@ -3518,7 +3527,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                     color: white;
                     padding: 8px 12px;
                     border-radius: 6px;
-                    font-size: 12px;
+                    font-size: calc(0.75rem * var(--gantt-text-scale, 1));
                     white-space: nowrap;
                     z-index: 15;
                     pointer-events: none;
@@ -10614,6 +10623,11 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         if (state.ganttZoomLevel < maxZoom) {
             state.ganttZoomLevel += 5; // Aumenta a largura em 5px
             state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
+            // Atualiza escala de texto proporcional ao zoom
+            const base = 25; // nível base corresponde a escala 1
+            const scale = Math.max(0.6, Math.min(1.6, state.ganttZoomLevel / base));
+            const scroll = DOM.ganttScrollContainer;
+            if (scroll) scroll.style.setProperty('--gantt-text-scale', String(scale));
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
             
@@ -10625,6 +10639,11 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         if (state.ganttZoomLevel > minZoom) {
             state.ganttZoomLevel -= 5; // Diminui a largura em 5px
             state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
+            // Atualiza escala de texto proporcional ao zoom
+            const base = 25;
+            const scale = Math.max(0.6, Math.min(1.6, state.ganttZoomLevel / base));
+            const scroll = DOM.ganttScrollContainer;
+            if (scroll) scroll.style.setProperty('--gantt-text-scale', String(scale));
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
         }
