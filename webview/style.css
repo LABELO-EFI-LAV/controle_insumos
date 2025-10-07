@@ -908,6 +908,33 @@ aside:hover .nav-link span {
     transition: background-color 0.1s ease-in-out;
 }
 
+/* Destaque de busca global: borda e brilho sem alterar a cor de status */
+.gantt-search-highlight {
+    outline: 3px solid #8b5cf6; /* Roxo médio, não usado nos status */
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.6), 0 0 12px rgba(139, 92, 246, 0.7);
+    position: relative;
+    animation: ganttSearchPulse 1.2s ease-in-out infinite;
+}
+
+/* Pulso chamativo que não altera o background de status */
+@keyframes ganttSearchPulse {
+  0% {
+    outline-color: #7c3aed; /* roxo mais escuro */
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    outline-color: #a78bfa; /* roxo mais claro */
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.8), 0 0 16px rgba(167, 139, 250, 0.9);
+    transform: scale(1.03);
+  }
+  100% {
+    outline-color: #7c3aed;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
+    transform: scale(1);
+  }
+}
+
 #notification-badge {
     line-height: 1;
 }

@@ -1743,6 +1743,8 @@ const state = {
     isLoggedIn: false,
     ganttZoomLevel: 25,
     ganttRowHeighLevel: 80,
+    // Busca global no Gantt
+    ganttSearchQuery: '',
 };
 
 // Referências do DOM
@@ -1778,6 +1780,7 @@ const DOM = {
     ganttGridContainer: document.getElementById('gantt-grid-container'),
     ganttScrollContainer: document.getElementById('gantt-scroll-container'),
     ganttPeriodLabel: document.getElementById('gantt-period'),
+    ganttGlobalSearchInput: document.getElementById('gantt-global-search'),
     passwordModal: document.getElementById('password-modal'),
     passwordInput: document.getElementById('password-input'),
     passwordSubmitBtn: document.getElementById('password-submit-btn'),
@@ -1797,6 +1800,46 @@ const DOM = {
 // -----------------------------------------------------------------------------
 // 2. Lógica Principal da Aplicação
 // -----------------------------------------------------------------------------
+// Utilitário de busca simples (case-insensitive, múltiplos campos)
+const searchUtils = {
+    normalize: (s) => (s || '').toString().toLowerCase(),
+    matchesAssay: (assay, query) => {
+        const q = searchUtils.normalize(query);
+        if (!q) return false;
+        const hay = [
+            assay.protocol,
+            assay.orcamento,
+            assay.assayManufacturer,
+            assay.model,
+            assay.tensao,
+            assay.nominalLoad?.toString(),
+            assay.status,
+            assay.type,
+            assay.observacoes,
+        ].map(searchUtils.normalize).join(' | ');
+        return hay.includes(q);
+    },
+    matchesCalibration: (calib, query) => {
+        const q = searchUtils.normalize(query);
+        if (!q) return false;
+        const hay = [
+            calib.protocol,
+            calib.notes,
+            calib.affectedTerminals?.toString(),
+        ].map(searchUtils.normalize).join(' | ');
+        return hay.includes(q);
+    }
+};
+
+// Listener do input de busca
+document.addEventListener('DOMContentLoaded', () => {
+    if (DOM.ganttGlobalSearchInput) {
+        DOM.ganttGlobalSearchInput.addEventListener('input', (e) => {
+            state.ganttSearchQuery = e.target.value || '';
+            renderers.renderGanttChart();
+        });
+    }
+});
 const undoManager = {
     saveState: () => {
         const stateToSave = {
@@ -3258,6 +3301,7 @@ const renderers = {
                     }
                 }
 
+                const isMatch = searchUtils.matchesAssay(assay, state.ganttSearchQuery);
                 contentHTML = `
                     <div class="relative w-full h-full gantt-event-content">
                         <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${assay.id}">
@@ -3294,6 +3338,9 @@ const renderers = {
 
                 const eventDiv = document.createElement('div');
                 eventDiv.className = `gantt-event rounded-md shadow-lg cursor-pointer select-none transition-all duration-100 ease-in-out hover:opacity-80 border-2 border-white flex items-center overflow-hidden ${statusClass}`;
+                if (isMatch) {
+                    eventDiv.classList.add('gantt-search-highlight');
+                }
                 
                 // Posicionamento normal dos elementos
                 if (isStacked) {
@@ -3435,6 +3482,7 @@ Período: ${calib.startDate} a ${calib.endDate}
 ${calib.notes ? `Observações: ${calib.notes}` : ''}
             `.trim();
 
+            const isMatchCalib = searchUtils.matchesCalibration(calib, state.ganttSearchQuery);
             calibDiv.innerHTML = `
                 <div class="relative w-full h-full flex items-center justify-center p-1 text-center text-white" style="writing-mode: vertical-rl; text-orientation: mixed;">
                     <span class="gantt-text font-semibold" style="font-size: 0.8rem;">${displayText}</span>
@@ -3447,6 +3495,9 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                     </button>
                 </div>
             `;
+            if (isMatchCalib) {
+                calibDiv.classList.add('gantt-search-highlight');
+            }
 
             calibDiv.setAttribute('data-tooltip', calibrationInfo);
             calibrationContainer.appendChild(calibDiv);
