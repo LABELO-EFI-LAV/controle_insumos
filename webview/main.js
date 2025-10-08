@@ -2250,7 +2250,7 @@ const authSystem = {
             }
 
             // Oculta páginas restritas para visualizadores
-            const restrictedPages = ['nav-settings', 'nav-inventory', 'nav-assays', 'nav-calibrations'];
+            const restrictedPages = ['nav-settings', 'nav-inventory', 'nav-assays', 'nav-calibrations', 'nav-forecast'];
             restrictedPages.forEach(navId => {
                 const navElement = document.getElementById(navId);
                 if (navElement) {
