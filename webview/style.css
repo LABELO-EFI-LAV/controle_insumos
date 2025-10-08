@@ -4,13 +4,6 @@
   box-sizing: border-box;
 }
 body { font-family: 'Inter', sans-serif; }
-/* Escala global de UI para compensar zoom do VS Code */
-:root {
-  --ui-scale: 1;
-}
-html {
-  font-size: calc(16px * var(--ui-scale, 1));
-}
         /* Estilos personalizados para animações e transições */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
@@ -103,6 +96,171 @@ html {
           padding: 0 !important;
           border: 0 !important;
           box-sizing: border-box !important;
+        }
+
+        /* Estilos para auditoria */
+        .audit-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .audit-stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .audit-stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .audit-stat-card.stat-logs {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .audit-stat-card.stat-recent {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+
+        .audit-stat-card.stat-users {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        .audit-stat-card.stat-action {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #374151;
+        }
+
+        .audit-chart-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+
+        .audit-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .audit-chart-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .audit-chart-label {
+            min-width: 80px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .audit-chart-progress {
+            flex: 1;
+            height: 1.5rem;
+            background: #f3f4f6;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .audit-chart-fill {
+            height: 100%;
+            border-radius: 0.75rem;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 0.5rem;
+        }
+
+        .audit-chart-value {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .sortable-header {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+
+        .sortable-header:hover {
+            background-color: #f9fafb;
+        }
+
+        .sort-icon {
+            margin-left: 0.25rem;
+            opacity: 0.5;
+            transition: opacity 0.2s ease;
+        }
+
+        .sortable-header:hover .sort-icon {
+            opacity: 1;
+        }
+
+        .audit-results-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        .audit-results-count {
+            font-weight: 600;
+            color: #1e40af;
+        }
+
+        .action-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .action-CREATE {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .action-UPDATE {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .action-DELETE {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .action-LOGIN {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .action-LOGOUT {
+            background: #f3e8ff;
+            color: #7c3aed;
+        }
+
+        .action-EXPORT {
+            background: #cffafe;
+            color: #0e7490;
         }
 
         /* Prevenir seleção de texto durante o arrasto */
@@ -497,45 +655,7 @@ html {
     overflow-wrap: break-word;
     white-space: normal;
     line-height: 1.2;
-    /* Base de tamanho 0.7rem multiplicada pela escala dinâmica */
-    font-size: calc(0.7rem * var(--gantt-text-scale, 1)) !important;
-}
-
-/* Variável de escala aplicada ao contêiner do Gantt */
-#gantt-scroll-container {
-    --gantt-text-scale: 1;
-}
-
-/* Escalar utilitários de texto do Tailwind dentro do Gantt */
-#gantt-scroll-container .text-xs {
-    font-size: calc(0.75rem * var(--gantt-text-scale, 1)) !important;
-}
-
-#gantt-scroll-container .text-sm {
-    font-size: calc(0.875rem * var(--gantt-text-scale, 1)) !important;
-}
-
-#gantt-scroll-container .text-base {
-    font-size: calc(1rem * var(--gantt-text-scale, 1)) !important;
-}
-
-/* Garantir que o conteúdo dos eventos escale mesmo sem utilitários de texto */
-#gantt-scroll-container .gantt-event-content {
-    font-size: calc(1rem * var(--gantt-text-scale, 1)) !important;
-}
-
-/* Escala dos textos do cabeçalho de dias/meses */
-.gantt-days-header-row span {
-    font-size: calc(0.75rem * var(--gantt-text-scale, 1)) !important;
-}
-
-.gantt-month-header-row {
-    font-size: calc(0.85rem * var(--gantt-text-scale, 1)) !important;
-}
-
-/* Escala dos rótulos das linhas do Gantt */
-.gantt-label {
-    font-size: calc(0.875rem * var(--gantt-text-scale, 1)) !important;
+    font-size: calc(0.75rem * var(--gantt-text-scale, 1));
 }
 
 .gantt-event-content {
@@ -546,6 +666,36 @@ html {
     height: 100%;
     padding: 2px;
     box-sizing: border-box;
+    /* inherit text scale variable from scroll container */
+    /* --gantt-text-scale is set in JS on #gantt-scroll-container */
+}
+
+/* Destaque para resultados de busca no cronograma: outline animado + glow */
+/* Destaque de busca global: borda e brilho sem alterar a cor de status (copiado do oficial) */
+.gantt-search-highlight {
+    outline: 3px solid #8b5cf6; /* Roxo médio, não usado nos status */
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.6), 0 0 12px rgba(139, 92, 246, 0.7);
+    position: relative;
+    animation: ganttSearchPulse 1.2s ease-in-out infinite;
+}
+
+/* Pulso chamativo que não altera o background de status */
+@keyframes ganttSearchPulse {
+  0% {
+    outline-color: #7c3aed; /* roxo mais escuro */
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    outline-color: #a78bfa; /* roxo mais claro */
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.8), 0 0 16px rgba(167, 139, 250, 0.9);
+    transform: scale(1.03);
+  }
+  100% {
+    outline-color: #7c3aed;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
+    transform: scale(1);
+  }
 }
 
 .truncate-multiline {
@@ -556,7 +706,7 @@ html {
 }
 /* Menu lateral */
 aside {
-    width: clamp(56px, 8vw, 64px);
+    width: 64px;
     transition: width 0.3s;
     overflow: hidden;
     display: flex;
@@ -564,7 +714,7 @@ aside {
 }
 
 aside:hover {
-    width: clamp(200px, 30vw, 256px);
+    width: 256px;
 }
 
 /* Logo no topo */
@@ -642,16 +792,9 @@ aside:hover .nav-link span {
 }
 /* Estilos para garantir que os gráficos ocupem toda a largura dos cards sem overflow */
 /* Estilos corrigidos para os gráficos */
-.responsive-grid {
-    display: grid;
-}
-
-.responsive-card {
-    min-width: 0;
-}
 .chart-container {
     width: 100%;
-    height: clamp(240px, 35vh, 400px);
+    height: 320px;
     position: relative;
     display: block;
     overflow: hidden;
@@ -724,6 +867,15 @@ aside:hover .nav-link span {
     }
 }
 
+/* Melhorias de usabilidade para mobile */
+.mobile-optimized {
+    touch-action: manipulation;
+}
+
+.mobile-optimized button {
+    min-height: 44px;
+    min-width: 44px;
+}
 
 /* Melhorias gerais de responsividade */
 @media (max-width: 480px) {
@@ -754,15 +906,25 @@ aside:hover .nav-link span {
     }
 }
 
-/* Melhorias para telas grandes */
-@media (min-width: 1440px) {
-    /* Manter 2 colunas por linha em telas grandes conforme comportamento anterior */
+/* Melhorias para tablets */
+@media (min-width: 768px) and (max-width: 1024px) {
     .responsive-grid {
         grid-template-columns: repeat(2, 1fr);
     }
     
     .chart-container {
-        height: clamp(360px, 40vh, 480px);
+        height: 300px;
+    }
+}
+
+/* Melhorias para telas grandes */
+@media (min-width: 1440px) {
+    .responsive-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .chart-container {
+        height: 400px;
     }
     
     .container {
@@ -942,33 +1104,6 @@ aside:hover .nav-link span {
     transition: background-color 0.1s ease-in-out;
 }
 
-/* Destaque de busca global: borda e brilho sem alterar a cor de status */
-.gantt-search-highlight {
-    outline: 3px solid #8b5cf6; /* Roxo médio, não usado nos status */
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.6), 0 0 12px rgba(139, 92, 246, 0.7);
-    position: relative;
-    animation: ganttSearchPulse 1.2s ease-in-out infinite;
-}
-
-/* Pulso chamativo que não altera o background de status */
-@keyframes ganttSearchPulse {
-  0% {
-    outline-color: #7c3aed; /* roxo mais escuro */
-    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
-    transform: scale(1);
-  }
-  50% {
-    outline-color: #a78bfa; /* roxo mais claro */
-    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.8), 0 0 16px rgba(167, 139, 250, 0.9);
-    transform: scale(1.03);
-  }
-  100% {
-    outline-color: #7c3aed;
-    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6), 0 0 6px rgba(124, 58, 237, 0.6);
-    transform: scale(1);
-  }
-}
-
 #notification-badge {
     line-height: 1;
 }
@@ -987,7 +1122,9 @@ aside:hover .nav-link span {
   transition: none !important; /* Remove qualquer transição */
   transform: none !important; /* Remove qualquer transformação */
 }
-
+#gantt-period {
+  display: none;
+}
 
 /* Responsividade específica para 1366x768 */
 @media (max-width: 1366px) and (max-height: 768px) {
@@ -999,15 +1136,15 @@ aside:hover .nav-link span {
     overflow: visible; /* evitar recorte quando houver wrap */
   }
   #page-schedule h1 {
-    font-size: calc(1.5rem * var(--gantt-text-scale, 1)); /* ~24px base */
+    font-size: 1.5rem; /* ~24px */
   }
   #page-schedule #gantt-filter-count {
     display: none; /* economiza espaço horizontal */
   }
   #page-schedule #gantt-global-search {
     width: 10rem; /* reduzir largura do campo de busca */
-    padding: calc(0.3rem * var(--gantt-text-scale, 1)) calc(0.5rem * var(--gantt-text-scale, 1));
-    font-size: calc(0.875rem * var(--gantt-text-scale, 1)); /* ~14px */
+    padding: 0.3rem 0.5rem;
+    font-size: 0.875rem; /* ~14px */
   }
   #page-schedule #efficiency-assay-menu button,
   #page-schedule #btn-open-add-safety-assay-modal,
@@ -1036,8 +1173,8 @@ aside:hover .nav-link span {
   }
   /* Diminuir altura do sticky header da coluna esquerda para caber melhor */
   #page-schedule #gantt-left-sticky-header {
-    height: calc(52px * var(--gantt-text-scale, 1));
-    font-size: calc(0.85rem * var(--gantt-text-scale, 1));
+    height: 52px;
+    font-size: 0.85rem;
   }
   /* Em telas 1366x768, reduzir padding e espaçamentos gerais da página schedule */
   #page-schedule.page-schedule {
@@ -1086,82 +1223,4 @@ aside:hover .nav-link span {
   #page-schedule .schedule-toolbar .border-l {
     height: 1rem;
   }
-}
-
-/* Desktop médio (1280–1599px): manter barra compacta e consistente */
-@media (min-width: 1280px) and (max-width: 1599px) {
-  #page-schedule #schedule-header .schedule-actions {
-    gap: 0.45rem;
-    flex-wrap: nowrap; /* tentar manter tudo numa linha */
-  }
-  #page-schedule .schedule-toolbar {
-    gap: 0.45rem;
-    flex-wrap: nowrap; /* tentar manter tudo numa linha */
-  }
-  #page-schedule #gantt-global-search {
-    width: 12rem !important;
-    font-size: 0.9rem !important;
-  }
-  #page-schedule .schedule-toolbar button {
-    padding: 0.38rem 0.65rem !important;
-    font-size: 0.875rem !important;
-    line-height: 1.25 !important;
-  }
-  #page-schedule #btn-sync-schedule {
-    padding: 0.38rem 0.6rem !important;
-    font-size: 0.875rem !important;
-  }
-}
-
-/* Desktop largo (≥1600px): baseline estável próximo de 1920px/1967px */
-@media (min-width: 1600px) {
-  #page-schedule #schedule-header .schedule-actions {
-    gap: 0.5rem;
-    flex-wrap: nowrap; /* tentar manter tudo numa linha */
-  }
-  #page-schedule .schedule-toolbar {
-    gap: 0.5rem;
-    flex-wrap: nowrap; /* tentar manter tudo numa linha */
-  }
-  #page-schedule #gantt-global-search {
-    width: 13rem !important;
-    font-size: 0.9rem !important;
-  }
-  #page-schedule .schedule-toolbar button {
-    padding: 0.4rem 0.7rem !important;
-    font-size: 0.9rem !important;
-    line-height: 1.25 !important;
-  }
-  #page-schedule #btn-sync-schedule {
-    padding: 0.4rem 0.65rem !important;
-    font-size: 0.9rem !important;
-  }
-}
-
-/* Priorizar quebra de texto dentro do botão antes de quebrar a linha */
-#page-schedule .schedule-toolbar button,
-#page-schedule #schedule-header .schedule-actions button {
-  white-space: normal !important; /* permitir quebra de linhas */
-  overflow-wrap: anywhere;        /* quebrar palavras longas se necessário */
-  word-break: break-word;         /* compatibilidade extra */
-  text-align: left;               /* texto alinhado para legibilidade ao quebrar */
-  flex: 0 1 auto !important;      /* permitir encolher no eixo principal */
-  min-width: 0 !important;        /* permitir largura menor que o conteúdo */
-  max-width: clamp(8rem, 16vw, 14rem) !important; /* limitar largura para forçar wrap quando apertado */
-  /* Reverter escala aplicada via --gantt-text-scale; manter responsivo via media queries */
-  font-size: 0.875rem !important;
-  padding: 0.5rem 0.75rem !important;
-}
-
-/* Botões de "Adicionar ensaios" não devem quebrar texto */
-/* Aumentamos a especificidade para prevalecer sobre a regra geral em #schedule-header .schedule-actions */
-#page-schedule #schedule-header .schedule-actions #btn-toggle-efficiency-menu,
-#page-schedule #schedule-header .schedule-actions #btn-open-add-safety-assay-modal,
-#page-schedule #schedule-header .schedule-actions #efficiency-assay-menu button {
-  white-space: nowrap !important;
-  overflow-wrap: normal !important;
-  word-break: normal !important;
-  text-align: left;
-  max-width: none !important;
-  flex: 0 0 auto !important;
 }

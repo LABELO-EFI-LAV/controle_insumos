@@ -1453,21 +1453,24 @@ const cacheSystem = {
  * para evitar erros de referência fora do ambiente do VS Code.
  * @returns {Object} A API do VS Code ou um objeto de fallback com postMessage vazio.
  */
-const vscode = (() => {
+// Inicialização resiliente da API do VS Code sem redeclarar identificador global
+(function initVsCodeApi() {
     try {
-        if (typeof acquireVsCodeApi !== 'undefined') {
-            return acquireVsCodeApi();
-        } else {
-            console.warn("API do VS Code não está disponível. Executando em modo de desenvolvimento com fallback.");
-            return {
-                postMessage: (message) => {
-                    // Mensagem enviada para extensão
+        if (typeof window !== 'undefined') {
+            if (!window.vscode) {
+                if (typeof acquireVsCodeApi !== 'undefined') {
+                    window.vscode = acquireVsCodeApi();
+                } else {
+                    console.warn("API do VS Code não está disponível. Fallback ativo.");
+                    window.vscode = { postMessage: () => {} };
                 }
-            };
+            }
         }
     } catch (error) {
-        console.error("Erro fatal ao adquirir a API do VS Code. Usando fallback.", error);
-        return { postMessage: () => {} };
+        console.error("Erro ao inicializar a API do VS Code. Usando fallback.", error);
+        if (typeof window !== 'undefined' && !window.vscode) {
+            window.vscode = { postMessage: () => {} };
+        }
     }
 })();
 
@@ -2500,7 +2503,7 @@ const authSystem = {
         // Solicita dados do backend após um pequeno delay
         setTimeout(() => {
             authSystem.updateLoadingStatus('Carregando dados...');
-            vscode.postMessage({ command: 'webviewReady' });
+    window.vscode?.postMessage({ command: 'webviewReady' });
         }, 500);
     }
 };
@@ -3333,7 +3336,7 @@ const renderers = {
                             </div>
                         </div>` :
                         `<div class="flex flex-col items-center justify-center w-full h-full p-1 text-center z-10">
-                            <span class="gantt-text text-xs font-bold">
+                            <span class="gantt-text font-bold">
                                 ${[assay.protocol || 'N/A',
                                 assay.orcamento || 'N/A', assay.assayManufacturer || 'N/A',
                                 assay.model || 'N/A', assay.tensao || 'N/A',
@@ -5423,7 +5426,7 @@ const dataHandlers = {
         }
         // Processando equipamentos de calibração para salvamento
         
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'saveData',
             data: dataToSave
         });
@@ -5444,7 +5447,7 @@ const dataHandlers = {
     updateAssayStatusOnly: (assayId, newStatus, table = 'scheduled_assays') => {
         console.log(`[WEBVIEW] Alterando status do ensaio ${assayId} para '${newStatus}' na tabela ${table}`);
         
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateAssayStatusOnly',
             data: {
                 assayId: assayId,
@@ -5477,7 +5480,7 @@ const dataHandlers = {
             return;
         }
 
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'addInventoryItem',
             data: {
                 item: item  // Envolvendo o item em um objeto data
@@ -5487,7 +5490,7 @@ const dataHandlers = {
 
     updateInventoryItem: (item) => {
         console.log('[WEBVIEW] Atualizando item do inventário:', item);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateInventoryItem',
             data: item
         });
@@ -5495,7 +5498,7 @@ const dataHandlers = {
 
     deleteInventoryItem: (itemId) => {
         console.log('[WEBVIEW] Removendo item do inventário:', itemId);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'deleteInventoryItem',
             data: { id: itemId }
         });
@@ -5524,7 +5527,7 @@ const dataHandlers = {
             return;
         }
 
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'createInventoryItemGranular',
             data: item
         });
@@ -5532,7 +5535,7 @@ const dataHandlers = {
 
     getInventoryItemById: (itemId) => {
         console.log('[WEBVIEW] Buscando item do inventário por ID:', itemId);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'getInventoryItemById',
             data: { id: itemId }
         });
@@ -5540,7 +5543,7 @@ const dataHandlers = {
 
     getAllInventoryItemsGranular: () => {
         console.log('[WEBVIEW] Buscando todos os itens do inventário (granular)');
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'getAllInventoryItemsGranular',
             data: {}
         });
@@ -5548,7 +5551,7 @@ const dataHandlers = {
 
     getLowStockItems: () => {
         console.log('[WEBVIEW] Buscando itens com estoque baixo');
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'getLowStockItems',
             data: {}
         });
@@ -5556,7 +5559,7 @@ const dataHandlers = {
 
     updateInventoryItemGranular: (itemId, updates) => {
         console.log('[WEBVIEW] Atualizando item do inventário (granular):', itemId, updates);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateInventoryItemGranular',
             data: { id: itemId, updates: updates }
         });
@@ -5564,7 +5567,7 @@ const dataHandlers = {
 
     updateInventoryQuantity: (itemId, quantity) => {
         console.log('[WEBVIEW] Atualizando quantidade do inventário:', itemId, quantity);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateInventoryQuantity',
             data: { id: itemId, quantity: quantity }
         });
@@ -5572,7 +5575,7 @@ const dataHandlers = {
 
     deleteInventoryItemGranular: (itemId) => {
         console.log('[WEBVIEW] Removendo item do inventário (granular):', itemId);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'deleteInventoryItemGranular',
             data: { id: itemId }
         });
@@ -5585,7 +5588,7 @@ const dataHandlers = {
      */
     createScheduledAssay: (assayData) => {
         console.log('[WEBVIEW] Criando ensaio agendado:', assayData);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'createScheduledAssay',
             data: assayData
         });
@@ -5593,7 +5596,7 @@ const dataHandlers = {
 
     createSafetyScheduledAssay: (assayData) => {
         console.log('[WEBVIEW] Criando ensaio de segurança agendado:', assayData);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'createSafetyScheduledAssay',
             data: assayData
         });
@@ -9650,7 +9653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-manual-refresh').forEach(button => {
     button.addEventListener('click', () => {
         utils.showToast('Sincronizando com a rede...', false);
-        vscode.postMessage({ command: 'requestManualRefresh' });
+            window.vscode?.postMessage({ command: 'requestManualRefresh' });
     });
 });
     
@@ -10030,7 +10033,7 @@ assaysFilters.forEach(id => {
                 if (message.success) {
                     utils.showToast(message.message || 'Exclusão em massa concluída com sucesso!');
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro ao realizar exclusão em massa.', true);
                 }
@@ -10049,7 +10052,7 @@ assaysFilters.forEach(id => {
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
                     
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de inventário.', true);
                 }
@@ -10090,7 +10093,7 @@ assaysFilters.forEach(id => {
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
                     
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de ensaio agendado.', true);
                 }
@@ -10106,7 +10109,7 @@ assaysFilters.forEach(id => {
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
                     
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de ensaio de segurança agendado.', true);
                 }
@@ -10143,7 +10146,7 @@ assaysFilters.forEach(id => {
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
                     
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de calibração.', true);
                 }
