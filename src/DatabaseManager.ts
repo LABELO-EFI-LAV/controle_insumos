@@ -1319,9 +1319,33 @@ export class DatabaseManager {
         await this.transaction(async (tx) => {
             if (data.scheduledAssays) {
                 await this.upsertScheduledAssays(tx, data.scheduledAssays);
+
+                // Exclusões: remover registros que não estão no conjunto enviado
+                const ids = (data.scheduledAssays || [])
+                    .map((a: any) => a.id)
+                    .filter((id: any) => id !== null && id !== undefined);
+                if (ids.length > 0) {
+                    const placeholders = ids.map(() => '?').join(',');
+                    await tx.runQuery(`DELETE FROM scheduled_assays WHERE id NOT IN (${placeholders})`, ids);
+                } else {
+                    // Se a lista estiver vazia, remove todos os registros
+                    await tx.runQuery('DELETE FROM scheduled_assays');
+                }
             }
             if (data.safetyScheduledAssays) {
                 await this.upsertSafetyScheduledAssays(tx, data.safetyScheduledAssays);
+
+                // Exclusões: remover registros que não estão no conjunto enviado
+                const ids = (data.safetyScheduledAssays || [])
+                    .map((a: any) => a.id)
+                    .filter((id: any) => id !== null && id !== undefined);
+                if (ids.length > 0) {
+                    const placeholders = ids.map(() => '?').join(',');
+                    await tx.runQuery(`DELETE FROM safety_scheduled_assays WHERE id NOT IN (${placeholders})`, ids);
+                } else {
+                    // Se a lista estiver vazia, remove todos os registros
+                    await tx.runQuery('DELETE FROM safety_scheduled_assays');
+                }
             }
         });
 

@@ -2881,6 +2881,59 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                     break;
 
+                case 'updateSafetyScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateSafetyScheduledAssay(id, updates);
+
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteSafetyScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteSafetyScheduledAssay(message.data.id);
+
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
                 // ==================== COMANDOS GRANULARES PARA INVENTÁRIO ====================
 
                 case 'createInventoryItemGranular':

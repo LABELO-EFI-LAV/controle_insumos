@@ -5372,23 +5372,46 @@ const ganttMiddleClickHandler = (e) => {
     assay.status = 'pendente';
     assay.setup = null; // Ensaios pendentes não têm um terminal/responsável atribuído
 
-    // Se o ensaio era de segurança, ele precisa ser movido para a lista de ensaios de eficiência,
-    // pois a linha "Pendentes" é alimentada por essa lista.
+    // Se o ensaio era de segurança, mover apenas no estado local para a lista de eficiência
     if (isSafetyAssay) {
         const [movedAssay] = sourceArray.splice(assayIndex, 1);
         state.scheduledAssays.push(movedAssay);
     }
 
-    // Atualiza a interface do usuário
+    // Atualiza a interface do usuário sem persistir imediatamente
     state.hasUnsavedChanges = true;
     ui.toggleScheduleActions(true);
     renderers.renderGanttChart();
-    utils.showToast(`Tarefa '${assay.protocol}' movida para Pendentes. Salve as alterações.`);
+    utils.showToast(`Tarefa '${assay.protocol}' movida para Pendentes. Clique em Guardar Alterações para aplicar.`);
 };
 /**
  * Funções para manipulação de dados, incluindo interações com a extensão VS Code.
  */
 const dataHandlers = {
+    updateScheduledAssayGranular: (id, updates) => {
+        window.vscode?.postMessage({
+            command: 'updateScheduledAssayGranular',
+            data: { id, updates }
+        });
+    },
+    deleteScheduledAssayGranular: (id) => {
+        window.vscode?.postMessage({
+            command: 'deleteScheduledAssayGranular',
+            data: { id }
+        });
+    },
+    updateSafetyScheduledAssayGranular: (id, updates) => {
+        window.vscode?.postMessage({
+            command: 'updateSafetyScheduledAssayGranular',
+            data: { id, updates }
+        });
+    },
+    deleteSafetyScheduledAssayGranular: (id) => {
+        window.vscode?.postMessage({
+            command: 'deleteSafetyScheduledAssayGranular',
+            data: { id }
+        });
+    },
     /** Salva o estado atual da aplicação. */
     saveData: () => {
         // Iniciando processo de salvamento
@@ -6202,44 +6225,45 @@ const dataHandlers = {
      * @param {number} assayId - O ID da tarefa a ser excluída.
      */
     handleDeleteGanttItem: (itemId) => {
-    undoManager.saveState();
-    let found = false;
-    
-    // Tenta remover de ensaios de segurança
-    let index = state.safetyScheduledAssays.findIndex(a => a.id === itemId);
-    if (index > -1) {
-        state.safetyScheduledAssays.splice(index, 1);
-        found = true;
-    }
+        undoManager.saveState();
+        let foundType = null; // 'safety' | 'efficiency' | 'calibration'
 
-    // Tenta remover de ensaios de eficiência
-    if (!found) {
-        index = state.scheduledAssays.findIndex(a => a.id === itemId);
+        // Tenta remover de ensaios de segurança
+        let index = state.safetyScheduledAssays.findIndex(a => a.id === itemId);
         if (index > -1) {
-            state.scheduledAssays.splice(index, 1);
-            found = true;
+            state.safetyScheduledAssays.splice(index, 1);
+            foundType = 'safety';
         }
-    }
 
-    // Tenta remover de calibrações
-    if (!found) {
-        index = state.calibrations.findIndex(c => c.id === itemId);
-        if (index > -1) {
-            state.calibrations.splice(index, 1);
-            found = true;
+        // Tenta remover de ensaios de eficiência
+        if (!foundType) {
+            index = state.scheduledAssays.findIndex(a => a.id === itemId);
+            if (index > -1) {
+                state.scheduledAssays.splice(index, 1);
+                foundType = 'efficiency';
+            }
         }
-    }
 
-    if (found) {
-        state.hasUnsavedChanges = true;
-        ui.toggleScheduleActions(true);
-        utils.closeModal();
-        renderers.renderGanttChart();
-        utils.showToast("Item removido. Guarde as alterações para confirmar.");
-    } else {
-        utils.showToast("Erro: Item não encontrado para exclusão.", true);
-    }
-},
+        // Tenta remover de calibrações
+        if (!foundType) {
+            index = state.calibrations.findIndex(c => c.id === itemId);
+            if (index > -1) {
+                state.calibrations.splice(index, 1);
+                foundType = 'calibration';
+            }
+        }
+
+        if (foundType) {
+            // Não persistir imediatamente; apenas marcar como alteração pendente
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            utils.closeModal();
+            renderers.renderGanttChart();
+            utils.showToast("Item removido do cronograma. Clique em Guardar Alterações para aplicar ao banco.");
+        } else {
+            utils.showToast("Erro: Item não encontrado para exclusão.", true);
+        }
+    },
 
 handleUpdateCalibration: (e) => {
     e.preventDefault();
@@ -10091,9 +10115,6 @@ assaysFilters.forEach(id => {
                         'delete': 'Ensaio agendado removido com sucesso!'
                     };
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
-                    
-                    // Recarrega os dados para refletir as mudanças
-            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de ensaio agendado.', true);
                 }
@@ -10107,9 +10128,6 @@ assaysFilters.forEach(id => {
                         'delete': 'Ensaio de segurança agendado removido com sucesso!'
                     };
                     utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
-                    
-                    // Recarrega os dados para refletir as mudanças
-            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro na operação de ensaio de segurança agendado.', true);
                 }
