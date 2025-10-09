@@ -1649,6 +1649,12 @@ export async function activate(context: vscode.ExtensionContext) {
             databaseManager.setNetworkMode(true);
             console.log('[EXTENSION] Modo rede ativado permanentemente (journal=DELETE, synchronous=FULL).');
             await databaseManager.initialize();
+            // Aplicar política de retenção de backups ao iniciar
+            try {
+                await databaseManager.cleanupOldBackups();
+            } catch (e) {
+                console.warn('[EXTENSION] Falha ao limpar backups antigos na inicialização:', e);
+            }
             // Se a inicialização encontrou busy/locked, abrir em modo leitura
             if (databaseManager.wasBusyOnInit && typeof databaseManager.wasBusyOnInit === 'function') {
                 const initBusy = databaseManager.wasBusyOnInit();

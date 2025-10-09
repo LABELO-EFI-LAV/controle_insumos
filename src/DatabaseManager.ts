@@ -136,7 +136,7 @@ export class DatabaseManager {
     constructor(workspaceRoot: string) {
         this.dbPath = path.join(workspaceRoot, 'database.sqlite');
         this.incrementalBackup = new IncrementalBackup(workspaceRoot, {
-            maxBackups: 50,
+            maxBackups: 30,
             maxAge: 30,
             compressionLevel: 6,
             incrementalThreshold: 10

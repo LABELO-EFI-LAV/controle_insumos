@@ -223,6 +223,9 @@ export class IncrementalBackup {
             this.saveMetadata(metadata);
             this.changeLog = []; // Limpar log após backup
             
+            // Limpeza automática para respeitar política de retenção
+            await this.cleanupOldBackups();
+            
             return filepath;
         } catch (error) {
             console.error('[BACKUP] Erro ao criar backup incremental:', error);
@@ -316,11 +319,12 @@ export class IncrementalBackup {
                 }
             }
 
-            // Remover backups excedentes (manter apenas maxBackups mais recentes)
+            // Remover backups incrementais excedentes (manter apenas maxBackups incrementais mais recentes)
             const remainingBackups = this.listBackups();
-            if (remainingBackups.length > this.config.maxBackups) {
-                const toDelete = remainingBackups.slice(this.config.maxBackups);
-                
+            const incrementalBackups = remainingBackups.filter(b => b.type === 'incremental');
+            if (incrementalBackups.length > this.config.maxBackups) {
+                const toDelete = incrementalBackups.slice(this.config.maxBackups);
+
                 for (const backup of toDelete) {
                     const backupFile = this.findBackupFile(backup.timestamp, backup.type);
                     const metaFile = backupFile + '.meta';
