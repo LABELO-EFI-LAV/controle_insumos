@@ -8036,8 +8036,8 @@ openEditCalibrationModal: (calibrationId) => {
                             <label class="block text-sm font-medium text-gray-700">Tensão</label>
                             <select name="tensao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                                 <option value="">Selecione a Tensão</option>
-                                <option value="127" ${assayToEdit.tensao == '127' ? 'selected' : ''}>127V</option>
-                                <option value="220" ${assayToEdit.tensao == '220' ? 'selected' : ''}>220V</option>
+                                <option value="127" ${assayToEdit.tensao == '127V' ? 'selected' : ''}>127V</option>
+                                <option value="220" ${assayToEdit.tensao == '220V' ? 'selected' : ''}>220V</option>
                             </select>
                         </div>
                         <div>
