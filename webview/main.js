@@ -5448,6 +5448,14 @@ const dataHandlers = {
             return;
         }
         // Processando equipamentos de calibração para salvamento
+        console.log('[SAVE] Equipamentos de calibração sendo salvos:', 
+            state.calibrationEquipments.map(eq => ({
+                tag: eq.tag,
+                calibrationStatus: eq.calibrationStatus,
+                lastCalibrationDate: eq.lastCalibrationDate,
+                calibrationStartDate: eq.calibrationStartDate
+            }))
+        );
         
             window.vscode?.postMessage({
             command: 'saveData',
@@ -9460,6 +9468,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || []; // Carrega os equipamentos de calibração
                     
+                    // Log específico para verificar datas de calibração
+                    console.log('[LOAD] Equipamentos de calibração carregados:', 
+                        state.calibrationEquipments.map(eq => ({
+                            tag: eq.tag,
+                            calibrationStatus: eq.calibrationStatus,
+                            lastCalibrationDate: eq.lastCalibrationDate,
+                            calibrationStartDate: eq.calibrationStartDate
+                        }))
+                    );
+                    
                     // Log específico para equipamentos em calibração
                     const equipmentsInCalibration = state.calibrationEquipments.filter(eq => eq.calibrationStatus === 'em_calibracao');
                     console.log('🔧 [WEBVIEW] Equipamentos em calibração recebidos:', equipmentsInCalibration.length);
@@ -10442,10 +10460,24 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
                 const calibrationButtonText = isInCalibration ? 'Calibração Finalizada' : 'Equip. Calibrando';
                 const calibrationButtonClass = isInCalibration ? 'btn-finish-calibration' : 'btn-start-calibration';
                 const calibrationButtonColor = isInCalibration ? 'text-green-600 hover:text-green-900' : 'text-blue-600 hover:text-blue-900';
+                
+                // Define o ícone baseado no status
+                const calibrationButtonIcon = isInCalibration ? 
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>` :
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>`;
 
                 return `
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${equipment.tag}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <button class="btn-view-equipment-details text-blue-600 hover:text-blue-900 font-medium" data-id="${equipment.id}" title="Ver detalhes do equipamento">
+                                ${equipment.tag}
+                            </button>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${equipment.equipment}</td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">
@@ -10454,12 +10486,8 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${utils.formatDate(equipment.validity)}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <button class="${calibrationButtonClass} ${calibrationButtonColor} mr-2" data-id="${equipment.id}" title="${calibrationButtonText}">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                ${calibrationButtonText}
+                            <button class="${calibrationButtonClass} ${calibrationButtonColor} mr-2 p-2 rounded hover:bg-gray-100" data-id="${equipment.id}" title="${calibrationButtonText}">
+                                ${calibrationButtonIcon}
                             </button>
                             <button class="btn-edit-calibration-equipment text-gray-600 hover:text-gray-900 mr-2" data-id="${equipment.id}" title="Editar">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -10563,11 +10591,13 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
             }
             
             // Atualiza equipamento
+            const finalizationDate = new Date().toISOString().split('T')[0];
+            
             equipment.calibrationStatus = 'operacional';
             equipment.validity = newValidity;
-            equipment.lastCalibrationDate = new Date().toISOString().split('T')[0];
+            equipment.lastCalibrationDate = finalizationDate; // Data de finalização da calibração
             equipment.calibrationNotes = calibrationNotes;
-            delete equipment.calibrationStartDate;
+            // Mantém equipment.calibrationStartDate para histórico de quantos dias demorou a calibração
             
             dataHandlers.saveData();
             calibrationsHandlers.renderCalibrationsTable();
@@ -10672,6 +10702,60 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
                 calibrationsHandlers.renderCalibrationsTable();
                 utils.showToast('Equipamento excluído com sucesso!');
             });
+        },
+
+        openEquipmentDetailsModal: (equipmentId) => {
+            const equipment = state.calibrationEquipments.find(e => e.id == equipmentId);
+            if (!equipment) {
+                utils.showToast('Equipamento não encontrado.', true);
+                return;
+            }
+
+            const modalContent = document.getElementById('equipment-details-modal-content').innerHTML;
+            utils.openModal('Detalhes do Equipamento', modalContent, () => {
+                // Preenche as informações do equipamento
+                document.getElementById('equipment-details-tag').textContent = equipment.tag;
+                document.getElementById('equipment-details-name').textContent = equipment.equipment;
+                document.getElementById('equipment-details-validity').textContent = utils.formatDate(equipment.validity);
+
+                // Define o status com as classes corretas
+                const statusElement = document.getElementById('equipment-details-status');
+                const today = new Date();
+                const validityDate = new Date(equipment.validity);
+                const daysUntilExpiry = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
+                
+                let statusClass, statusText;
+                if (equipment.calibrationStatus === 'em_calibracao') {
+                    statusClass = 'bg-blue-100 text-blue-800';
+                    statusText = 'Em calibração';
+                } else if (daysUntilExpiry < 0) {
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusText = 'Vencido';
+                } else if (daysUntilExpiry <= 15) {
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                    statusText = 'Próximo do vencimento';
+                } else {
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusText = 'Em dia';
+                }
+                
+                statusElement.className = `inline-flex px-3 py-1 text-xs font-semibold rounded-full ${statusClass}`;
+                statusElement.textContent = statusText;
+
+                // Observações
+                const notesElement = document.getElementById('equipment-details-notes');
+                if (equipment.calibrationNotes && equipment.calibrationNotes.trim()) {
+                    notesElement.textContent = equipment.calibrationNotes;
+                } else {
+                    notesElement.textContent = 'Nenhuma observação registrada';
+                }
+
+                // Event listener para o botão fechar
+                const closeButton = document.querySelector('.btn-close-modal');
+                if (closeButton) {
+                    closeButton.addEventListener('click', () => utils.closeModal());
+                }
+            });
         }
     };
 
@@ -10701,6 +10785,9 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         } else if (e.target.closest('.btn-finish-calibration')) {
             const equipmentId = e.target.closest('.btn-finish-calibration').dataset.id;
             calibrationsHandlers.openFinishCalibrationModal(parseInt(equipmentId));
+        } else if (e.target.closest('.btn-view-equipment-details')) {
+            const equipmentId = e.target.closest('.btn-view-equipment-details').dataset.id;
+            calibrationsHandlers.openEquipmentDetailsModal(parseInt(equipmentId));
         }
     });
 
