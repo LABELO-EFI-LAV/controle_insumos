@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SourceTextModule } from 'vm';
-import { DatabaseManager } from './DatabaseManager';
+import { DatabaseManager, SystemUser } from './DatabaseManager';
+import { HybridCoordinator } from './HybridCoordinator';
+import { CargoManager } from './modules/CargoManager';
 const PDFKit = require('pdfkit');
 const PDFDocument = PDFKit.default || PDFKit;
 const { SimpleLinearRegression } = require('ml-regression-simple-linear');
@@ -10,6 +12,32 @@ const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 // ========================================================================
 // START: Added Utility Functions
 // ========================================================================
+// Obtém o mtime em ms de um arquivo com segurança
+function safeMtimeMs(filePath: string): number {
+    try {
+        const stats = fs.statSync(filePath);
+        return (stats as any).mtimeMs || stats.mtime.getTime();
+    } catch {
+        return 0;
+    }
+}
+
+// Caminhos auxiliares do WAL/SHM
+function getDbAuxPaths(dbPath: string): { wal: string; shm: string } {
+    return { wal: `${dbPath}-wal`, shm: `${dbPath}-shm` };
+}
+
+// Mtime mais recente entre DB/WAL/SHM
+function getLatestDbMTime(dbPath: string): number {
+    const base = safeMtimeMs(dbPath);
+    const { wal, shm } = getDbAuxPaths(dbPath);
+    const walM = safeMtimeMs(wal);
+    const shmM = safeMtimeMs(shm);
+    return Math.max(base, walM, shmM);
+}
+
+// Intervalo de polling para detectar mudanças no SQLite
+const POLLING_INTERVAL = 2000; // 2s
 
 /**
  * Função segura para obter chaves de objetos, evitando erros com null/undefined.
@@ -36,6 +64,7 @@ class BackupManager {
     private backupDir: string;
     private maxBackups: number = 30; // Manter 30 backups
     private backupInterval: NodeJS.Timeout | null = null;
+    private initialBackupTimeout: NodeJS.Timeout | null = null;
 
     constructor(workspaceRoot: string) {
         this.backupDir = path.join(workspaceRoot, '.labcontrol-backups');
@@ -222,9 +251,13 @@ class BackupManager {
         if (this.backupInterval) {
             clearInterval(this.backupInterval);
         }
-
-        // Backup imediato
-        this.createBackup(dbPath);
+        // Atraso inicial de 5 minutos para evitar I/O pesado no startup
+        if (this.initialBackupTimeout) {
+            clearTimeout(this.initialBackupTimeout);
+        }
+        this.initialBackupTimeout = setTimeout(() => {
+            this.createBackup(dbPath);
+        }, 5 * 60 * 1000);
 
         // Backup a cada 6 horas (21600000 ms)
         this.backupInterval = setInterval(() => {
@@ -243,12 +276,21 @@ class BackupManager {
             this.backupInterval = null;
             // Sistema de backup automático parado
         }
+        if (this.initialBackupTimeout) {
+            clearTimeout(this.initialBackupTimeout);
+            this.initialBackupTimeout = null;
+        }
     }
 }
 
 let backupManager: BackupManager | null = null;
 let databaseManager: DatabaseManager | null = null;
+let hybridCoordinator: HybridCoordinator | null = null;
+let cargoManager: CargoManager | null = null;
 let isCommandRegistered = false;
+let lastDbUpdateTime = 0;
+let isFetchingData = false;
+let lastKnownData: any = null;
 
 // --- FUNÇÕES DE CÁLCULO OTIMIZADAS ---
 // Calcula o número de tiras de sujidade com base na carga nominal
@@ -1537,7 +1579,13 @@ export async function activate(context: vscode.ExtensionContext) {
         try {
             // Inicializa o DatabaseManager
             databaseManager = new DatabaseManager(rootPath);
+            // Força modo rede (journal=DELETE, sem WAL/SHM)
+            databaseManager.setNetworkMode(true);
             await databaseManager.initialize();
+            
+            // Inicializa o HybridCoordinator
+            hybridCoordinator = new HybridCoordinator(rootPath);
+            await hybridCoordinator.initialize();
             
             // Banco de dados SQLite inicializado com sucesso
             return true;
@@ -1567,6 +1615,30 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!dbInitialized) {
             vscode.window.showErrorMessage('Erro ao inicializar banco de dados. A extensão pode não funcionar corretamente.');
             return;
+        }
+
+        try {
+            if (databaseManager) {
+                // Verifica se existem usuários no banco de dados.
+                const hasUsers = await databaseManager.hasUsers();
+
+                // Se NÃO houver usuários, cria o usuário atual como administrador.
+                if (!hasUsers) {
+                    const rawUsername = process.env.USERNAME || process.env.USER || 'admin';
+                    const systemUsername = (
+                        rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                    ).split('@')[0].toLowerCase();
+                    const displayName = 'Administrador Principal';
+                    
+                    vscode.window.showInformationMessage(
+                        `Configurando o primeiro acesso. O usuário '${systemUsername}' será definido como Administrador Principal.`
+                    );
+
+                    await databaseManager.createFirstAdminUser(systemUsername, displayName);
+                }
+            }
+        } catch (err) {
+            handleError(err, 'ERRO ao configurar o primeiro usuário administrador:');
         }
         
         // Inicializa o sistema de backup
@@ -1608,15 +1680,58 @@ export async function activate(context: vscode.ExtensionContext) {
         panel.iconPath = iconPatch;
         panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
         
+        // --- WATCHER DE ARQUIVO DO BANCO (SQLite) ---
+        const dbPathForWatcher = getDbPath();
+        let watcherInterval: NodeJS.Timeout | null = null;
+        if (dbPathForWatcher && fs.existsSync(dbPathForWatcher)) {
+            // Inicializa último mtime conhecido
+            try {
+                // Em modo rede, ignorar arquivos -wal/-shm e observar apenas o DB principal
+                lastDbUpdateTime = safeMtimeMs(dbPathForWatcher);
+            } catch {
+                lastDbUpdateTime = safeMtimeMs(dbPathForWatcher);
+            }
+            // Inicia polling simples para detectar alterações de arquivo
+            watcherInterval = setInterval(async () => {
+                try {
+                    const currentMtime = safeMtimeMs(dbPathForWatcher!);
+                    if (currentMtime > lastDbUpdateTime && !isFetchingData) {
+                        lastDbUpdateTime = currentMtime;
+                        if (!databaseManager) return;
+                        isFetchingData = true;
+                        try {
+                            const updatedData = await databaseManager.getAllData();
+                            lastKnownData = updatedData;
+                            panel.webview.postMessage({
+                                command: 'forceDataRefresh',
+                                data: updatedData
+                            });
+                        } catch (err) {
+                            // Apenas log, não interrompe o watcher
+                            console.error('[Watcher] Erro ao recarregar dados após alteração do SQLite:', err);
+                        } finally {
+                            isFetchingData = false;
+                        }
+                    }
+                } catch (err) {
+                    console.error('[Watcher] Erro ao verificar mtime do SQLite:', err);
+                }
+            }, POLLING_INTERVAL);
+        }
+
+        // Limpa watcher ao fechar o painel
+        panel.onDidDispose(() => {
+            if (watcherInterval) {
+                clearInterval(watcherInterval);
+                watcherInterval = null;
+            }
+        });
+        
         // --- LISTENER DE MENSAGENS DO WEBVIEW ---
         panel.webview.onDidReceiveMessage(async (message) => {
             // Mensagem recebida do webview
             const dbPath = getDbPath();
-
-            if (!dbPath) {
-                // Operação cancelada pois nenhuma pasta de projeto está aberta
-                return; 
-            }
+            const workspaceAvailable = !!dbPath;
             
             switch (message.command) {
                 case 'webviewReady':
@@ -1628,13 +1743,18 @@ export async function activate(context: vscode.ExtensionContext) {
                         
                         // Carregando dados do banco
                         const database = await databaseManager.getAllData();
+                        // Atualiza cache para fallback futuro
+                        lastKnownData = database;
                         // Dados carregados do banco
                         
-                        // Obtém o nome do usuário do sistema operacional
-                        const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
-                        
+                        // Obtém e normaliza o nome do usuário do sistema operacional
+                        const rawUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                        const systemUsername = (
+                            rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                        ).split('@')[0].toLowerCase();
+
                         // Lê os usuários cadastrados do banco SQLite
-                        const systemUsers = database.systemUsers || {
+                        const systemUsersRaw: Record<string, SystemUser> = (database.systemUsers || {
                             // Usuário administrador padrão (sempre presente)
                             '10088141': {
                                 username: '10088141',
@@ -1650,12 +1770,14 @@ export async function activate(context: vscode.ExtensionContext) {
                                     addAssays: true
                                 }
                             }
-                        };
+                        }) as Record<string, SystemUser>;
+                        const systemUsersEntries = Object.entries(systemUsersRaw).map(([k, v]) => [k.toLowerCase(), v] as [string, SystemUser]);
+                        const systemUsers: Record<string, SystemUser> = Object.fromEntries(systemUsersEntries);
                         
                         // Usuários cadastrados no sistema
                         
                         // Determina o usuário baseado no username do sistema
-                        const currentUser = systemUsers[systemUsername] || {
+                        const currentUser: SystemUser = systemUsers[systemUsername] || {
                             username: systemUsername,
                             type: 'visualizador',
                             displayName: 'Visualizador',
@@ -1671,14 +1793,260 @@ export async function activate(context: vscode.ExtensionContext) {
                         };
                         
                         // Usuário mapeado e dados preparados para webview
+                        if (databaseManager) {
+                            try {
+                                databaseManager.setCurrentUser(currentUser);
+                            } catch {}
+                        }
+                        // Atualiza mtime conhecido
+                        if (dbPath) {
+                            try {
+                                lastDbUpdateTime = getLatestDbMTime(dbPath);
+                            } catch {
+                                lastDbUpdateTime = safeMtimeMs(dbPath);
+                            }
+                        }
                         
                         panel.webview.postMessage({
                             command: 'loadData',
                             data: database,
-                            currentUser: currentUser
+                            currentUser: currentUser,
+                            preservePage: message.preservePage || false
                         });
                     } catch (err) {
+                        // Fallback: mesmo em caso de erro ou sem workspace, envia dados mínimos
                         handleError(err, 'ERRO AO LER/ENVIAR DADOS DO SQLITE:');
+                        const rawUsername = process.env.USERNAME || process.env.USER || 'visualizador';
+                        const systemUsername = (
+                            rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                        ).split('@')[0].toLowerCase();
+                        const currentUser: SystemUser = {
+                            username: systemUsername,
+                            type: 'visualizador',
+                            displayName: 'Visualizador',
+                            permissions: {
+                                editHistory: false,
+                                addEditSupplies: false,
+                                accessSettings: false,
+                                editSchedule: false,
+                                dragAndDrop: false,
+                                editCompletedAssays: false,
+                                addAssays: false
+                            }
+                        };
+                        const emptyDatabase = {
+                            inventory: [],
+                            historicalAssays: [],
+                            scheduledAssays: [],
+                            safetyScheduledAssays: [],
+                            calibrations: [],
+                            efficiencyCategories: [],
+                            safetyCategories: [],
+                            holidays: [],
+                            calibrationEquipments: [],
+                            settings: {},
+                            systemUsers: {}
+                        };
+                        const fallbackData = lastKnownData || emptyDatabase;
+                        panel.webview.postMessage({
+                            command: 'loadData',
+                            data: fallbackData,
+                            currentUser,
+                            readonly: true
+                        });
+
+                        // Tenta atualização em segundo plano com backoff exponencial limitado
+                        let attempt = 0;
+                        const maxAttempts = 5;
+                        const tryRefresh = async () => {
+                            attempt++;
+                            try {
+                                if (!databaseManager) return;
+                                const refreshed = await databaseManager.getAllData();
+                                lastKnownData = refreshed;
+                                panel.webview.postMessage({
+                                    command: 'forceDataRefresh',
+                                    data: refreshed
+                                });
+                            } catch (e) {
+                                if (attempt < maxAttempts) {
+                                    const delay = Math.min(3000 * Math.pow(2, attempt - 1), 30000);
+                                    setTimeout(tryRefresh, delay);
+                                } else {
+                                    console.warn('[EXT] Falha ao atualizar em segundo plano após várias tentativas.', e);
+                                }
+                            }
+                        };
+                        tryRefresh();
+                    }
+                    break;
+
+                case 'syncData':
+                    // Solicitação para sincronizar dados sem alterar a página atual
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        // Recarrega todos os dados do banco
+                        const database = await databaseManager.getAllData();
+
+                        // Mantém o usuário atual se fornecido, senão usa o usuário do sistema
+                        const rawUsername2 = process.env.USERNAME || process.env.USER || 'unknown';
+                        const systemUsername = (
+                            rawUsername2.includes('\\') ? rawUsername2.split('\\').pop()! : rawUsername2
+                        ).split('@')[0].toLowerCase();
+                        const systemUsersRaw: Record<string, SystemUser> = (database.systemUsers || {
+                            '10088141': {
+                                username: '10088141',
+                                type: 'administrador',
+                                displayName: 'Administrador',
+                                permissions: {
+                                    editHistory: true,
+                                    addEditSupplies: true,
+                                    accessSettings: true,
+                                    editSchedule: true,
+                                    dragAndDrop: true,
+                                    editCompletedAssays: true,
+                                    addAssays: true
+                                }
+                            }
+                        }) as Record<string, SystemUser>;
+                        const systemUsersEntriesSync = Object.entries(systemUsersRaw).map(([k, v]) => [k.toLowerCase(), v] as [string, SystemUser]);
+                        const systemUsers: Record<string, SystemUser> = Object.fromEntries(systemUsersEntriesSync);
+                        const currentUser: SystemUser = systemUsers[systemUsername] || {
+                            username: systemUsername,
+                            type: 'visualizador',
+                            displayName: 'Visualizador',
+                            permissions: {
+                                editHistory: false,
+                                addEditSupplies: false,
+                                accessSettings: false,
+                                editSchedule: false,
+                                dragAndDrop: false,
+                                editCompletedAssays: false,
+                                addAssays: false
+                            }
+                        };
+                        if (databaseManager) {
+                            try {
+                                databaseManager.setCurrentUser(currentUser);
+                            } catch {}
+                        }
+                        panel.webview.postMessage({
+                            command: 'loadData',
+                            data: database,
+                            currentUser: currentUser,
+                            preservePage: true
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO SINCRONIZAR DADOS DO SQLITE:');
+                        // Fallback para garantir que a UI saia do loading
+                        const rawUsername = process.env.USERNAME || process.env.USER || 'visualizador';
+                        const systemUsername = (
+                            rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                        ).split('@')[0].toLowerCase();
+                        const currentUser: SystemUser = {
+                            username: systemUsername,
+                            type: 'visualizador',
+                            displayName: 'Visualizador',
+                            permissions: {
+                                editHistory: false,
+                                addEditSupplies: false,
+                                accessSettings: false,
+                                editSchedule: false,
+                                dragAndDrop: false,
+                                editCompletedAssays: false,
+                                addAssays: false
+                            }
+                        };
+                        const emptyDatabase = {
+                            inventory: [],
+                            historicalAssays: [],
+                            scheduledAssays: [],
+                            safetyScheduledAssays: [],
+                            calibrations: [],
+                            efficiencyCategories: [],
+                            safetyCategories: [],
+                            holidays: [],
+                            preparacaoCargaProtocols: [],
+                            calibrationEquipments: [],
+                            settings: {},
+                            systemUsers: {}
+                        };
+                        panel.webview.postMessage({
+                            command: 'loadData',
+                            data: emptyDatabase,
+                            currentUser,
+                            preservePage: true
+                        });
+                        panel.webview.postMessage({
+                            command: 'syncDataResult',
+                            success: false,
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'requestManualRefresh':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        // Recarrega dados atualizados
+                        const updatedData = await databaseManager.getAllData();
+
+                        // Determina e normaliza usuário atual do sistema
+                        const rawUsernameReq = process.env.USERNAME || process.env.USER || 'unknown';
+                        const systemUsernameReq = (
+                            rawUsernameReq.includes('\\') ? rawUsernameReq.split('\\').pop()! : rawUsernameReq
+                        ).split('@')[0].toLowerCase();
+                        const systemUsersRawReq: Record<string, SystemUser> = (updatedData.systemUsers || {
+                            'rdaro': {
+                                username: 'rdaro',
+                                type: 'administrador',
+                                displayName: 'Administrador',
+                                permissions: {
+                                    editHistory: true,
+                                    addEditSupplies: true,
+                                    accessSettings: true,
+                                    editSchedule: true,
+                                    dragAndDrop: true,
+                                    editCompletedAssays: true,
+                                    addAssays: true
+                                }
+                            }
+                        }) as Record<string, SystemUser>;
+                        const systemUsersEntriesReq = Object.entries(systemUsersRawReq).map(([k, v]) => [k.toLowerCase(), v] as [string, SystemUser]);
+                        const systemUsersReq: Record<string, SystemUser> = Object.fromEntries(systemUsersEntriesReq);
+                        const currentUserReq: SystemUser = systemUsersReq[systemUsernameReq] || {
+                            username: systemUsernameReq,
+                            type: 'visualizador',
+                            displayName: 'Visualizador',
+                            permissions: {
+                                editHistory: false,
+                                addEditSupplies: false,
+                                accessSettings: false,
+                                editSchedule: false,
+                                dragAndDrop: false,
+                                editCompletedAssays: false,
+                                addAssays: false
+                            }
+                        };
+                        if (databaseManager) {
+                            try { databaseManager.setCurrentUser(currentUserReq); } catch {}
+                        }
+
+                        // Envia atualização completa preservando a página atual
+                        panel.webview.postMessage({
+                            command: 'loadData',
+                            data: updatedData,
+                            currentUser: currentUserReq,
+                            preservePage: true,
+                            readonly: true
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXECUTAR SINCRONIZAÇÃO MANUAL:');
                     }
                     break;
 
@@ -1960,7 +2328,48 @@ export async function activate(context: vscode.ExtensionContext) {
                         });
                     }
                     break;
+                    case 'getPecasCycleDistribution':
+                        try {
+                            if (!hybridCoordinator) {
+                                panel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: [], error: 'HybridCoordinator não inicializado' });
+                                return;
+                            }
+                            const distribution = await hybridCoordinator.delegateCargoOperation('getPecasCycleDistribution', {});
+                            panel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: distribution });
+                        } catch (err) {
+                            panel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: [], error: (err as Error).message });
+                        }
+                        break;
 
+                    case 'addPecaCarga':
+                        try {
+                            if (!hybridCoordinator) {
+                                throw new Error('HybridCoordinator não inicializado');
+                            }
+                            await hybridCoordinator.delegateCargoOperation('addPeca', message.data);
+                            panel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peça cadastrada com sucesso!' });
+                            // Recarrega os dados para atualizar a UI
+                            const updatedDistribution = await hybridCoordinator.delegateCargoOperation('getPecasCycleDistribution', {});
+                            panel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            panel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+
+                    // NEW CASES
+
+
+
+                case 'getAllPecas':
+                    try {
+                        if (!hybridCoordinator) throw new Error('HybridCoordinator não inicializado');
+                        // Assumindo que hybridCoordinator.delegateCargoOperation('getAllPecas') retorna todas as peças, incluindo inativas
+                        const allPecas = await hybridCoordinator.delegateCargoOperation('getAllPecas', {}); 
+                        panel.webview.postMessage({ command: 'allPecasResult', data: allPecas });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR TODAS AS PEÇAS:');
+                    }
+                    break;
                 case 'addCategory':
                     try {
                         if (!databaseManager) {
@@ -2058,20 +2467,14 @@ export async function activate(context: vscode.ExtensionContext) {
                             ...message.data
                         };
 
-                        // Salva no SQLite
+                        // Define DELTA como modo padrão e salva no SQLite
+                        databaseManager.setFullSyncMode(false);
                         await databaseManager.saveData(dataToSave);
                         
-                        // Dados salvos com sucesso no SQLite
-                        
-                        // Cria backup do SQLite
-                        if (backupManager) {
-                            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                            if (workspaceRoot) {
-                                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                                const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
-                                await databaseManager.createBackup(backupPath);
-                            }
-                        }
+                        // Gera backup incremental após alterações
+                        try {
+                            await databaseManager.createIncrementalBackup();
+                        } catch {}
                     } catch (err) {
                         handleError(err, 'ERRO AO SALVAR DADOS NO SQLITE:');
                     }
@@ -2082,26 +2485,11 @@ export async function activate(context: vscode.ExtensionContext) {
                         if (!databaseManager) {
                             throw new Error('DatabaseManager não inicializado');
                         }
+                        // Salva apenas o delta do cronograma
+                        await databaseManager.saveDataDelta(message.data);
 
-                        // Obtém dados atuais do banco
-                        const currentDatabase = await databaseManager.getAllData();
-                        
-                        // Mescla com os novos dados do cronograma
-                        const dataToSave = {
-                            ...currentDatabase,
-                            ...message.data
-                        };
-
-                        // Salva no SQLite
-                        await databaseManager.saveData(dataToSave);
-                        
-                        // Cria backup do banco de dados
-                        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                        if (workspaceRoot) {
-                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                            const backupPath = path.join(workspaceRoot, '.labcontrol-backups', `database-backup-${timestamp}.sqlite`);
-                            await databaseManager.createBackup(backupPath);
-                        }
+                        // Cria backup incremental das mudanças para evitar cópia pesada do SQLite
+                        await databaseManager.createIncrementalBackup();
                         
                         console.log('[EXTENSION] Dados do cronograma salvos com sucesso no SQLite');
                         
@@ -2109,7 +2497,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         handleError(err, 'ERRO AO SALVAR DADOS DO CRONOGRAMA NO SQLITE:');
                     }
                     break;
-
+                    
                 case 'listBackups':
                     if (backupManager) {
                         const backups = backupManager.listBackups();
@@ -2324,10 +2712,15 @@ export async function activate(context: vscode.ExtensionContext) {
                         }
                         
                         // Verifica se o usuário é administrador
-                        const systemUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                        const rawUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                        const systemUsername = (
+                            rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                        ).split('@')[0].toLowerCase();
                         const database = await databaseManager.getAllData();
-                        const systemUsers = database.systemUsers || {};
-                        const currentUser = systemUsers[systemUsername];
+                        const systemUsersRaw: Record<string, SystemUser> = (database.systemUsers || {}) as Record<string, SystemUser>;
+                        const systemUsersEntriesBulk = Object.entries(systemUsersRaw).map(([k, v]) => [k.toLowerCase(), v] as [string, SystemUser]);
+                        const systemUsers: Record<string, SystemUser> = Object.fromEntries(systemUsersEntriesBulk);
+                        const currentUser: SystemUser | undefined = systemUsers[systemUsername];
                         
                         if (!currentUser || currentUser.type !== 'administrador') {
                             panel.webview.postMessage({
@@ -2390,8 +2783,13 @@ export async function activate(context: vscode.ExtensionContext) {
                         database.holidays = (database.holidays || []).filter((item: any) => !isInRange(item.startDate));
                         database.calibrations = (database.calibrations || []).filter((item: any) => !isInRange(item.startDate));
                         
-                        // Salva no SQLite
-                        await databaseManager.saveData(database);
+                        // Salva no SQLite em modo FULL para refletir deleções globais
+                        databaseManager.setFullSyncMode(true);
+                        try {
+                            await databaseManager.saveData(database);
+                        } finally {
+                            databaseManager.setFullSyncMode(false);
+                        }
                         
                         panel.webview.postMessage({
                             command: 'bulkDeleteResult',
@@ -2411,6 +2809,610 @@ export async function activate(context: vscode.ExtensionContext) {
                         });
                     }
                     break;
+                    case 'deleteCalibrationEquipment':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        const { id } = message.data;
+                        await databaseManager.deleteCalibrationEquipment(id);
+                        panel.webview.postMessage({
+                            command: 'deleteCalibrationEquipmentResult',
+                            success: true,
+                            id: id
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR EQUIPAMENTO DE CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'deleteCalibrationEquipmentResult',
+                            success: false,
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+                    // ==================== COMANDOS GRANULARES PARA ENSAIOS AGENDADOS ====================
+
+                case 'createScheduledAssay':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createScheduledAssay(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'createSafetyScheduledAssay':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createSafetyScheduledAssay(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getScheduledAssayById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const assay = await databaseManager.getScheduledAssayById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: assay
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllScheduledAssays':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const assays = await databaseManager.getAllScheduledAssays();
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: assays
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ENSAIOS AGENDADOS:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateScheduledAssay(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteScheduledAssay(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ENSAIO AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'scheduledAssayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateSafetyScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateSafetyScheduledAssay(id, updates);
+
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteSafetyScheduledAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteSafetyScheduledAssay(message.data.id);
+
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ENSAIO DE SEGURANÇA AGENDADO:');
+                        panel.webview.postMessage({
+                            command: 'safetyScheduledAssayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteHistoricalAssayGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteHistoricalAssay(message.data.id);
+
+                        panel.webview.postMessage({
+                            command: 'historicalAssayOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ENSAIO HISTÓRICO:');
+                        panel.webview.postMessage({
+                            command: 'historicalAssayOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                // ==================== COMANDOS GRANULARES PARA INVENTÁRIO ====================
+
+                case 'createInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createInventoryItem(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getInventoryItemById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const item = await databaseManager.getInventoryItemById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: item
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllInventoryItemsGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const items = await databaseManager.getAllInventoryItems();
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: items
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITENS DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getLowStockItems':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const items = await databaseManager.getLowStockItems();
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: true,
+                            operation: 'getLowStock',
+                            data: items
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR ITENS COM ESTOQUE BAIXO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularDataResult',
+                            success: false,
+                            operation: 'getLowStock',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateInventoryItemGranular(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateInventoryQuantity':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, quantity } = message.data;
+                        await databaseManager.updateInventoryQuantity(id, quantity);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'updateQuantity',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR QUANTIDADE DO INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'updateQuantity',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteInventoryItemGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteInventoryItemGranular(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR ITEM DE INVENTÁRIO:');
+                        panel.webview.postMessage({
+                            command: 'inventoryGranularOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                // ==================== COMANDOS GRANULARES PARA CALIBRAÇÕES ====================
+
+                case 'createCalibration':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const newId = await databaseManager.createCalibration(message.data);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'create',
+                            newId: newId
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO CRIAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'create',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getCalibrationById':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const calibration = await databaseManager.getCalibrationById(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getById',
+                            data: calibration
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getById',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getAllCalibrations':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const calibrations = await databaseManager.getAllCalibrations();
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getAll',
+                            data: calibrations
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÕES:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getAll',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'getUpcomingCalibrations':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const daysAhead = message.data.daysAhead || 30;
+                        const calibrations = await databaseManager.getUpcomingCalibrations(daysAhead);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: true,
+                            operation: 'getUpcoming',
+                            data: calibrations
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR CALIBRAÇÕES PRÓXIMAS:');
+                        panel.webview.postMessage({
+                            command: 'calibrationDataResult',
+                            success: false,
+                            operation: 'getUpcoming',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateCalibrationGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const { id, updates } = message.data;
+                        await databaseManager.updateCalibrationGranular(id, updates);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteCalibrationGranular':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        await databaseManager.deleteCalibrationGranular(message.data.id);
+                        
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id: message.data.id
+                        });
+                        
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR CALIBRAÇÃO:');
+                        panel.webview.postMessage({
+                            command: 'calibrationOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
             }
         });
         
@@ -2427,6 +3429,548 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     context.subscriptions.push(disposable);
+
+    // Registrar comando para Controle de Carga separado
+    let cargoDisposable;
+    try {
+        cargoDisposable = vscode.commands.registerCommand('controle-de-carga.abrir', async () => {
+            // Comando "controle-de-carga.abrir" acionado
+
+            // Obter rootPath do workspace
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                vscode.window.showErrorMessage('Por favor, abra uma pasta de projeto para usar o controle de carga.');
+                return;
+            }
+            const rootPath = workspaceFolders[0].uri.fsPath;
+
+            // Inicializar CargoManager se não estiver inicializado
+            if (!cargoManager) {
+                cargoManager = new CargoManager(rootPath);
+                await cargoManager.initialize();
+            }
+
+            const cargoPanel = vscode.window.createWebviewPanel(
+                'cargoControl',
+                'Controle de Carga',
+                vscode.ViewColumn.One,
+                {
+                    enableScripts: true,
+                    localResourceRoots: [
+                        vscode.Uri.file(path.join(context.extensionPath, 'images')),
+                        vscode.Uri.file(path.join(context.extensionPath, 'webview')),
+                    ]
+                }
+            );
+
+            const iconPatch = vscode.Uri.file(path.join(context.extensionPath, 'images', 'icon.png'));
+            cargoPanel.iconPath = iconPatch;
+            cargoPanel.webview.html = getCargoWebviewContent(cargoPanel.webview, context.extensionUri);
+            
+            // --- WATCHER DE ARQUIVO DO BANCO (cargo.sqlite) para Controle de Carga ---
+            const cargoDbPath = path.join(rootPath, 'cargo.sqlite');
+            let cargoWatcherInterval: NodeJS.Timeout | null = null;
+            if (cargoDbPath && fs.existsSync(cargoDbPath)) {
+                // Inicializa último mtime conhecido
+                try {
+                    lastDbUpdateTime = safeMtimeMs(cargoDbPath);
+                } catch {
+                    lastDbUpdateTime = safeMtimeMs(cargoDbPath);
+                }
+                // Inicia polling simples para detectar alterações de arquivo
+                cargoWatcherInterval = setInterval(async () => {
+                    try {
+                        const currentMtime = safeMtimeMs(cargoDbPath!);
+                        if (currentMtime > lastDbUpdateTime && !isFetchingData) {
+                            lastDbUpdateTime = currentMtime;
+                            if (!cargoManager) return;
+                            isFetchingData = true;
+                            try {
+                                // Buscar dados atualizados do CargoManager
+                                const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                                cargoPanel.webview.postMessage({
+                                    command: 'pecasCycleDistributionResult',
+                                    data: updatedDistribution
+                                });
+                            } catch (err) {
+                                console.error('[Cargo Watcher] Erro ao recarregar dados após alteração do cargo.sqlite:', err);
+                            } finally {
+                                isFetchingData = false;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[Cargo Watcher] Erro ao verificar mtime do SQLite:', err);
+                    }
+                }, POLLING_INTERVAL);
+            }
+
+            // Limpa watcher ao fechar o painel
+            cargoPanel.onDidDispose(() => {
+                if (cargoWatcherInterval) {
+                    clearInterval(cargoWatcherInterval);
+                    cargoWatcherInterval = null;
+                }
+            });
+            
+            // --- LISTENER DE MENSAGENS DO WEBVIEW para Controle de Carga ---
+            cargoPanel.webview.onDidReceiveMessage(async (message) => {
+                // Reutiliza a mesma lógica de mensagens do webview principal
+                // mas apenas para funcionalidades relacionadas ao controle de carga
+                const workspaceAvailable = !!cargoManager;
+                
+                switch (message.command) {
+                    case 'webviewReady':
+                        // Webview está pronto, carregando dados do cargo.sqlite
+                        try {
+                            if (!cargoManager) {
+                                throw new Error('CargoManager não inicializado');
+                            }
+                            
+                            // Carregando dados do controle de carga
+                            const cargoReport = await cargoManager.getCargoReport();
+                            
+                            // Obtém e normaliza o nome do usuário do sistema operacional
+                            const rawUsername = process.env.USERNAME || process.env.USER || 'unknown';
+                            const systemUsername = (
+                                rawUsername.includes('\\') ? rawUsername.split('\\').pop()! : rawUsername
+                            ).split('@')[0].toLowerCase();
+
+                            // Para o módulo de carga, todos os usuários têm permissões de técnico
+                            const userPermissions: string[] = ['read', 'write'];
+                            const userType = 'tecnico_eficiencia';
+                            const displayName = systemUsername;
+
+                            // Dados carregados do banco de carga com informações do usuário
+                            cargoPanel.webview.postMessage({
+                                command: 'dataLoaded',
+                                data: { cargoReport },
+                                user: {
+                                    username: systemUsername,
+                                    displayName: displayName,
+                                    userType: userType,
+                                    permissions: userPermissions
+                                },
+                                workspaceAvailable
+                            });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO CARREGAR DADOS INICIAIS DO CONTROLE DE CARGA:');
+                            cargoPanel.webview.postMessage({
+                                command: 'error',
+                                message: 'Erro ao carregar dados do banco de carga. Verifique se o workspace está aberto.'
+                            });
+                        }
+                        break;
+                    
+                    // ========================================================================
+                    // CASOS ADICIONADOS PARA CONTROLE DE CARGA
+                    // ========================================================================
+                    
+                    case 'getPecasCycleDistribution':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const distribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: distribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR DISTRIBUIÇÃO DE CICLOS:');
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: [], error: (err as Error).message });
+                        }
+                        break;
+
+                    case 'getAllPecasAtivas':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const pecas = await cargoManager.getAllPecasAtivas();
+                            cargoPanel.webview.postMessage({ command: 'allPecasAtivasResult', data: pecas });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PEÇAS ATIVAS:');
+                        }
+                        break;
+
+                    case 'getPecasSemVinculoAtivo':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const pecas = await cargoManager.getPecasSemVinculoAtivo();
+                            cargoPanel.webview.postMessage({ command: 'pecasSemVinculoAtivoResult', data: pecas });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PEÇAS SEM VÍNCULO ATIVO:');
+                        }
+                        break;
+                    
+
+
+                    case 'checkPecaExists':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            
+                            const tagId = message.data?.tag_id;
+                            if (!tagId) {
+                                cargoPanel.webview.postMessage({ 
+                                    command: 'checkPecaExistsResult', 
+                                    tag_id: tagId,
+                                    exists: false,
+                                    error: 'TAG da peça não fornecida'
+                                });
+                                break;
+                            }
+                            
+                            // Verificar se a peça já existe
+                            const existingPecas = await cargoManager.checkExistingPecas([tagId]);
+                            const exists = existingPecas.includes(tagId);
+                            
+                            cargoPanel.webview.postMessage({ 
+                                command: 'checkPecaExistsResult', 
+                                tag_id: tagId,
+                                exists: exists
+                            });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO VERIFICAR PEÇA:');
+                            cargoPanel.webview.postMessage({ 
+                                command: 'checkPecaExistsResult', 
+                                tag_id: message.data?.tag_id,
+                                exists: false,
+                                error: (err as Error).message 
+                            });
+                        }
+                        break;
+
+                    case 'addPecaCarga':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            
+                            // Verificar se é uma única peça ou múltiplas peças
+                            if (Array.isArray(message.data)) {
+                                // Múltiplas peças
+                                const result = await cargoManager.addMultiplePecas(message.data);
+                                cargoPanel.webview.postMessage({ 
+                                    command: 'pecaCargaOperationResult', 
+                                    success: result.success, 
+                                    message: result.message,
+                                    addedPecas: result.addedPecas,
+                                    existingPecas: result.existingPecas
+                                });
+                            } else {
+                                // Peça única (compatibilidade com código existente)
+                                await cargoManager.addPeca(message.data);
+                                cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peça cadastrada com sucesso!' });
+                            }
+                            
+                            // Atualizar distribuição de ciclos após adicionar peça
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO ADICIONAR PEÇA DE CARGA:');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+
+                    case 'openModal':
+                        break;
+                    
+                    case 'addProtocoloCarga':
+                        try {
+                            if (!cargoManager) {
+                                throw new Error('CargoManager não inicializado');
+                            }
+                            await cargoManager.saveProtocoloCarga(message.data.protocolo, message.data.pecas_vinculadas);
+                            cargoPanel.webview.postMessage({ command: 'protocoloCargaOperationResult', success: true, message: 'Protocolo cadastrado com sucesso!' });
+                        } catch (err) {
+                            cargoPanel.webview.postMessage({ command: 'protocoloCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    
+                    default:
+                        // Para outros comandos, redirecionar para o painel principal se necessário
+                        break;
+                    case 'getAllPecas':
+                    try {
+                        if (!cargoManager) throw new Error('CargoManager não inicializado');
+                        const allPecas = await cargoManager.getAllPecas(); 
+                        cargoPanel.webview.postMessage({ command: 'allPecasResult', data: allPecas });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO BUSCAR TODAS AS PEÇAS:');
+                    }
+                    break;
+                    case 'deleteProtocoloCarga':
+                            try {
+                                if (!cargoManager) throw new Error('CargoManager não inicializado');
+                                
+                                const { protocolo, cycles_to_add, tipo_ciclo } = message.data;
+                                
+                                // A função agora retorna objeto com peças afetadas e vencidas
+                                const { pecasAfetadas, pecasVencidas } = await cargoManager.deleteProtocoloCarga(protocolo, cycles_to_add, tipo_ciclo);
+
+                                // Envia o resultado da operação principal
+                                cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Protocolo de carga descadastrado com sucesso!' });
+
+                                // Envia a lista completa das peças afetadas com ciclos e status atual
+                                if (pecasAfetadas && pecasAfetadas.length > 0) {
+                                    cargoPanel.webview.postMessage({ command: 'pecasAfetadasNotification', data: { pecasAfetadas, pecasVencidas } });
+                                }
+                            } catch (err) {
+                                handleError(err, 'ERRO AO DESCADASTRAR PROTOCOLO DE CARGA:');
+                                cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' });
+                            }
+                            break;
+                        case 'deleteProtocolo':
+                            try {
+                                if (!cargoManager) throw new Error('CargoManager não inicializado');
+                                
+                                const { protocolo } = message.data;
+                                
+                                // Usa a nova função simplificada que apenas exclui o protocolo
+                                const success = await cargoManager.deleteProtocolo(protocolo);
+
+                                if (success) {
+                                    cargoPanel.webview.postMessage({ 
+                                        command: 'pecaCargaOperationResult', 
+                                        success: true, 
+                                        message: `Protocolo ${protocolo} excluído com sucesso!` 
+                                    });
+                                    
+                                    // Atualizar a lista de protocolos
+                                    cargoPanel.webview.postMessage({ command: 'refreshProtocolos' });
+                                } else {
+                                    cargoPanel.webview.postMessage({ 
+                                        command: 'pecaCargaOperationResult', 
+                                        success: false, 
+                                        error: 'Falha ao excluir protocolo' 
+                                    });
+                                }
+                            } catch (err) {
+                                handleError(err, 'ERRO AO EXCLUIR PROTOCOLO:');
+                                cargoPanel.webview.postMessage({ 
+                                    command: 'pecaCargaOperationResult', 
+                                    success: false, 
+                                    error: err instanceof Error ? err.message : 'Erro desconhecido' 
+                                });
+                            }
+                            break;
+                        case 'markPecaAsDanificada':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            await cargoManager.updatePecaStatus(message.tag_id, 'inativa');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peça marcada como inativa.' });
+                            // Refresh charts
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO MARCAR PEÇA COMO DANIFICADA:');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'updatePecaStatus': // New command for updating piece status
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { tag_id, status } = message.data;
+                            await cargoManager.updatePecaStatus(tag_id, status);
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: `Peça ${tag_id} atualizada para status ${status}.` });
+                            // Refresh charts
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO ATUALIZAR STATUS DA PEÇA:');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'bulkDeleteInactivePieces': // New command for bulk deleting inactive pieces by year
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { year } = message;
+
+                            if (!year) {
+                                throw new Error("O ano para exclusão não foi fornecido.");
+                            }
+
+                            const deletedCount = await cargoManager.bulkDeleteInactivePiecesByYear(year);
+                            cargoPanel.webview.postMessage({ 
+                                command: 'bulkDeleteInactivePiecesResult', 
+                                success: true, 
+                                message: `${deletedCount} peças inativas de ${year} foram excluídas com sucesso.`,
+                                deletedCount 
+                            });
+
+                            // Atualizar dados na UI após a exclusão
+                            const pecasVencidas = await cargoManager.getAllPecasVencidas();
+                            cargoPanel.webview.postMessage({ command: 'allPecasVencidasResult', data: pecasVencidas });
+
+                            // Refresh charts
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO EXCLUIR PEÇAS INATIVAS EM MASSA:');
+                            cargoPanel.webview.postMessage({ command: 'bulkDeleteInactivePiecesResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'bulkDeleteProtocolsByYear': // New command for bulk deleting protocols by year
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { year } = message.data;
+                            const deletedCount = await cargoManager.bulkDeleteProtocolsByYear(year);
+                            cargoPanel.webview.postMessage({ 
+                                command: 'bulkDeleteProtocolsByYearResult', 
+                                success: true, 
+                                message: `${deletedCount} protocolos de ${year} foram excluídos com sucesso.`,
+                                deletedCount 
+                            });
+                            // Refresh protocols table
+                            const protocolos = await cargoManager.getProtocolosComStatus();
+                            cargoPanel.webview.postMessage({ command: 'protocolosComStatusResult', data: protocolos });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO EXCLUIR PROTOCOLOS EM MASSA:');
+                            cargoPanel.webview.postMessage({ command: 'bulkDeleteProtocolsByYearResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'saveProtocoloCarga':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { protocolo, pecas_vinculadas } = message.data;
+
+                            await cargoManager.saveProtocoloCarga(protocolo, pecas_vinculadas);
+                            const pecasVencidas: any[] = []; // A função saveProtocoloCarga não retorna pecasVencidas, então inicializamos como um array vazio.
+
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Protocolo de carga cadastrado com sucesso!' });
+
+                            // Se houver peças que se tornaram vencidas, notifica o frontend
+                            if (pecasVencidas.length > 0) {
+                                cargoPanel.webview.postMessage({ command: 'pecasVencidasNotification', data: pecasVencidas });
+                            }
+
+                            // Atualiza os gráficos
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO SALVAR PROTOCOLO DE CARGA:');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'addPecaToProtocolo':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { protocolo, pecas_vinculadas } = message.data;
+                            await cargoManager.addPecaToProtocolo(protocolo, pecas_vinculadas);
+                            
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peças adicionadas ao protocolo com sucesso!' });
+
+                            // Atualiza os gráficos
+                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            
+                            // Atualiza a tabela de protocolos
+                            const protocolosComStatus = await cargoManager.getProtocolosComStatus();
+                            cargoPanel.webview.postMessage({ command: 'protocolosComStatusResult', data: protocolosComStatus });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO ADICIONAR PEÇAS AO PROTOCOLO:');
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
+                        }
+                        break;
+                    case 'getPecaDetails':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const details = await cargoManager.getPecaDetails(message.tag_id);
+                            cargoPanel.webview.postMessage({ command: 'pecaDetailsResult', data: details });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR DETALHES DA PEÇA:');
+                        }
+                        break;
+                        case 'getAllPecasAtivas':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const pecas = await cargoManager.getAllPecasAtivas();
+                            
+                            // Verificar se a mensagem vem do controle de carga
+                            const responseCommand = message.source === 'loadControl' ? 'loadControlPecasAtivasResult' : 'allPecasAtivasResult';
+                            cargoPanel.webview.postMessage({ command: responseCommand, data: pecas });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PEÇAS ATIVAS:');
+                        }
+                        break;
+
+                        case 'getPecasSemVinculoAtivo':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const pecas = await cargoManager.getPecasSemVinculoAtivo();
+                            cargoPanel.webview.postMessage({ command: 'pecasSemVinculoAtivoResult', data: pecas });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PEÇAS SEM VÍNCULO ATIVO:');
+                        }
+                        break;
+
+                    case 'getAllPecasVencidas':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const pecasVencidas = await cargoManager.getAllPecasVencidas();
+                            cargoPanel.webview.postMessage({ command: 'allPecasVencidasResult', data: pecasVencidas });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PEÇAS VENCIDAS:');
+                        }
+                        break;
+                    case 'getProtocoloCargaDetails':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            // Extrai protocolo e tipoCiclo da mensagem
+                            const { protocolo, tipoCiclo } = message.data; // <<< ALTERADO AQUI
+                            const details = await cargoManager.getProtocoloCargaDetails(protocolo, tipoCiclo); // <<< ALTERADO AQUI
+                            cargoPanel.webview.postMessage({ command: 'protocoloCargaDetailsResult', data: details });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR DETALHES DO PROTOCOLO:');
+                        }
+                        break;
+                    case 'getAllProtocolosCarga':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const protocolos = await cargoManager.getAllProtocolosCarga();
+                            cargoPanel.webview.postMessage({ command: 'getAllProtocolosCargaResult', data: protocolos.map((p: any) => p.protocolo) });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PROTOCOLOS DE CARGA:');
+                        }
+                        break;
+
+                    case 'getProtocoloCargaDetailsForDeletion':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { protocolo, cycles_to_add, tipo_ciclo } = message.data;
+                            const pieces = await cargoManager.getProtocoloCargaPiecesWithCycles(protocolo, tipo_ciclo);
+                            cargoPanel.webview.postMessage({ command: 'protocoloCargaDetailsForDeletionResult', data: { pieces, cycles_to_add, tipo_ciclo } });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR DETALHES PARA DESCADASTRO DO PROTOCOLO:');
+                        }
+                        break;
+
+                    case 'getActiveProtocolosCarga':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const protocolos = await cargoManager.getActiveProtocolosCarga();
+                            
+                            // Verificar se a mensagem vem do controle de carga
+                            const responseCommand = message.source === 'loadControl' ? 'loadControlActiveProtocolosResult' : 'activeProtocolosCargaResult';
+                            cargoPanel.webview.postMessage({ command: responseCommand, data: protocolos.map((p: any) => p.protocolo) });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PROTOCOLOS ATIVOS DE CARGA:');
+                        }
+                        break;
+
+                    case 'getProtocolosComStatus':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const protocolos = await cargoManager.getProtocolosComStatus();
+                            
+                            cargoPanel.webview.postMessage({ command: 'protocolosComStatusResult', data: protocolos });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR PROTOCOLOS COM STATUS:');
+                        }
+                        break;
+                    
+
+                        
+                }
+            });
+        });
+    } catch (error) {
+        vscode.window.showErrorMessage('Erro ao registrar comando de controle de carga. Tente recarregar o VS Code.');
+        return;
+    }
+
+    context.subscriptions.push(cargoDisposable);
 
     // --- CLEANUP AO DESATIVAR A EXTENSÃO ---
     context.subscriptions.push({
@@ -2469,6 +4013,39 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): s
     htmlContent = htmlContent
         .replace('{{stylesUri}}', stylesUri.toString())
         .replace('{{scriptUri}}', scriptUri.toString())
+        .replace('{{iconUri}}', iconUri.toString())
+        .replace(/{{version}}/g, version.toString())
+        .replace('{{wmGifUri}}', wmGifUri.toString());
+
+
+    return htmlContent;
+}
+
+function getCargoWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+    const webviewPath = vscode.Uri.joinPath(extensionUri, 'webview');
+    const stylesPath = vscode.Uri.joinPath(webviewPath, 'style.css');
+    const scriptPath = vscode.Uri.joinPath(webviewPath, 'main-cargo.js'); // Using simplified version
+    const cargoHtmlPath = vscode.Uri.joinPath(webviewPath, 'controle-carga.html');
+
+    const iconPath = vscode.Uri.joinPath(extensionUri, 'images', 'icon.png');
+    const iconUri = webview.asWebviewUri(iconPath);
+
+    const wmGifPath = vscode.Uri.joinPath(extensionUri, 'images', 'wm.gif');
+    const wmGifUri = webview.asWebviewUri(wmGifPath);
+    
+    const stylesUri = webview.asWebviewUri(stylesPath);
+    const scriptUri = webview.asWebviewUri(scriptPath);
+
+    const packageJsonPath = vscode.Uri.joinPath(extensionUri, 'package.json');
+    const packageJsonContent = fs.readFileSync(packageJsonPath.fsPath, 'utf8');
+    const packageJson = JSON.parse(packageJsonContent);
+    const version = packageJson.version;
+
+    let htmlContent = fs.readFileSync(cargoHtmlPath.fsPath, 'utf8');
+
+    htmlContent = htmlContent
+        .replace('{{stylesUri}}', stylesUri.toString())
+        .replace('{{scriptUriCargo}}', scriptUri.toString())
         .replace('{{iconUri}}', iconUri.toString())
         .replace('{{version}}', version.toString())
         .replace('{{wmGifUri}}', wmGifUri.toString());
@@ -2566,20 +4143,23 @@ function handleError(err: unknown, contextMessage: string) {
 }
 
 export async function deactivate() {
-    console.log('🔄 Desativando extensão Controle de Insumos...');
     
     // Para o sistema de backup automático
     if (backupManager) {
         backupManager.stopAutoBackup();
         backupManager = null;
-        console.log('✅ Sistema de backup parado');
     }
     
     // Fecha a conexão com o banco de dados
     if (databaseManager) {
         await databaseManager.close();
         databaseManager = null;
-        console.log('✅ Conexão com banco de dados fechada');
+    }
+    
+    // Fecha o HybridCoordinator
+    if (hybridCoordinator) {
+        await hybridCoordinator.close();
+        hybridCoordinator = null;
     }
     
     // Reseta a flag de comando registrado
@@ -2588,5 +4168,4 @@ export async function deactivate() {
     // Limpa qualquer timer ou interval que possa estar rodando
     // (Isso é importante para evitar vazamentos de memória)
     
-    console.log('✅ Extensão Controle de Insumos desativada com sucesso');
 }

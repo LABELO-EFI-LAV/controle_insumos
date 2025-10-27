@@ -6,6 +6,8 @@
     <title>LabControl</title>
 
     <link href="{{stylesUri}}" rel="stylesheet">
+    <!-- Fallback local para visualização estática -->
+    <link href="./style.css" rel="stylesheet" media="(min-width:0px)" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -263,13 +265,21 @@
             <div id="page-dashboard" class="page active p-4 md:p-6 bg-gray-50">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Dashboard</h1>
-                    <div class="relative">
+                    <div class="relative flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <polyline points="1 20 1 14 7 14"></polyline>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                            </svg>
+                            <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
                         <button id="notification-bell" class="p-2 rounded-full hover:bg-gray-200 relative">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                             <span id="notification-badge" class="hidden absolute top-0 right-0 h-4 w-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center"></span>
                         </button>
                         
-                        <div id="notification-panel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl z-30 border">
+                        <div id="notification-panel" class="hidden absolute right-0 top-full mt-3 w-80 bg-white rounded-lg shadow-xl z-30 border">
                             <div class="p-3 border-b font-semibold text-gray-800">Notificações</div>
                             <ul id="notification-list" class="flew-grow max-h-[80vh] overflow-y-auto">
                                 </ul>
@@ -360,14 +370,38 @@
                     
                     <div id="dashboard-assays-table" class="table-scroll-container overflow-auto smooth-scroll max-h-[50vh] responsive-table"></div>
                 </div>
+                
+                <!-- Rodapé da Página Dashboard -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            <p>Versão {{version}}</p>
+                        </div>
+                    </div>
+                </footer>
             </div>
             <div id="page-inventory" class="page p-6 hidden">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <h1 class="text-3xl font-bold text-gray-800">Inventário de Insumos</h1>
-                    <button id="btn-open-reagent-modal" class="mobile-optimized flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                        <span>Adicionar Insumo</span>
-                    </button>
+                    <div class="relative flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
+                        <button id="btn-open-reagent-modal" class="mobile-optimized flex items-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                            <span>Adicionar Insumo</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-4">
                     <label for="filter-inventory" class="block text-sm font-medium text-gray-700">Buscar no Inventário:</label>
@@ -388,6 +422,20 @@
                         <tbody id="inventory-table-body" class="text-gray-700"></tbody>
                     </table>
                 </div>
+                
+                <!-- Rodapé da Página Inventory -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>
             <div id="page-forecast" class="page hidden p-4 md:p-6 bg-gray-50">
                 <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mb-6">Previsão de Consumo de Insumos</h1>
@@ -436,24 +484,46 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Rodapé da Página Forecast -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>
-
-
 
             <div id="page-assays" class="page p-6 hidden">
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                         <h1 class="text-3xl font-bold text-gray-800">Histórico de Ensaios</h1>
-                        <button id="btn-open-assay-modal" class=" flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200">
-                                <path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"></path>
-                                <circle cx="12" cy="12" r="4"></circle>
-                                <path d="M18 9h.01"></path>
-                                <path d="M16 19h6"></path>
-                                <path d="M19 16v6"></path>
-                            </svg>
-                            <span>Registrar Ensaio</span>
-                        </button>
+                        <div class="relative flex items-center space-x-4">
+                            <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                            </button>
+                            <button id="btn-open-assay-modal" class=" flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg shadow-md transition-all duration-300 text-sm md:text-base hover:shadow-lg hover:scale-105">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 md:mr-2 h-4 w-4 md:h-5 md:w-5 transition-transform duration-200">
+                                    <path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"></path>
+                                    <circle cx="12" cy="12" r="4"></circle>
+                                    <path d="M18 9h.01"></path>
+                                    <path d="M16 19h6"></path>
+                                    <path d="M19 16v6"></path>
+                                </svg>
+                                <span>Registrar Ensaio</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="my-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                         <div>
@@ -477,24 +547,30 @@
                     </div>
                     <div id="assays-page-table" class="table-scroll-container overflow-auto max-h-[75vh]"></div>
                 </div>
+                
+                <!-- Rodapé da Página Assays -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>
             <div id="page-schedule" class="page p-6 hidden">
-                <div class="flex justify-between items-center mb-6">
+                <div id="schedule-header" class="flex flex-col mb-6 gap-3">
                     <h1 class="text-3xl font-bold text-gray-800">Cronograma de Ensaios</h1>
                     
-                    <div class="flex items-center space-x-4">
+                    <div class="schedule-actions flex flex-wrap items-center gap-3 w-full">
                         <div class="flex items-center">
-                            <button id="prev-gantt-btn" class="p-2 rounded-full hover:bg-gray-200" title="Período Anterior">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                            </button>
                             <h2 id="gantt-period" class="hidden text-xl font-semibold text-gray-700 w-64 text-center whitespace-nowrap"></h2>
-                            <button id="next-gantt-btn" class="p-2 rounded-full hover:bg-gray-200" title="Próximo Período">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                            </button>
-                            
-                            <div class="border-l h-6 border-gray-600 mx-2"></div>
+                            <div class="border-l h-6 border-gray-300 mx-2"></div>
                                 <div class="flex items-center bg-gray-200 rounded-full p-1 space-x-1">
-    
                                 <button id="zoom-out-gantt-btn" class="p-1 rounded-full hover:bg-gray-300 transition-colors" title="Reduzir Zoom (Ver mais dias)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="8" y1="11" x2="14" y2="11"></line></svg>
                                 </button>
@@ -504,7 +580,20 @@
                                 <button id="zoom-in-gantt-btn" class="p-1 rounded-full hover:bg-gray-300 transition-colors" title="Aumentar Zoom (Ver mais detalhes)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
                                 </button>
-
+                            </div>
+                            <div class="border-l h-6 border-gray-300 mx-2"></div>   
+                                    <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="23 4 23 10 17 10"></polyline>
+                                                <polyline points="1 20 1 14 7 14"></polyline>
+                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                            </svg>
+                                            <span class="ml-2 text-sm">Sincronizar</span>
+                                    </button>
+                            <div class="border-l h-6 border-gray-300 mx-2"></div>
+                            <!-- Busca Global no Cronograma -->
+                            <div class="relative">
+                                <input id="gantt-global-search" type="text" placeholder="Buscar..." class="w-40 md:w-40 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm text-black" />
                             </div>
                         </div>
                         <div class="border-l h-8 border-gray-300"></div>
@@ -524,14 +613,17 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
                             Adicionar Ensaio de Segurança
                         </button>
-                        <button id="btn-open-add-calibration-modal" class="flex items-center bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
-                            Agendar Calibração
-                        </button>
-                        <button id="btn-open-add-vacation-modal" class="flex items-center bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
-                            Agendar Férias
-                        </button>
+                        <div class="relative" id="schedule-menu">
+                            <button id="btn-toggle-schedule-menu" class="flex items-center bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="20"></line><line x1="9" y1="17" x2="15" y2="17"></polyline></svg>
+                                Agendar
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="schedule-dropdown" class="hidden absolute left-0 mt-2 w-56 bg-white rounded-md shadow-xl z-20">
+                                <a href="#" id="btn-open-add-calibration-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Agendar Calibração</a>
+                                <a href="#" id="btn-open-add-vacation-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Agendar Férias</a>
+                            </div>
+                        </div>
                         
                         <div class="border-l h-8 border-gray-300"></div>
                         
@@ -601,29 +693,53 @@
                 </div>
 
                 <div id="gantt-scroll-container" class="bg-white rounded-b-xl shadow-lg border border-gray-200 overflow-x-auto max-h-[75vh] overflow-y-visible relative">
-                    <div class="w-[200px] flex-shrink-0 sticky left-0 z-20 bg-white">
-                        <div class="bg-gray-800 text-white font-bold p-2 text-sm h-[62px] border-b flex items-center justify-center sticky top-0 z-40">Recursos/Projetos</div>
+            <div class="flex-shrink-0 sticky left-0 z-20 bg-white" style="width: calc(200px * var(--ui-scale, 1));">
+                <div class="bg-gray-800 text-white font-bold p-2 text-sm border-b flex items-center justify-center sticky top-0 z-40" style="height: calc(62px * var(--ui-scale, 1));">Recursos/Projetos</div>
                         <div id="gantt-labels-container"></div>
                     </div>
-                    <div class="absolute top-0 left-0 z-10 ml-[200px]">
+                <div class="absolute top-0 left-0 z-10" style="margin-left: calc(200px * var(--ui-scale, 1));">
                         <div id="gantt-header-container" class="sticky top-0 z-30 bg-gray-50">
                         </div>
                         <div id="gantt-grid-container" class="relative">
                         </div>
                     </div>
                 </div>
+                
+                <!-- Rodapé da Página Schedule -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>  
                 
                 <!-- Página de Calibrações -->
             <div id="page-calibrations" class="page p-6 hidden">
                 <div class="flex justify-between items-center mb-6">
                     <h1 class="text-3xl font-bold text-gray-800">Calibrações</h1>
-                    <button id="btn-add-calibration-equipment" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        Adicionar Equipamento
-                    </button>
+                    <div class="flex items-center space-x-4">
+                        <button class="btn-manual-refresh p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center" title="Sincronizar com a rede">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                <span class="ml-2 text-sm">Sincronizar</span>
+                        </button>
+                        <button id="btn-add-calibration-equipment" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Adicionar Equipamento
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Filtros -->
@@ -659,6 +775,20 @@
                         </table>
                     </div>
                 </div>
+                
+                <!-- Rodapé da Página Calibrations -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>
             <div id="page-settings" class="page p-6 hidden">
                 <h1 class="text-3xl font-bold text-gray-800 mb-6">Configurações</h1>
@@ -749,6 +879,20 @@
                     </div>
 
                 </div>
+                
+                <!-- Rodapé da Página Settings -->
+                <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 1000;">
+                    <div class="container mx-auto px-4 text-center">
+                        <div class="text-sm text-gray-600 mb-1">
+                            <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                            <span class="mx-4">|</span>
+                            <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Versão {{version}}
+                        </div>
+                    </div>
+                </footer>
             </div>
 
         </main>
@@ -858,14 +1002,9 @@
                             <select name="type" id="assay-type-select" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                                 <option value="homologation">Homologação</option>
                                 <option value="acp">AcP</option>
-                                <option value="secadora">Ensaio de Secadora</option>
-                                <option value="seguranca-eletrica">Segurança Elétrica</option>
+                                <option value="acreditado">Não Acreditado</option>
                                 <option value="acao-corretiva">Ação Corretiva</option>
                             </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Motivo</label>
-                            <input type="text" name="reason" id="reason" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                 </div>
@@ -969,7 +1108,6 @@
                 <select id="gantt-type" name="type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
                     <option value="homologation">Homologação</option>
                     <option value="acp">AcP</option>
-                    <option value="secadora">Ensaio de Secadora</option>
                     <option value="acreditado">Não Acreditado</option>
                     <option value="acao-corretiva">Ação Corretiva</option>
                 </select>
@@ -1252,7 +1390,6 @@
                 <select id="edit-gantt-type" name="type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
                     <option value="homologation">Homologação</option>
                     <option value="acp">AcP</option>
-                    <option value="secadora">Ensaio de Secadora</option>
                     <option value="acreditado">Não Acreditado</option>
                     <option value="acao-corretiva">Ação Corretiva</option>
                 </select>
@@ -1411,6 +1548,7 @@
             <div>
                 <label for="safety-type" class="block text-sm font-medium text-gray-900">Tipo de Ensaio</label>
                 <select id="safety-type" name="type" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    <option value="seguranca-eletrica">Segurança Elétrica</option>
                     <option value="homologation">Homologação</option>
                     <option value="acp">AcP</option>
                     <option value="secadora">Ensaio de Secadora</option>
@@ -1526,6 +1664,7 @@
             <select name="affectedTerminals" id="edit-affectedTerminals" class="w-full p-2 border rounded text-black">
                 <option value="1-4">Terminais 1-4</option>
                 <option value="5-8">Terminais 5-8</option>
+                <option value="Todos">Todos</option>
             </select>
         </div>
         <div class="grid grid-cols-2 gap-4">
@@ -1716,6 +1855,54 @@
     </form>
 </div>
 
+<!-- Modal para Detalhes do Equipamento -->
+<div id="equipment-details-modal-content">
+    <div class="space-y-6">
+        <div class="text-center mb-6">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Detalhes do Equipamento</h3>
+            <p class="text-sm text-gray-600">Informações completas sobre o equipamento de calibração</p>
+        </div>
+        
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">TAG do Equipamento</label>
+                    <p id="equipment-details-tag" class="text-lg font-semibold text-blue-600 bg-white p-2 rounded border"></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Equipamento</label>
+                    <p id="equipment-details-name" class="text-sm text-gray-900 bg-white p-2 rounded border"></p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status Atual</label>
+                    <span id="equipment-details-status" class="inline-flex px-3 py-1 text-xs font-semibold rounded-full"></span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Data de Validade</label>
+                    <p id="equipment-details-validity" class="text-sm text-gray-900 bg-white p-2 rounded border"></p>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <p id="equipment-details-notes" class="text-sm text-gray-900 bg-white p-3 rounded border min-h-[80px] whitespace-pre-wrap"></p>
+            </div>
+        </div>
+        
+        <div class="flex justify-end pt-4">
+            <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg transition-colors">Fechar</button>
+        </div>
+    </div>
+</div>
+
 <div id="generate-pdf-report-modal-content">
     <form id="form-generate-pdf-report" class="space-y-6">
         <div class="text-center mb-6">
@@ -1758,7 +1945,7 @@
     </form>
 </div>
 
-        
+
        
     <script src="{{scriptUri}}"></script>
     <script>

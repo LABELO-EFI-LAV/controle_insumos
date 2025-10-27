@@ -1,10 +1,10 @@
-# LabControl 🧪🧺
+# LabControl 🧺
 
-**LabControl** é uma extensão avançada para o Visual Studio Code projetada para simplificar o gerenciamento completo de insumos, ensaios e equipamentos de laboratório, com foco especial em testes de performance de lavagem. Centralize o controle de reagentes, lotes, ensaios, calibrações e gere relatórios detalhados, tudo dentro do seu editor de código.
+**LabControl** é uma extensão avançada para o Visual Studio Code projetada para simplificar o gerenciamento completo de insumos, ensaios e equipamentos de laboratório, com foco especial em testes de performance de lavagem.
 
 ---
 
-## ✨ Principais Funcionalidades
+## ✨ Controle de Insumos
 
 ### 📊 **Dashboard Visual Avançado**
 Tenha uma visão geral e instantânea do seu laboratório com cartões de resumo (total de ensaios, insumos em estoque) e gráficos interativos que mostram o consumo por lote, estoque atual e performance de marcas.
@@ -19,7 +19,6 @@ Registre novos ensaios de forma completa, associando protocolo, modelo da máqui
 - **Controle de Status:** Gerencie equipamentos com status "Operacional", "Em Calibração", "Próximo do Vencimento" e "Vencido"
 - **Workflow Completo:** Botões dinâmicos para iniciar calibração e finalizar com nova data de validade
 - **Alertas Automáticos:** Notificações quando equipamentos estão próximos da calibração (configurável)
-- **Histórico:** Rastreamento completo de calibrações realizadas
 
 ### 📅 **Cronograma Interativo (Gantt)**
 - **Visualização Temporal:** Cronograma visual de ensaios, calibrações e férias
@@ -27,37 +26,44 @@ Registre novos ensaios de forma completa, associando protocolo, modelo da máqui
 - **Múltiplos Tipos:** Suporte para ensaios de eficiência, segurança, calibrações e períodos de férias
 - **Controle de Permissões:** Sistema de usuários com diferentes níveis de acesso
 
-### 👥 **Sistema de Usuários e Permissões**
-- **Três Níveis:** Administrador, Técnico e Visualizador
-- **Controle Granular:** Permissões específicas para edição, visualização e configurações
-- **Login Automático:** Integração com usuário do VS Code
-- **Segurança:** Proteção por senha para funções administrativas
+### 🔍 **Previsão de Consumo**
+- **Modelagem de Consumo:** Visualize o consumo futuro com base nos ensaios previstos
+- **Alertas de Estoque:** Notificações quando o estoque de insumos está abaixo do mínimo configurado
 
-### 📄 **Geração de Relatórios Profissionais em PDF**
-Crie relatórios completos em PDF para períodos específicos com design moderno:
-- **Cabeçalho Profissional:** Título, período, ícone e estatísticas
-- **Tabelas Detalhadas:** Consumo por reagente, lote e fabricante
-- **Gráficos Coloridos:** Visualizações de ciclos, consumo e tendências
-- **Análise Temporal:** Quantidade de ensaios por mês
+## 🧺 Controle de Carga
 
-### 🔔 **Sistema de Notificações Inteligente**
-- **Fila Organizada:** Notificações aparecem em sequência vertical, sem sobreposição
-- **Múltiplos Tipos:** Alertas de estoque, validade de reagentes e calibração de equipamentos
-- **Configurável:** Defina limites personalizados para cada tipo de alerta
-- **Integração com Email:** Envio automático de alertas para responsáveis
+### 📊 **Dashboard de Monitoramento**
+Visualize em tempo real a distribuição e status das peças de carga através de gráficos interativos organizados por tipo:
+- **Fronhas:** Controle completo de fronhas ativas com filtros por TAG
+- **Toalhas de Rosto:** Monitoramento de toalhas com status detalhado
+- **Lençóis:** Gestão de lençóis com rastreamento de ciclos
 
-### 🛡️ **Backup Automático e Segurança**
-- **Backup Automático:** Sistema de backup a cada 6 horas
-- **Histórico de Versões:** Mantenha múltiplas versões dos dados
-- **Recuperação:** Restaure dados de backups anteriores quando necessário
-- **Integridade:** Validação automática de dados
+### 🏷️ **Gestão de Peças de Carga**
+Sistema completo para controle de peças têxteis utilizadas nos ensaios:
+- **Cadastro de Peças:** Registro de novas peças com TAG única, tipo e data de aquisição
+- **Controle de Status:** Acompanhamento do status das peças (Ativa, Danificada, Inativa)
+- **Rastreamento de Ciclos:** Monitoramento do número de ciclos de lavagem por peça
+- **Filtros Avançados:** Busca rápida por TAG em todas as categorias de peças
 
-### ⚡ **Interface Moderna e Responsiva**
-- **Design Profissional:** Interface limpa e intuitiva dentro do VS Code
-- **Navegação Fluida:** Transições suaves entre páginas
-- **Modais Interativos:** Formulários organizados para cada ação
-- **Filtros Avançados:** Busca e filtros em todas as tabelas
-- **Responsivo:** Adapta-se a diferentes tamanhos de tela
+### 📋 **Protocolos de Carga**
+Criação e gerenciamento de protocolos padronizados para ensaios:
+- **Cadastro de Protocolos:** Criação de novos protocolos com vinculação de peças específicas
+- **Tipos de Ciclo:** Suporte para ciclos frios e quentes
+- **Consulta Detalhada:** Visualização completa de protocolos com peças vinculadas
+- **Exclusão Controlada:** Remoção segura de protocolos com confirmação
+
+### ⚙️ **Processos de Carga**
+Gerenciamento avançado dos processos de preparação:
+- **Visualização de Processos:** Tabela completa com protocolos e tipos de ciclo
+- **Filtros por Protocolo:** Busca rápida por código de protocolo específico
+- **Exclusão em Massa:** Ferramenta para remoção de protocolos por ano de criação
+- **Controle de Permissões:** Acesso restrito para técnicos e administradores
+
+### 🔧 **Funcionalidades Operacionais**
+- **Peças Danificadas:** Registro e controle de peças com problemas
+- **Peças Inativas:** Gestão de peças fora de uso
+- **Relatórios Visuais:** Gráficos de distribuição por tipo de peça
+- **Interface Responsiva:** Design adaptável para diferentes tamanhos de tela
 
 ---
 
@@ -79,38 +85,12 @@ Crie relatórios completos em PDF para períodos específicos com design moderno
 
 1. **Ativação:**
    - Pressione `Ctrl+Shift+P` no VS Code
-   - Digite "Abrir Controle de Insumos"
+   - Digite "Abrir Controle de Insumos" ou "Abrir Controle de Carga"
    - A interface será aberta em uma nova aba
-
-2. **Navegação:**
-   - **Dashboard:** Visão geral do laboratório
-   - **Inventário:** Gestão de reagentes e insumos
-   - **Ensaios:** Registro e acompanhamento de testes
-   - **Cronograma:** Planejamento temporal de atividades
-   - **Calibrações:** Controle de equipamentos
-   - **Configurações:** Personalização do sistema
 
 ## 📊 Versão Atual
 
-**Versão:** 1.2.3
-
-### 🆕 Novidades da Versão 1.1.6
-- ✅ Sistema completo de calibração de equipamentos
-- ✅ Notificações em fila organizada (sem sobreposição)
-- ✅ Workflow de calibração com botões dinâmicos
-- ✅ Modal para finalização de calibração
-- ✅ Status visual com cores diferenciadas
-- ✅ Alertas configuráveis para calibração
-- ✅ Melhorias na interface e usabilidade
-
-## 🛠️ Tecnologias
-
-- **Frontend:** HTML5, CSS3, JavaScript (ES6+)
-- **Backend:** TypeScript, Node.js
-- **Framework:** VS Code Extension API
-- **Relatórios:** PDFKit para geração de PDFs
-- **Gráficos:** Chart.js para visualizações
-- **Backup:** Sistema automático com JSON
+**Versão:** 1.4.0
 
 ## 📄 Licença
 

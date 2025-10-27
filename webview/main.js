@@ -309,7 +309,7 @@ const validator = {
         const schema = {
             notificationEmail: {
                 label: 'E-mail de Notificação',
-                rules: ['required', 'email']
+                rules: []
             },
             alertThreshold: {
                 label: 'Limite de Alerta',
@@ -321,7 +321,7 @@ const validator = {
             },
             schedulePassword: {
                 label: 'Senha do Cronograma',
-                rules: ['required', { type: 'minLength', params: [4] }]
+                rules: [{ type: 'minLength', params: [3] }]
             }
         };
         
@@ -1448,67 +1448,29 @@ const cacheSystem = {
 
 };
 
-
-
-/**
- * Sistema de usuários estáticos com diferentes níveis de permissão
- */
-const USERS = {
-    'lav': {
-        password: 'lav',
-        type: 'administrador',
-        displayName: 'Administrador',
-        permissions: {
-            accessSettings: true,
-            editHistory: true,
-            addEditSupplies: true,
-            viewOnly: false
-        }
-    },
-    'eficiencia': {
-        password: 'eficiencia',
-        type: 'tecnico_eficiencia',
-        displayName: 'Técnico Eficiência',
-        permissions: {
-            accessSettings: false,
-            editHistory: true,
-            addEditSupplies: true,
-            viewOnly: false
-        }
-    },
-    'geral': {
-        password: 'geral',
-        type: 'geral',
-        displayName: 'Geral',
-        permissions: {
-            accessSettings: false,
-            editHistory: false,
-            addEditSupplies: false,
-            viewOnly: true
-        }
-    }
-};
-
 /**
  * Garante que a API do VS Code esteja disponível, com um fallback robusto
  * para evitar erros de referência fora do ambiente do VS Code.
  * @returns {Object} A API do VS Code ou um objeto de fallback com postMessage vazio.
  */
-const vscode = (() => {
+// Inicialização resiliente da API do VS Code sem redeclarar identificador global
+(function initVsCodeApi() {
     try {
-        if (typeof acquireVsCodeApi !== 'undefined') {
-            return acquireVsCodeApi();
-        } else {
-            console.warn("API do VS Code não está disponível. Executando em modo de desenvolvimento com fallback.");
-            return {
-                postMessage: (message) => {
-                    // Mensagem enviada para extensão
+        if (typeof window !== 'undefined') {
+            if (!window.vscode) {
+                if (typeof acquireVsCodeApi !== 'undefined') {
+                    window.vscode = acquireVsCodeApi();
+                } else {
+                    console.warn("API do VS Code não está disponível. Fallback ativo.");
+                    window.vscode = { postMessage: () => {} };
                 }
-            };
+            }
         }
     } catch (error) {
-        console.error("Erro fatal ao adquirir a API do VS Code. Usando fallback.", error);
-        return { postMessage: () => {} };
+        console.error("Erro ao inicializar a API do VS Code. Usando fallback.", error);
+        if (typeof window !== 'undefined' && !window.vscode) {
+            window.vscode = { postMessage: () => {} };
+        }
     }
 })();
 
@@ -1581,6 +1543,41 @@ const REAGENT_KEYS = Object.fromEntries(
 const COLOR_PALETTE = ['#4f46e5', '#db2777', '#f59e0b', '#10b981', '#3b82f6',
     '#8b5cf6', '#f43f5e', '#06b6d4', '#f97316'
 ];
+
+/**
+ * Função global para apenas validar estoque de reagentes (sem deduzir)
+ * @param {string} reagentKey - Chave do reagente (poBase, perborato, taed, tiras)
+ * @param {Array} lotsArray - Array de lotes com ciclos
+ * @param {number} nominalLoad - Carga nominal do ensaio
+ * @returns {boolean} - True se há estoque suficiente
+ */
+const validateStock = (reagentKey, lotsArray, nominalLoad) => {
+    const reagentName = REAGENT_NAMES[reagentKey];
+    if (!lotsArray || lotsArray.length === 0) return true;
+    
+    // Apenas valida se há estoque suficiente para cada lote individualmente
+    for (const { lot, cycles } of lotsArray) {
+        let consumption;
+        // Usa as mesmas fórmulas diretas do handleFinishAssay
+        if (reagentKey === 'poBase') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.77;
+        } else if (reagentKey === 'perborato') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.20;
+        } else if (reagentKey === 'taed') {
+            consumption = (16 * nominalLoad + 54) * cycles * 0.03;
+        } else if (reagentKey === 'tiras') {
+            consumption = calculations.calculateTiras(nominalLoad) * cycles;
+        }
+        
+        const itemIndex = state.inventory.findIndex(i => i.lot === lot && i.reagent === reagentName);
+        if (itemIndex === -1 || state.inventory[itemIndex].quantity < consumption) {
+            utils.showToast(`Estoque insuficiente para o lote ${lot} de ${reagentName}. Necessário: ${consumption.toFixed(2)}, Disponível: ${state.inventory[itemIndex]?.quantity.toFixed(2) || 0}`, true);
+            return false;
+        }
+    }
+    
+    return true;
+};
 
 /**
  * Função global para validar e deduzir estoque de reagentes
@@ -1739,6 +1736,7 @@ const state = {
     maxUndoHistory: 10,
     originalEfficiencyCategories: [], 
     originalSafetyCategories: [],
+    pendingHistoricalAssays: [], // Ensaios aguardando confirmação para adicionar ao histórico
     efficiencyCategories: [
         { id: 1, name: 'Terminal 1' },
         { id: 2, name: 'Terminal 2' },
@@ -1762,6 +1760,10 @@ const state = {
     },
     systemUsers: {},
     charts: {},
+    // Controle de repetição de toast de atualização automática
+    lastForceRefreshToastAt: 0,
+    lastForceRefreshSignature: '',
+    forceRefreshToastCooldownMs: 3000,
     selectedAssayId: null,
     selectedReagentId: null,
     ganttStart: new Date(),
@@ -1780,6 +1782,8 @@ const state = {
     isLoggedIn: false,
     ganttZoomLevel: 25,
     ganttRowHeighLevel: 80,
+    // Busca global no Gantt
+    ganttSearchQuery: '',
 };
 
 // Referências do DOM
@@ -1815,6 +1819,7 @@ const DOM = {
     ganttGridContainer: document.getElementById('gantt-grid-container'),
     ganttScrollContainer: document.getElementById('gantt-scroll-container'),
     ganttPeriodLabel: document.getElementById('gantt-period'),
+    ganttGlobalSearchInput: document.getElementById('gantt-global-search'),
     passwordModal: document.getElementById('password-modal'),
     passwordInput: document.getElementById('password-input'),
     passwordSubmitBtn: document.getElementById('password-submit-btn'),
@@ -1834,6 +1839,46 @@ const DOM = {
 // -----------------------------------------------------------------------------
 // 2. Lógica Principal da Aplicação
 // -----------------------------------------------------------------------------
+// Utilitário de busca simples (case-insensitive, múltiplos campos)
+const searchUtils = {
+    normalize: (s) => (s || '').toString().toLowerCase(),
+    matchesAssay: (assay, query) => {
+        const q = searchUtils.normalize(query);
+        if (!q) return false;
+        const hay = [
+            assay.protocol,
+            assay.orcamento,
+            assay.assayManufacturer,
+            assay.model,
+            assay.tensao,
+            assay.nominalLoad?.toString(),
+            assay.status,
+            assay.type,
+            assay.observacoes,
+        ].map(searchUtils.normalize).join(' | ');
+        return hay.includes(q);
+    },
+    matchesCalibration: (calib, query) => {
+        const q = searchUtils.normalize(query);
+        if (!q) return false;
+        const hay = [
+            calib.protocol,
+            calib.notes,
+            calib.affectedTerminals?.toString(),
+        ].map(searchUtils.normalize).join(' | ');
+        return hay.includes(q);
+    }
+};
+
+// Listener do input de busca
+document.addEventListener('DOMContentLoaded', () => {
+    if (DOM.ganttGlobalSearchInput) {
+        DOM.ganttGlobalSearchInput.addEventListener('input', (e) => {
+            state.ganttSearchQuery = e.target.value || '';
+            renderers.renderGanttChart();
+        });
+    }
+});
 const undoManager = {
     saveState: () => {
         const stateToSave = {
@@ -2244,7 +2289,7 @@ const authSystem = {
             }
 
             // Oculta páginas restritas para visualizadores
-            const restrictedPages = ['nav-settings', 'nav-inventory', 'nav-assays', 'nav-calibrations'];
+            const restrictedPages = ['nav-settings', 'nav-inventory', 'nav-assays', 'nav-calibrations', 'nav-forecast'];
             restrictedPages.forEach(navId => {
                 const navElement = document.getElementById(navId);
                 if (navElement) {
@@ -2275,9 +2320,6 @@ const authSystem = {
                 if (btn) btn.style.display = 'none';
             });
 
-            // Os botões de Guardar Alterações e Cancelar permanecem disponíveis para técnicos
-            // pois eles precisam poder salvar suas edições no cronograma
-            // Drag and drop liberado para técnicos
         }
 
         // Para administrador, garante acesso total aos botões do cronograma
@@ -2494,7 +2536,7 @@ const authSystem = {
         // Solicita dados do backend após um pequeno delay
         setTimeout(() => {
             authSystem.updateLoadingStatus('Carregando dados...');
-            vscode.postMessage({ command: 'webviewReady' });
+    window.vscode?.postMessage({ command: 'webviewReady' });
         }, 500);
     }
 };
@@ -2793,6 +2835,7 @@ const renderers = {
         renderers.renderGanttChart();
         renderers.renderHolidaysList();
         renderers.renderCalibrationsTable();
+        forecastSystem.renderAll();
         
         // Aplica permissões após renderizar todos os elementos
         if (state.isLoggedIn) {
@@ -2885,7 +2928,7 @@ const renderers = {
                 const allLots = [...(assay.lots.poBase || []), ...(assay.lots.perborato || []), ...(assay.lots.taed || []), ...(assay.lots.tiras || [])];
                 if (allLots.length > 0) {
                     const totalCycles = allLots.reduce((sum, lot) => sum + (lot.cycles || 0), 0);
-                    displayCycles = Math.round(totalCycles / allLots.length);
+                    displayCycles = Math.round(totalCycles / 4);
                 }
             } else {
                 // Fallback
@@ -3031,13 +3074,21 @@ const renderers = {
 
     renderGanttChart: function(callback = null) {
         if (!DOM.ganttLabelsContainer || !DOM.ganttHeaderContainer ||
-            !DOM.ganttGridContainer || !DOM.ganttPeriodLabel) return;
+            !DOM.ganttGridContainer) return;
    
 
         // Limpa os contêineres principais
         DOM.ganttLabelsContainer.innerHTML = '';
         DOM.ganttHeaderContainer.innerHTML = '';
         DOM.ganttGridContainer.innerHTML = '';
+        
+        // Atualiza a variável de escala de texto baseada no nível de zoom atual
+        const _baseZoom = 25;
+        const _textScale = Math.max(0.6, Math.min(1.6, (state.ganttZoomLevel || _baseZoom) / _baseZoom));
+        if (DOM.ganttScrollContainer) {
+            DOM.ganttScrollContainer.style.setProperty('--gantt-text-scale', String(_textScale));
+        }
+        
 
         const fixedRowHeight = state.ganttRowHeightLevel || 80;
         const subRowHeight = state.ganttRowHeightLevel || 80; // Altura padrão
@@ -3130,8 +3181,8 @@ const renderers = {
                     class="flex flex-col items-center justify-center ${dayBorderClass} border-r border-black font-semibold leading-none h-[40px] ${dayClass}" 
                     data-date="${dateStr}"
                 >
-                    <span class="text-[10px] text-gray-900">${dayOfWeek}</span>
-                    <span class="text-sm text-gray-800">${dayOfMonth}</span>
+                    <span class="text-gray-900" style="font-size: calc(10px * var(--gantt-text-scale, 1));">${dayOfWeek}</span>
+                    <span class="text-gray-800" style="font-size: calc(12px * var(--gantt-text-scale, 1));">${dayOfMonth}</span>
                 </div>
             `);
         });
@@ -3141,7 +3192,9 @@ const renderers = {
         DOM.ganttHeaderContainer.innerHTML = `<div class="gantt-month-header-row grid bg-white z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${monthsHtml.join('')}</div><div class="gantt-days-header-row grid bg-gray-50 z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${daysHtml.join('')}</div>`;
         DOM.ganttHeaderContainer.style.width = `${totalGanttWidth}px`;
         DOM.ganttHeaderContainer.classList.add('border-b-2', 'border-black');
-        DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
+        if (DOM.ganttPeriodLabel) {
+            DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
+        }
 
         // Agrupa os ensaios por categoria
         const groupedAssays = {};
@@ -3178,23 +3231,21 @@ const renderers = {
 
         categoriesToRender.forEach((category, index) => {
             const isSafetyCategory = state.safetyCategories.some(cat => cat.name === category);
-            const safetyRowHeight = 180; // Altura para as linhas de segurança (aumentada para acomodar 4 containers)
-            const subRowHeightForSafety = (safetyRowHeight - subRowMargin) / 4; // Altura de 1/4 da linha, menos a margem
-            
+                        
             categoryPositions[category] = currentY;
 
             const isLastCategory = index === categoriesToRender.length - 1;
             const assaysForCategory = groupedAssays[category] || [];
             let rowHeight, assaysToRender, isStacked, effectiveSubRowHeight;
             
-            if (isSafetyCategory || category === 'Pendentes' || category === 'Férias') {
-                isStacked = true;
-                const { positionedAssays, subRowCount } = layoutEngine.calculateSubRows(assaysForCategory);
-                assaysToRender = positionedAssays;
+           if (isSafetyCategory || category === 'Pendentes' || category === 'Férias') {
+            isStacked = true;
+            const { positionedAssays, subRowCount } = layoutEngine.calculateSubRows(assaysForCategory);
+            assaysToRender = positionedAssays;
 
-                if (isSafetyCategory) {
-                    effectiveSubRowHeight = subRowHeightForSafety;
-                    rowHeight = safetyRowHeight;
+            if (isSafetyCategory) {
+                const fixedContainerHeight = 40; 
+                rowHeight = subRowCount * (fixedContainerHeight + subRowMargin) + subRowMargin;
                 } else if (category === 'Férias') {
                     effectiveSubRowHeight = subRowHeight / 2;
                     rowHeight = subRowCount * (effectiveSubRowHeight + subRowMargin) + subRowMargin;
@@ -3291,11 +3342,12 @@ const renderers = {
                         case 'concluido': statusClass = 'bg-green-500 text-white'; break;
                         case 'relatorio': statusClass = 'bg-blue-700 text-white'; break;
                         case 'pendente': statusClass = 'bg-yellow-500 text-black'; break;
-                        case 'férias': statusClass = 'bg-black text-white'; break;
+                        case 'férias': statusClass = 'bg-amber-500 text-white'; break;
                         default: statusClass = 'bg-gray-400'; break;
                     }
                 }
 
+                const isMatch = searchUtils.matchesAssay(assay, state.ganttSearchQuery);
                 contentHTML = `
                     <div class="relative w-full h-full gantt-event-content">
                         <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${assay.id}">
@@ -3308,17 +3360,22 @@ const renderers = {
                         ${assay.type === 'férias' ?
                         `<div class="flex items-center justify-center w-full h-full p-1 text-white z-10">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 mr-2 flex-shrink-0">
-                                <path d="M22 10.5h-5.5a2.5 2.5 0 0 0-5 0H6"></path>
-                                <path d="M6 10.5V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7.5"></path>
-                                <path d="M11.5 21a2.5 2.5 0 0 1-5 0V14h5v7Z"></path>
-                                <path d="M17.5 21a2.5 2.5 0 0 0 5 0V14h-5v7Z"></path>
+                                <circle cx="12" cy="12" r="4"></circle>
+                                <path d="M12 2v2"></path>
+                                <path d="M12 20v2"></path>
+                                <path d="M4.93 4.93l1.41 1.41"></path>
+                                <path d="M17.66 17.66l1.41 1.41"></path>
+                                <path d="M2 12h2"></path>
+                                <path d="M20 12h2"></path>
+                                <path d="M4.93 19.07l1.41-1.41"></path>
+                                <path d="M17.66 6.34l1.41-1.41"></path>
                             </svg>
                             <div class="flex flex-col">
-                                <span class="font-bold text-sm truncate">${assay.protocol}</span>
+                                <span class="gantt-text font-bold">${assay.protocol}</span>
                             </div>
                         </div>` :
                         `<div class="flex flex-col items-center justify-center w-full h-full p-1 text-center z-10">
-                            <span class="gantt-text text-xs font-bold" style="font-size: 0.7rem;">
+                            <span class="gantt-text font-bold">
                                 ${[assay.protocol || 'N/A',
                                 assay.orcamento || 'N/A', assay.assayManufacturer || 'N/A',
                                 assay.model || 'N/A', assay.tensao || 'N/A',
@@ -3332,6 +3389,9 @@ const renderers = {
 
                 const eventDiv = document.createElement('div');
                 eventDiv.className = `gantt-event rounded-md shadow-lg cursor-pointer select-none transition-all duration-100 ease-in-out hover:opacity-80 border-2 border-white flex items-center overflow-hidden ${statusClass}`;
+                if (isMatch) {
+                    eventDiv.classList.add('gantt-search-highlight');
+                }
                 
                 // Posicionamento normal dos elementos
                 if (isStacked) {
@@ -3362,6 +3422,31 @@ const renderers = {
                 eventDiv.title = `${assay.protocol} (${assay.startDate} a ${assay.endDate})`;
                 eventDiv.dataset.assayId = assay.id;
                 foregroundGrid.appendChild(eventDiv);
+
+                // Ajuste automático de tamanho do texto dentro do evento (shrink-to-fit)
+                (function autoFitEventText() {
+                    const contentEl = eventDiv.querySelector('.gantt-event-content');
+                    const textEl = contentEl ? contentEl.querySelector('.gantt-text') : null;
+                    if (!contentEl || !textEl) return;
+                    // Remover override local para ler a escala herdada do contêiner
+                    contentEl.style.removeProperty('--gantt-text-scale');
+                    const inherited = getComputedStyle(contentEl).getPropertyValue('--gantt-text-scale');
+                    const baseScale = Math.max(0.6, parseFloat(inherited) || 1);
+                    let scale = baseScale;
+                    let iter = 0;
+                    const maxIter = 8;
+                    const minScale = baseScale * 0.6; // não encolher abaixo de 60% da escala base
+                    const fits = () => (
+                        textEl.scrollWidth <= contentEl.clientWidth &&
+                        textEl.scrollHeight <= contentEl.clientHeight
+                    );
+                    while (!fits() && iter < maxIter) {
+                        scale = Math.max(minScale, scale - 0.08);
+                        contentEl.style.setProperty('--gantt-text-scale', String(scale));
+                        iter++;
+                        if (scale === minScale) break;
+                    }
+                })();
             });
 
             rowContainer.appendChild(backgroundGrid);
@@ -3473,9 +3558,10 @@ Período: ${calib.startDate} a ${calib.endDate}
 ${calib.notes ? `Observações: ${calib.notes}` : ''}
             `.trim();
 
+            const isMatchCalib = searchUtils.matchesCalibration(calib, state.ganttSearchQuery);
             calibDiv.innerHTML = `
                 <div class="relative w-full h-full flex items-center justify-center p-1 text-center text-white" style="writing-mode: vertical-rl; text-orientation: mixed;">
-                    <span class="gantt-text font-semibold" style="font-size: 0.8rem;">${displayText}</span>
+                    <span class="gantt-text font-semibold">${displayText}</span>
                     <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${calib.id}" data-is-calibration="true">
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none">
                             <circle cx="12" cy="12" r="10"></circle>
@@ -3485,9 +3571,37 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                     </button>
                 </div>
             `;
+            if (isMatchCalib) {
+                calibDiv.classList.add('gantt-search-highlight');
+            }
 
             calibDiv.setAttribute('data-tooltip', calibrationInfo);
             calibrationContainer.appendChild(calibDiv);
+
+            // Ajuste automático para texto de calibração (vertical): shrink-to-fit respeitando a escala herdada
+            (function autoFitCalibrationText() {
+                const target = calibDiv; // aplica escala no contêiner para herdar na .gantt-text
+                const textEl = target.querySelector('.gantt-text');
+                if (!textEl) return;
+                // Remover override local para ler a escala herdada do contêiner
+                target.style.removeProperty('--gantt-text-scale');
+                const inherited = getComputedStyle(target).getPropertyValue('--gantt-text-scale');
+                const baseScale = Math.max(0.6, parseFloat(inherited) || 1);
+                let scale = baseScale;
+                let iter = 0;
+                const maxIter = 8;
+                const minScale = baseScale * 0.6; // não encolher abaixo de 60% da escala base
+                const fits = () => (
+                    textEl.scrollWidth <= target.clientWidth &&
+                    textEl.scrollHeight <= target.clientHeight
+                );
+                while (!fits() && iter < maxIter) {
+                    scale = Math.max(minScale, scale - 0.08);
+                    target.style.setProperty('--gantt-text-scale', String(scale));
+                    iter++;
+                    if (scale === minScale) break;
+                }
+            })();
         });
 
         // adiciona css tooltip apenas 1x
@@ -3505,7 +3619,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                     color: white;
                     padding: 8px 12px;
                     border-radius: 6px;
-                    font-size: 12px;
+                    font-size: calc(0.75rem * var(--gantt-text-scale, 1));
                     white-space: nowrap;
                     z-index: 15;
                     pointer-events: none;
@@ -3531,9 +3645,11 @@ renderDashboard: () => {
     
     cardsContainer.innerHTML = '';
     const suppliers = ['MHC', 'Swissatest'];
-    const totalAssays = state.historicalAssays.length;
+    const totalAssays = state.historicalAssays.filter(assay => {
+        const type = (assay.type || '').toLowerCase();
+        return type !== 'férias' && !type.includes('calibracao');
+    }).length;
     
-    // CORREÇÃO APLICADA AQUI:
     // 1. A chamada da função agora retorna um objeto.
     const possibleAssaysResult = calculations.calculatePossibleAssays();
     // 2. Extraímos o número de ensaios e o nome do reagente.
@@ -4811,7 +4927,6 @@ const forecastSystem = {
         return result;
     },
 
-    // NOVA FUNÇÃO: Lógica principal para encontrar a data de fim do estoque.
     calculateReagentEndDate(reagentName, supplier, initialStock, dailyConsumptions) {
         const stockKey = `${reagentName}-${supplier}`;
         let currentStock = initialStock[stockKey] || 0;
@@ -4859,7 +4974,6 @@ const forecastSystem = {
         return "Não se esgota (sem consumo)";
     },
     
-    // NOVA FUNÇÃO: Renderiza as datas de fim nos cards.
     renderEndDateForecasts() {
         const { initialStock, dailyConsumptions } = this.prepareData();
     
@@ -4975,7 +5089,6 @@ const forecastSystem = {
     });
     },
 
-    // FUNÇÃO MODIFICADA: Adiciona a chamada para renderizar as datas de fim.
     renderAll() {
         const { labels, timeline } = this.prepareData();
         const reagentToCanvasMap = {
@@ -5180,7 +5293,7 @@ const historicalForecastSystem = {
                     const futureMonth = new Date(today.getFullYear(), today.getMonth() + i, 1);
                     const historicalMonthKey = `${futureMonth.getFullYear() - 1}-${String(futureMonth.getMonth() + 1).padStart(2, '0')}`;
                     
-                    // CORREÇÃO: Busca o valor de consumo. Se não existir, é 0.
+                    // Busca o valor de consumo. Se não existir, é 0.
                     const consumptionValue = historicalConsumption[historicalMonthKey]?.[reagentName]?.[supplier] || 0;
                     data.push(consumptionValue);
                 }
@@ -5297,23 +5410,52 @@ const ganttMiddleClickHandler = (e) => {
     assay.status = 'pendente';
     assay.setup = null; // Ensaios pendentes não têm um terminal/responsável atribuído
 
-    // Se o ensaio era de segurança, ele precisa ser movido para a lista de ensaios de eficiência,
-    // pois a linha "Pendentes" é alimentada por essa lista.
+    // Se o ensaio era de segurança, mover apenas no estado local para a lista de eficiência
     if (isSafetyAssay) {
         const [movedAssay] = sourceArray.splice(assayIndex, 1);
         state.scheduledAssays.push(movedAssay);
     }
 
-    // Atualiza a interface do usuário
+    // Atualiza a interface do usuário sem persistir imediatamente
     state.hasUnsavedChanges = true;
     ui.toggleScheduleActions(true);
     renderers.renderGanttChart();
-    utils.showToast(`Tarefa '${assay.protocol}' movida para Pendentes. Salve as alterações.`);
+    utils.showToast(`Tarefa '${assay.protocol}' movida para Pendentes. Clique em Guardar Alterações para aplicar.`);
 };
 /**
  * Funções para manipulação de dados, incluindo interações com a extensão VS Code.
  */
 const dataHandlers = {
+    updateScheduledAssayGranular: (id, updates) => {
+        window.vscode?.postMessage({
+            command: 'updateScheduledAssayGranular',
+            data: { id, updates }
+        });
+    },
+    deleteScheduledAssayGranular: (id) => {
+        window.vscode?.postMessage({
+            command: 'deleteScheduledAssayGranular',
+            data: { id }
+        });
+    },
+    updateSafetyScheduledAssayGranular: (id, updates) => {
+        window.vscode?.postMessage({
+            command: 'updateSafetyScheduledAssayGranular',
+            data: { id, updates }
+        });
+    },
+    deleteSafetyScheduledAssayGranular: (id) => {
+        window.vscode?.postMessage({
+            command: 'deleteSafetyScheduledAssayGranular',
+            data: { id }
+        });
+    },
+    deleteHistoricalAssayGranular: (id) => {
+        window.vscode?.postMessage({
+            command: 'deleteHistoricalAssayGranular',
+            data: { id }
+        });
+    },
     /** Salva o estado atual da aplicação. */
     saveData: () => {
         // Iniciando processo de salvamento
@@ -5350,8 +5492,16 @@ const dataHandlers = {
             return;
         }
         // Processando equipamentos de calibração para salvamento
+        console.log('[SAVE] Equipamentos de calibração sendo salvos:', 
+            state.calibrationEquipments.map(eq => ({
+                tag: eq.tag,
+                calibrationStatus: eq.calibrationStatus,
+                lastCalibrationDate: eq.lastCalibrationDate,
+                calibrationStartDate: eq.calibrationStartDate
+            }))
+        );
         
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'saveData',
             data: dataToSave
         });
@@ -5372,7 +5522,7 @@ const dataHandlers = {
     updateAssayStatusOnly: (assayId, newStatus, table = 'scheduled_assays') => {
         console.log(`[WEBVIEW] Alterando status do ensaio ${assayId} para '${newStatus}' na tabela ${table}`);
         
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateAssayStatusOnly',
             data: {
                 assayId: assayId,
@@ -5405,7 +5555,7 @@ const dataHandlers = {
             return;
         }
 
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'addInventoryItem',
             data: {
                 item: item  // Envolvendo o item em um objeto data
@@ -5415,7 +5565,7 @@ const dataHandlers = {
 
     updateInventoryItem: (item) => {
         console.log('[WEBVIEW] Atualizando item do inventário:', item);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'updateInventoryItem',
             data: item
         });
@@ -5423,9 +5573,192 @@ const dataHandlers = {
 
     deleteInventoryItem: (itemId) => {
         console.log('[WEBVIEW] Removendo item do inventário:', itemId);
-        vscode.postMessage({
+            window.vscode?.postMessage({
             command: 'deleteInventoryItem',
             data: { id: itemId }
+        });
+    },
+
+    // ==================== OPERAÇÕES GRANULARES PARA INVENTÁRIO ====================
+
+    /**
+     * Operações granulares para inventário
+     */
+    createInventoryItemGranular: (item) => {
+        console.log('[WEBVIEW] Criando item do inventário (granular):', item);
+        
+        if (!item || typeof item !== 'object') {
+            console.error('[WEBVIEW] Item inválido:', item);
+            notificationSystem.send('Erro', 'Dados do item são inválidos', 'error');
+            return;
+        }
+
+        const requiredFields = ['reagent', 'manufacturer', 'lot', 'quantity', 'validity'];
+        const missingFields = requiredFields.filter(field => !item[field]);
+        
+        if (missingFields.length > 0) {
+            console.error('[WEBVIEW] Campos obrigatórios ausentes:', missingFields);
+            notificationSystem.send('Erro', `Campos obrigatórios ausentes: ${missingFields.join(', ')}`, 'error');
+            return;
+        }
+
+            window.vscode?.postMessage({
+            command: 'createInventoryItemGranular',
+            data: item
+        });
+    },
+
+    getInventoryItemById: (itemId) => {
+        console.log('[WEBVIEW] Buscando item do inventário por ID:', itemId);
+            window.vscode?.postMessage({
+            command: 'getInventoryItemById',
+            data: { id: itemId }
+        });
+    },
+
+    getAllInventoryItemsGranular: () => {
+        console.log('[WEBVIEW] Buscando todos os itens do inventário (granular)');
+            window.vscode?.postMessage({
+            command: 'getAllInventoryItemsGranular',
+            data: {}
+        });
+    },
+
+    getLowStockItems: () => {
+        console.log('[WEBVIEW] Buscando itens com estoque baixo');
+            window.vscode?.postMessage({
+            command: 'getLowStockItems',
+            data: {}
+        });
+    },
+
+    updateInventoryItemGranular: (itemId, updates) => {
+        console.log('[WEBVIEW] Atualizando item do inventário (granular):', itemId, updates);
+            window.vscode?.postMessage({
+            command: 'updateInventoryItemGranular',
+            data: { id: itemId, updates: updates }
+        });
+    },
+
+    updateInventoryQuantity: (itemId, quantity) => {
+        console.log('[WEBVIEW] Atualizando quantidade do inventário:', itemId, quantity);
+            window.vscode?.postMessage({
+            command: 'updateInventoryQuantity',
+            data: { id: itemId, quantity: quantity }
+        });
+    },
+
+    deleteInventoryItemGranular: (itemId) => {
+        console.log('[WEBVIEW] Removendo item do inventário (granular):', itemId);
+            window.vscode?.postMessage({
+            command: 'deleteInventoryItemGranular',
+            data: { id: itemId }
+        });
+    },
+
+    // ==================== OPERAÇÕES GRANULARES PARA ENSAIOS AGENDADOS ====================
+
+    /**
+     * Operações granulares para ensaios agendados
+     */
+    createScheduledAssay: (assayData) => {
+        console.log('[WEBVIEW] Criando ensaio agendado:', assayData);
+            window.vscode?.postMessage({
+            command: 'createScheduledAssay',
+            data: assayData
+        });
+    },
+
+    createSafetyScheduledAssay: (assayData) => {
+        console.log('[WEBVIEW] Criando ensaio de segurança agendado:', assayData);
+            window.vscode?.postMessage({
+            command: 'createSafetyScheduledAssay',
+            data: assayData
+        });
+    },
+
+    getScheduledAssayById: (assayId) => {
+        console.log('[WEBVIEW] Buscando ensaio agendado por ID:', assayId);
+        vscode.postMessage({
+            command: 'getScheduledAssayById',
+            data: { id: assayId }
+        });
+    },
+
+    getAllScheduledAssays: () => {
+        console.log('[WEBVIEW] Buscando todos os ensaios agendados');
+        vscode.postMessage({
+            command: 'getAllScheduledAssays',
+            data: {}
+        });
+    },
+
+    updateScheduledAssayGranular: (assayId, updates) => {
+        console.log('[WEBVIEW] Atualizando ensaio agendado (granular):', assayId, updates);
+        vscode.postMessage({
+            command: 'updateScheduledAssayGranular',
+            data: { id: assayId, updates: updates }
+        });
+    },
+
+    deleteScheduledAssayGranular: (assayId) => {
+        console.log('[WEBVIEW] Removendo ensaio agendado (granular):', assayId);
+        vscode.postMessage({
+            command: 'deleteScheduledAssayGranular',
+            data: { id: assayId }
+        });
+    },
+
+    // ==================== OPERAÇÕES GRANULARES PARA CALIBRAÇÕES ====================
+
+    /**
+     * Operações granulares para calibrações
+     */
+    createCalibration: (calibrationData) => {
+        console.log('[WEBVIEW] Criando calibração:', calibrationData);
+        vscode.postMessage({
+            command: 'createCalibration',
+            data: calibrationData
+        });
+    },
+
+    getCalibrationById: (calibrationId) => {
+        console.log('[WEBVIEW] Buscando calibração por ID:', calibrationId);
+        vscode.postMessage({
+            command: 'getCalibrationById',
+            data: { id: calibrationId }
+        });
+    },
+
+    getAllCalibrations: () => {
+        console.log('[WEBVIEW] Buscando todas as calibrações');
+        vscode.postMessage({
+            command: 'getAllCalibrations',
+            data: {}
+        });
+    },
+
+    getUpcomingCalibrations: (daysAhead = 30) => {
+        console.log('[WEBVIEW] Buscando calibrações próximas:', daysAhead);
+        vscode.postMessage({
+            command: 'getUpcomingCalibrations',
+            data: { daysAhead: daysAhead }
+        });
+    },
+
+    updateCalibrationGranular: (calibrationId, updates) => {
+        console.log('[WEBVIEW] Atualizando calibração (granular):', calibrationId, updates);
+        vscode.postMessage({
+            command: 'updateCalibrationGranular',
+            data: { id: calibrationId, updates: updates }
+        });
+    },
+
+    deleteCalibrationGranular: (calibrationId) => {
+        console.log('[WEBVIEW] Removendo calibração (granular):', calibrationId);
+        vscode.postMessage({
+            command: 'deleteCalibrationGranular',
+            data: { id: calibrationId }
         });
     },
 
@@ -5502,11 +5835,65 @@ const dataHandlers = {
     saveScheduleData: () => {
         console.log('[WEBVIEW] Salvando dados do cronograma...');
         
+        // Processa ensaios pendentes para adicionar ao histórico
+        if (state.pendingHistoricalAssays && state.pendingHistoricalAssays.length > 0) {
+            const pendingCount = state.pendingHistoricalAssays.length;
+            console.log('[WEBVIEW] Adicionando ensaios finalizados ao histórico:', pendingCount);
+            
+            // Adiciona os ensaios pendentes ao histórico
+            state.historicalAssays.push(...state.pendingHistoricalAssays);
+            
+            // Remove as flags pendingHistoryAdd dos ensaios no cronograma
+            state.scheduledAssays.forEach(assay => {
+                if (assay.pendingHistoryAdd) {
+                    delete assay.pendingHistoryAdd;
+                    delete assay.previousStatus; // Remove o status anterior após confirmar
+                }
+            });
+            
+            state.safetyScheduledAssays.forEach(assay => {
+                if (assay.pendingHistoryAdd) {
+                    delete assay.pendingHistoryAdd;
+                    delete assay.previousStatus; // Remove o status anterior após confirmar
+                }
+            });
+            
+            // Limpa a lista de ensaios pendentes
+            state.pendingHistoricalAssays = [];
+            
+            utils.showToast(`${pendingCount} ensaio(s) adicionado(s) ao histórico.`);
+        }
+        
+        // Processa descontos de insumos pendentes
+        let stockDeductionCount = 0;
+        state.scheduledAssays.forEach(assay => {
+            if (assay.pendingStockDeduction) {
+                console.log(`[WEBVIEW] Processando desconto de insumos para ensaio ${assay.id}`);
+                
+                // Executa o desconto de cada reagente
+                const deduction = assay.pendingStockDeduction;
+                checkAndDeductStock('poBase', deduction.poBase, deduction.nominalLoad);
+                checkAndDeductStock('perborato', deduction.perborato, deduction.nominalLoad);
+                checkAndDeductStock('taed', deduction.taed, deduction.nominalLoad);
+                checkAndDeductStock('tiras', deduction.tiras, deduction.nominalLoad);
+                
+                // Remove a flag após processar
+                delete assay.pendingStockDeduction;
+                stockDeductionCount++;
+            }
+        });
+        
+        if (stockDeductionCount > 0) {
+            utils.showToast(`Insumos descontados para ${stockDeductionCount} ensaio(s).`);
+        }
+        
         const scheduleData = {
             scheduledAssays: state.scheduledAssays,
             safetyScheduledAssays: state.safetyScheduledAssays,
+            calibrations: state.calibrations,
             efficiencyCategories: state.efficiencyCategories,
-            safetyCategories: state.safetyCategories
+            safetyCategories: state.safetyCategories,
+            historicalAssays: state.historicalAssays // Inclui o histórico atualizado
         };
         
         vscode.postMessage({
@@ -5521,7 +5908,7 @@ const dataHandlers = {
     updateSystemSettings: (settings) => {
         console.log('[WEBVIEW] Atualizando configurações do sistema:', settings);
         vscode.postMessage({
-            command: 'updateSystemSettings',
+            command: 'updateSettings',
             data: settings
         });
     },
@@ -5874,8 +6261,6 @@ const dataHandlers = {
             return utils.showToast(`Não é possível excluir a linha "${categoryName}", pois ela contém ${assaysOnRow.length} tarefa(s). Mova as tarefas primeiro.`, true);
         }
 
-        // --- CORREÇÃO AQUI ---
-        // Substitui a chamada 'confirm()' pelo nosso novo modal
         const confirmationMessage = `Tem a certeza de que deseja excluir a linha "${categoryName}"?`;
         
         ui.showConfirmationModal(confirmationMessage, () => {
@@ -5918,24 +6303,15 @@ const dataHandlers = {
         undoManager.saveState();
         const historicalIndex = state.historicalAssays.findIndex(a => a.id === assayId);
         if (historicalIndex > -1) {
-            const assay = state.historicalAssays[historicalIndex];
-            
-            // Devolver reagentes ao inventário se o ensaio tiver lotes registrados
-            if (assay.lots) {
-                // Usar a função revertStockDeduction existente para cada tipo de reagente
-                if (assay.lots.poBase) revertStockDeduction('poBase', assay.lots.poBase, assay.nominalLoad);
-                if (assay.lots.perborato) revertStockDeduction('perborato', assay.lots.perborato, assay.nominalLoad);
-                if (assay.lots.taed) revertStockDeduction('taed', assay.lots.taed, assay.nominalLoad);
-                if (assay.lots.tiras) revertStockDeduction('tiras', assay.lots.tiras, assay.nominalLoad);
-                
-                console.log(`📦 Reagentes do ensaio ${assay.id} devolvidos ao inventário`);
-            }
-            
+            // Remove do array local
             state.historicalAssays.splice(historicalIndex, 1);
+            
+            // Usa comando granular para deletar do banco de dados
+            // O backend já cuida da reversão do estoque automaticamente
+            dataHandlers.deleteHistoricalAssayGranular(assayId);
         }
         utils.closeModal();
         renderers.renderAll();
-        dataHandlers.saveData();
         utils.showToast("Ensaio excluído com sucesso!");
     },
 
@@ -5944,44 +6320,45 @@ const dataHandlers = {
      * @param {number} assayId - O ID da tarefa a ser excluída.
      */
     handleDeleteGanttItem: (itemId) => {
-    undoManager.saveState();
-    let found = false;
-    
-    // Tenta remover de ensaios de segurança
-    let index = state.safetyScheduledAssays.findIndex(a => a.id === itemId);
-    if (index > -1) {
-        state.safetyScheduledAssays.splice(index, 1);
-        found = true;
-    }
+        undoManager.saveState();
+        let foundType = null; // 'safety' | 'efficiency' | 'calibration'
 
-    // Tenta remover de ensaios de eficiência
-    if (!found) {
-        index = state.scheduledAssays.findIndex(a => a.id === itemId);
+        // Tenta remover de ensaios de segurança
+        let index = state.safetyScheduledAssays.findIndex(a => a.id === itemId);
         if (index > -1) {
-            state.scheduledAssays.splice(index, 1);
-            found = true;
+            state.safetyScheduledAssays.splice(index, 1);
+            foundType = 'safety';
         }
-    }
 
-    // Tenta remover de calibrações
-    if (!found) {
-        index = state.calibrations.findIndex(c => c.id === itemId);
-        if (index > -1) {
-            state.calibrations.splice(index, 1);
-            found = true;
+        // Tenta remover de ensaios de eficiência
+        if (!foundType) {
+            index = state.scheduledAssays.findIndex(a => a.id === itemId);
+            if (index > -1) {
+                state.scheduledAssays.splice(index, 1);
+                foundType = 'efficiency';
+            }
         }
-    }
 
-    if (found) {
-        state.hasUnsavedChanges = true;
-        ui.toggleScheduleActions(true);
-        utils.closeModal();
-        renderers.renderGanttChart();
-        utils.showToast("Item removido. Guarde as alterações para confirmar.");
-    } else {
-        utils.showToast("Erro: Item não encontrado para exclusão.", true);
-    }
-},
+        // Tenta remover de calibrações
+        if (!foundType) {
+            index = state.calibrations.findIndex(c => c.id === itemId);
+            if (index > -1) {
+                state.calibrations.splice(index, 1);
+                foundType = 'calibration';
+            }
+        }
+
+        if (foundType) {
+            // Não persistir imediatamente; apenas marcar como alteração pendente
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            utils.closeModal();
+            renderers.renderGanttChart();
+            utils.showToast("Item removido do cronograma. Clique em Guardar Alterações para aplicar ao banco.");
+        } else {
+            utils.showToast("Erro: Item não encontrado para exclusão.", true);
+        }
+    },
 
 handleUpdateCalibration: (e) => {
     e.preventDefault();
@@ -6057,18 +6434,31 @@ handleUpdateCalibration: (e) => {
             return;
         }
         
-        // Determina a tabela correta
-        const isInScheduled = state.scheduledAssays.find(a => a.id === assayId);
-        const table = isInScheduled ? 'scheduled_assays' : 'safety_scheduled_assays';
+        // Armazena os dados originais do ensaio antes de qualquer modificação
+        if (!assay.originalData) {
+            assay.originalData = {
+                status: assay.status,
+                startDate: assay.startDate,
+                endDate: assay.endDate,
+                cycles: assay.cycles,
+                lots: assay.lots ? JSON.parse(JSON.stringify(assay.lots)) : null,
+                nominalLoad: assay.nominalLoad
+            };
+            console.log(`[WEBVIEW] Dados originais armazenados para ensaio ${assayId}:`, assay.originalData);
+        }
+        
+        // Armazena o status anterior para possível reversão
+        if (!assay.previousStatus) {
+            assay.previousStatus = assay.status;
+        }
         
         assay.status = 'labelo';
-        
-        // Usa a função otimizada para alterar apenas o status no banco
-        dataHandlers.updateAssayStatusOnly(assayId, 'labelo', table);
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
         
         renderers.ganttInitialRenderDone = false;
         renderers.renderGanttChart();
-        utils.showToast("Amostra no LABELO!");
+        utils.showToast("Amostra no LABELO! Clique em 'Guardar Alterações' para confirmar.");
         utils.closeModal();
     },
     /**
@@ -6083,18 +6473,31 @@ handleUpdateCalibration: (e) => {
             return;
         }
         
-        // Determina a tabela correta
-        const isInScheduled = state.scheduledAssays.find(a => a.id === assayId);
-        const table = isInScheduled ? 'scheduled_assays' : 'safety_scheduled_assays';
+        // Armazena os dados originais do ensaio antes de qualquer modificação
+        if (!assay.originalData) {
+            assay.originalData = {
+                status: assay.status,
+                startDate: assay.startDate,
+                endDate: assay.endDate,
+                cycles: assay.cycles,
+                lots: assay.lots ? JSON.parse(JSON.stringify(assay.lots)) : null,
+                nominalLoad: assay.nominalLoad
+            };
+            console.log(`[WEBVIEW] Dados originais armazenados para ensaio ${assayId}:`, assay.originalData);
+        }
+        
+        // Armazena o status anterior para possível reversão
+        if (!assay.previousStatus) {
+            assay.previousStatus = assay.status;
+        }
         
         assay.status = 'andamento';
-        
-        // Usa a função otimizada para alterar apenas o status no banco
-        dataHandlers.updateAssayStatusOnly(assayId, 'andamento', table);
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
         
         renderers.ganttInitialRenderDone = false;
         renderers.renderGanttChart();
-        utils.showToast("Ensaio iniciado com sucesso!");
+        utils.showToast("Ensaio iniciado! Clique em 'Guardar Alterações' para confirmar.");
         utils.closeModal();
     },
 
@@ -6128,6 +6531,19 @@ handleUpdateCalibration: (e) => {
         return utils.showToast("Erro ao concluir: Ensaio não encontrado no cronograma.", true);
     }
 
+    // Armazena os dados originais do ensaio antes de qualquer modificação
+    if (!assayToUpdate.originalData) {
+        assayToUpdate.originalData = {
+            status: assayToUpdate.status,
+            startDate: assayToUpdate.startDate,
+            endDate: assayToUpdate.endDate,
+            cycles: assayToUpdate.cycles,
+            lots: assayToUpdate.lots ? JSON.parse(JSON.stringify(assayToUpdate.lots)) : null,
+            nominalLoad: assayToUpdate.nominalLoad
+        };
+        console.log(`[WEBVIEW] Dados originais armazenados para ensaio ${assayId}:`, assayToUpdate.originalData);
+    }
+
     const newStartDate = form.newStartDate.value;
     const newEndDate = form.newEndDate.value;
     
@@ -6156,15 +6572,24 @@ handleUpdateCalibration: (e) => {
             });
         });
 
-        const averageCycles = totalLotEntries > 0 ? Math.round(totalCyclesSum / totalLotEntries) : 0;
+        const averageCycles = totalCyclesSum > 0 ? Math.round(totalCyclesSum / 4) : 0;
         assayToUpdate.cycles = averageCycles;
         assayToUpdate.lots = newLots;
 
-        // Valida e deduz o estoque usando a função global
-        if (!checkAndDeductStock('poBase', newLots.poBase, assayToUpdate.nominalLoad)) return;
-        if (!checkAndDeductStock('perborato', newLots.perborato, assayToUpdate.nominalLoad)) return;
-        if (!checkAndDeductStock('taed', newLots.taed, assayToUpdate.nominalLoad)) return;
-        if (!checkAndDeductStock('tiras', newLots.tiras, assayToUpdate.nominalLoad)) return;
+        // Valida se há estoque suficiente, mas NÃO deduz ainda
+        if (!validateStock('poBase', newLots.poBase, assayToUpdate.nominalLoad)) return;
+        if (!validateStock('perborato', newLots.perborato, assayToUpdate.nominalLoad)) return;
+        if (!validateStock('taed', newLots.taed, assayToUpdate.nominalLoad)) return;
+        if (!validateStock('tiras', newLots.tiras, assayToUpdate.nominalLoad)) return;
+        
+        // Armazena os dados de consumo para desconto posterior
+        assayToUpdate.pendingStockDeduction = {
+            poBase: newLots.poBase,
+            perborato: newLots.perborato,
+            taed: newLots.taed,
+            tiras: newLots.tiras,
+            nominalLoad: assayToUpdate.nominalLoad
+        };
 
         // Calcula o consumo total baseado nos lotes utilizados
         const consumption = {
@@ -6185,19 +6610,33 @@ handleUpdateCalibration: (e) => {
     assayToUpdate.status = newStatus;
     assayToUpdate.report = (newStatus === 'incompleto') ? 'Pendente' : 'Pendente'; // Define como pendente em ambos os casos
 
-    // Cria a cópia para o histórico
-    const historicalAssay = { ...assayToUpdate };
-    state.historicalAssays.push(historicalAssay);
+    // Para ensaios de eficiência, armazena os dados para envio posterior ao histórico
+    if (!isSafetyAssay && (newStatus === 'concluido' || newStatus === 'incompleto')) {
+        // Marca que este ensaio precisa ser enviado ao histórico quando salvar
+        assayToUpdate.pendingHistoryAdd = true;
+        
+        // Armazena uma cópia dos dados para o histórico
+        if (!state.pendingHistoricalAssays) {
+            state.pendingHistoricalAssays = [];
+        }
+        
+        const historicalAssay = { ...assayToUpdate };
+        delete historicalAssay.pendingHistoryAdd; // Remove a flag da cópia histórica
+        delete historicalAssay.previousStatus; // Remove o status anterior da cópia histórica
+        
+        // Remove qualquer entrada anterior deste ensaio na lista pendente
+        state.pendingHistoricalAssays = state.pendingHistoricalAssays.filter(h => h.id !== assayId);
+        state.pendingHistoricalAssays.push(historicalAssay);
+    }
 
     // NÃO remove do cronograma - apenas atualiza o status
     // O ensaio permanece visível no cronograma com o novo status
 
     state.hasUnsavedChanges = true;
     ui.toggleScheduleActions(true);
-    dataHandlers.saveData(); // Salva as alterações
     utils.closeModal();
     renderers.renderAll();
-    utils.showToast(`Status do ensaio atualizado para '${ASSAY_STATUS_MAP[newStatus] || newStatus}' e adicionado ao histórico!`);
+    utils.showToast(`Status do ensaio atualizado para '${ASSAY_STATUS_MAP[newStatus] || newStatus}'. Clique em 'Guardar Alterações' para confirmar.`);
 },
 
     /**
@@ -6237,13 +6676,14 @@ handleUpdateCalibration: (e) => {
             // Atualiza o ensaio no histórico, se existir
             historicalAssay.report = reportNumber;
             historicalAssay.status = 'relatorio';
+            // Para ensaios no histórico, salva imediatamente pois não afeta o cronograma
+            dataHandlers.saveData();
         } else if (!scheduledAssay) {
             // Se o ensaio não foi encontrado em nenhum dos locais, mostra um erro.
             utils.showToast("Erro: Ensaio não encontrado para adicionar relatório.", true);
             return;
         }
 
-        dataHandlers.saveData();
         renderers.renderAll();
         utils.closeModal();
         utils.showToast("Relatório adicionado com sucesso!");
@@ -6305,7 +6745,7 @@ handleUpdateCalibration: (e) => {
         });
 
         // Calcular a média dos ciclos informados nos containers
-        const averageCycles = totalLotEntries > 0 ? Math.round(totalCyclesSum / totalLotEntries) : 0;
+        const averageCycles = totalCyclesSum > 0 ? Math.round(totalCyclesSum / 4) : 0;
         
         // Validação dos ciclos
         if (averageCycles <= 0) {
@@ -6647,41 +7087,85 @@ handleUpdateCalibration: (e) => {
         }
         
         // Obter dados originais do ensaio para reverter o desconto
-        const originalAssay = state.historicalAssays[assayIndex];
-        const originalLots = originalAssay.lots || {};
-        const originalNominalLoad = originalAssay.nominalLoad;
-        
-        // Reverter o desconto original do inventário
+        const canonicalStringify = (obj) => {
+        const sortedObj = {};
+        if (!obj) return '{}';
+        // Garante que a ordem das chaves de reagente seja sempre a mesma
+        Object.keys(obj).sort().forEach(key => {
+            if (Array.isArray(obj[key])) {
+                // Ordena também o array de lotes para consistência
+                sortedObj[key] = [...obj[key]].sort((a, b) => a.lot.localeCompare(b.lot) || a.cycles - b.cycles);
+            } else {
+                sortedObj[key] = obj[key];
+            }
+        });
+        return JSON.stringify(sortedObj);
+    };
+
+    // 1. Obter os dados originais do ensaio
+    const originalAssay = state.historicalAssays[assayIndex];
+    const originalLots = originalAssay.lots || {};
+    const originalNominalLoad = originalAssay.nominalLoad;
+
+    // 2. NORMALIZE o objeto de lotes original para garantir que todas as chaves de reagentes existam
+    const allReagentKeys = ['poBase', 'perborato', 'taed', 'tiras'];
+    const normalizedOriginalLots = {};
+    allReagentKeys.forEach(key => {
+        normalizedOriginalLots[key] = originalLots[key] || [];
+    });
+
+    // 3. Obter os novos dados do formulário
+    const newNominalLoad = parseFloat(form.nominalLoad.value);
+    const newLots = {}; // Este objeto já é construído de forma "normalizada" abaixo
+    let totalCycles = 0;
+    const lotContainers = form.querySelectorAll('.lote-container');
+    lotContainers.forEach(container => {
+        const reagentType = container.dataset.reagentType;
+        newLots[reagentType] = [];
+        container.querySelectorAll('.lote-entry').forEach(entry => {
+            const lot = entry.querySelector('select[name="lote"]').value;
+            const cycles = parseInt(entry.querySelector('input[name="cycles"]').value);
+            if (lot && cycles > 0) {
+                newLots[reagentType].push({ lot, cycles });
+                totalCycles += cycles;
+            }
+        });
+    });
+
+    const averageCycles = totalCycles > 0 ? Math.round(totalCycles / 4) : 0;
+
+    // 4. Comparar lotes/ciclos E carga nominal
+    const lotsChanged = canonicalStringify(normalizedOriginalLots) !== canonicalStringify(newLots);
+    const nominalLoadChanged = originalNominalLoad !== newNominalLoad; // Nova verificação
+
+    if (lotsChanged || nominalLoadChanged) {
+        console.log(`Detectada alteração. Lotes mudaram: ${lotsChanged}, Carga Nominal mudou: ${nominalLoadChanged}. Recalculando estoque...`);
+
+        // 4a. Validar se o novo consumo é possível ANTES de qualquer alteração no estoque
+        //     A função validateStock já usa a carga nominal correta (newNominalLoad)
+        if (!validateStock('poBase', newLots.poBase || [], newNominalLoad)) return;
+        if (!validateStock('perborato', newLots.perborato || [], newNominalLoad)) return;
+        if (!validateStock('taed', newLots.taed || [], newNominalLoad)) return;
+        if (!validateStock('tiras', newLots.tiras || [], newNominalLoad)) return;
+
+        // 4b. Reverter o desconto antigo usando os dados ORIGINAIS (lotes e carga nominal)
+        console.log(`Revertendo consumo antigo com carga ${originalNominalLoad}`);
         if (originalLots.poBase) revertStockDeduction('poBase', originalLots.poBase, originalNominalLoad);
         if (originalLots.perborato) revertStockDeduction('perborato', originalLots.perborato, originalNominalLoad);
         if (originalLots.taed) revertStockDeduction('taed', originalLots.taed, originalNominalLoad);
         if (originalLots.tiras) revertStockDeduction('tiras', originalLots.tiras, originalNominalLoad);
-        
-        // Coleta os dados dos lotes dinâmicos
-        const newLots = {};
-        const lotContainers = form.querySelectorAll('.lote-container');
-        let totalCycles = 0;
-        const newNominalLoad = parseFloat(form.nominalLoad.value);
 
-        lotContainers.forEach(container => {
-            const reagentType = container.dataset.reagentType;
-            newLots[reagentType] = [];
-            const lotEntries = container.querySelectorAll('.lote-entry');
-            lotEntries.forEach(entry => {
-                const lot = entry.querySelector('select[name="lote"]').value;
-                const cycles = parseInt(entry.querySelector('input[name="cycles"]').value);
-                if (lot && cycles > 0) {
-                    newLots[reagentType].push({ lot, cycles });
-                    totalCycles += cycles;
-                }
-            });
-        });
-        
-        // Aplicar o novo desconto do inventário
-        if (!checkAndDeductStock('poBase', newLots.poBase, newNominalLoad)) return;
-        if (!checkAndDeductStock('perborato', newLots.perborato, newNominalLoad)) return;
-        if (!checkAndDeductStock('taed', newLots.taed, newNominalLoad)) return;
-        if (!checkAndDeductStock('tiras', newLots.tiras, newNominalLoad)) return;
+        // 4c. Aplicar o novo desconto usando os NOVOS dados (lotes e carga nominal)
+        console.log(`Aplicando novo consumo com carga ${newNominalLoad}`);
+        // Usamos || [] para garantir que passamos um array vazio se o lote não foi selecionado
+        checkAndDeductStock('poBase', newLots.poBase || [], newNominalLoad);
+        checkAndDeductStock('perborato', newLots.perborato || [], newNominalLoad);
+        checkAndDeductStock('taed', newLots.taed || [], newNominalLoad);
+        checkAndDeductStock('tiras', newLots.tiras || [], newNominalLoad);
+
+    } else {
+        console.log("Nenhuma alteração nos lotes/ciclos ou carga nominal. Estoque não será modificado.");
+    }
         
         state.historicalAssays[assayIndex] = {
             ...state.historicalAssays[assayIndex],
@@ -6690,11 +7174,10 @@ handleUpdateCalibration: (e) => {
             assayManufacturer: form.assayManufacturer.value,
             model: form.model.value,
             nominalLoad: parseFloat(form.nominalLoad.value),
-            cycles: totalCycles,
+            cycles: averageCycles,
             type: form.type.value,
             startDate: form.startDate.value,
             endDate: form.endDate.value,
-            reason: form.reason.value,
             lots: newLots,
             setup: parseInt(form.setup.value) || 0,
             tensao: form.tensao.value,
@@ -6714,6 +7197,7 @@ handleUpdateCalibration: (e) => {
             utils.showToast('Erro ao salvar ensaio. Verifique os dados e tente novamente.', true);
         }
     },
+
     handleUpdateSafetyAssay: (e) => {
     undoManager.saveState();
         e.preventDefault();
@@ -6742,6 +7226,7 @@ handleUpdateCalibration: (e) => {
     assayToUpdate.tensao = form.tensao?.value || 'N/A';
     assayToUpdate.startDate = startDate;
     assayToUpdate.endDate = endDate;
+    assayToUpdate.reportDate = form.reportDate?.value || '';
     assayToUpdate.setup = form.setup.value;
     assayToUpdate.status = form.status.value;
     assayToUpdate.observacoes = form.observacoes?.value || '';
@@ -6867,42 +7352,81 @@ handleUpdateCalibration: (e) => {
         state.selectedAssayId = null;
     },
 
-    /** Salva as configurações. */
+    /** Salva as configurações com atualização granular. */
     saveSettings: () => {
         const form = document.querySelector('#settings-form');
         if (!form) {
-            // Fallback para salvar sem validação se o formulário não for encontrado
-            dataHandlers.saveData();
+            // Fallback: envia todas as configurações atuais
+            dataHandlers.updateSystemSettings(state.settings);
+            notificationSystem.send(
+                'Configurações Atualizadas',
+                `✅ Configurações aplicadas (fallback sem validação).`,
+                'success'
+            );
             return;
         }
-        
-        // Coleta dados do formulário
+
+        // Coleta os e-mails da lista renderizada na tela, que é mais confiável
+        let currentEmails = '';
+        const emailListItems = document.querySelectorAll('#email-list li span:first-child');
+        if (emailListItems.length > 0) {
+            currentEmails = Array.from(emailListItems).map(span => span.textContent.trim()).join(',');
+        } else {
+            currentEmails = state.settings.notificationEmail || '';
+        }
+
+        // Coleta dados do formulário com tolerância a diferentes nomes/ids
+        const calibrationDaysInput = form.querySelector('[name="calibrationAlertDays"]') || document.getElementById('setting-calibration-threshold');
+        const alertThresholdInput = form.alertThreshold || document.getElementById('setting-threshold');
+
         const formData = {
             notificationEmail: form.notificationEmail?.value?.trim() || state.settings.notificationEmail,
-            alertThreshold: form.alertThreshold?.value || state.settings.alertThreshold,
+            alertThreshold: alertThresholdInput?.value ?? state.settings.alertThreshold,
+            calibrationAlertDays: calibrationDaysInput?.value ?? state.settings.calibrationAlertDays,
             schedulePassword: form.schedulePassword?.value || state.settings.schedulePassword
         };
-        
-        // Valida os dados
+
+        // Validação
         const errors = validator.validateSettings(formData);
-        
         if (errors.length > 0) {
             validator.displayErrors(errors, form);
             return;
         }
-        
-        // Salva as configurações
-        state.settings = {
-            ...state.settings,
-            notificationEmail: formData.notificationEmail,
-            alertThreshold: parseInt(formData.alertThreshold),
-            schedulePassword: formData.schedulePassword
-        };
-        
-        dataHandlers.saveData();
+
+        // Calcula apenas chaves alteradas
+        const changes = {};
+        const prev = { ...state.settings };
+        const parsedAlertThreshold = parseInt(formData.alertThreshold, 10);
+        const parsedCalibrationDays = parseInt(formData.calibrationAlertDays, 10);
+
+        if (formData.notificationEmail !== prev.notificationEmail) {
+            changes.notificationEmail = formData.notificationEmail;
+        }
+        if (!Number.isNaN(parsedAlertThreshold) && parsedAlertThreshold !== prev.alertThreshold) {
+            changes.alertThreshold = parsedAlertThreshold;
+        }
+        if (!Number.isNaN(parsedCalibrationDays) && parsedCalibrationDays !== prev.calibrationAlertDays) {
+            changes.calibrationAlertDays = parsedCalibrationDays;
+        }
+        if (formData.schedulePassword !== prev.schedulePassword) {
+            changes.schedulePassword = formData.schedulePassword;
+        }
+
+        // Se nada mudou, evita envio desnecessário
+        if (Object.keys(changes).length === 0) {
+            utils.showToast('Nenhuma alteração nas configurações para salvar.');
+            return;
+        }
+
+        // Envia apenas alterações
+        dataHandlers.updateSystemSettings(changes);
+
+        // Atualiza estado local após envio
+        state.settings = { ...state.settings, ...changes };
+
         notificationSystem.send(
             'Configurações Atualizadas com Sucesso',
-            `✅ OPERAÇÃO CONCLUÍDA: Todas as configurações do sistema foram salvas e aplicadas.`,
+            `✅ OPERAÇÃO CONCLUÍDA: Configurações alteradas foram salvas e aplicadas.`,
             'success'
         );
     },
@@ -7048,6 +7572,8 @@ handleUpdateCalibration: (e) => {
         const form = e.target;
         const startDateInput = form.querySelector('[name="startDate"]');
         const orcamentoInput = form.querySelector('[name="orcamento"]');
+        const modelInput = form.querySelector('[name="model"]');
+        const assayManufacturerInput = form.querySelector('[name="assayManufacturer"]');
         const umidadeInput = form.querySelector('[name="humidity"]');
         const endDateInput = form.querySelector('[name="endDate"]');
         const protocolInput = form.querySelector('[name="protocol"]');
@@ -7074,6 +7600,8 @@ handleUpdateCalibration: (e) => {
             id: Date.now(),
             protocol: protocolInput.value,
             orcamento: orcamentoInput?.value || 'N/A',
+            model: modelInput?.value || 'N/A',
+            assayManufacturer: assayManufacturerInput?.value || 'N/A',
             humidity: umidadeInput.value,
             nominalLoad: parseFloat(nominalLoadInput?.value) || 0,
             tensao: tensaoInput.value,
@@ -7152,7 +7680,10 @@ const modalHandlers = {
             const generateLotFields = (reagentKey, reagentName) => {
                 const lotsHtml = state.inventory
                     .filter(item => item.reagent === reagentName)
-                    .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
+                    .map(item => {
+                    const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
+                    return `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} ${unit})</option>`;
+                    })
                     .join('');
 
                 return `
@@ -7196,8 +7727,11 @@ const modalHandlers = {
                     // Gerar opções limpas sem seleções
                     const cleanOptions = state.inventory
                         .filter(item => item.reagent === reagentName)
-                        .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
-                        .join('');
+                    .map(item => {
+                    const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
+                    return `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} ${unit})</option>`;
+                    })
+                    .join('');
                     
                     const newEntry = document.createElement('div');
                     newEntry.className = 'lote-entry flex items-center space-x-2 mt-2';
@@ -7467,11 +8001,9 @@ openEditCalibrationModal: (calibrationId) => {
         const editButton = activeModal.querySelector('.btn-edit-gantt-calibration');
         const deleteButton = activeModal.querySelector('.btn-delete-gantt-calibration');
 
-        // --- INÍCIO DA CORREÇÃO ---
         // Atribui o ID correto aos botões
         if (editButton) editButton.dataset.id = calib.id;
         if (deleteButton) deleteButton.dataset.id = calib.id;
-        // --- FIM DA CORREÇÃO ---
 
         if (editButton) {
             editButton.addEventListener('click', () => {
@@ -7493,7 +8025,7 @@ openEditCalibrationModal: (calibrationId) => {
     /**
      * Abre o modal de visualização de tarefa do Gantt.
      * @param {number} assayId - O ID da tarefa a ser visualizada.
-     * CORREÇÃO DE BUG: Adicionada verificação robusta para garantir que o objeto de ensaio
+     * Adicionada verificação robusta para garantir que o objeto de ensaio
      * é encontrado antes de tentar preencher o modal.
      */
     openViewGanttAssayModal: (assayId) => {
@@ -7724,8 +8256,8 @@ openEditCalibrationModal: (calibrationId) => {
                             <label class="block text-sm font-medium text-gray-700">Tensão</label>
                             <select name="tensao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                                 <option value="">Selecione a Tensão</option>
-                                <option value="127" ${assayToEdit.tensao == '127' ? 'selected' : ''}>127V</option>
-                                <option value="220" ${assayToEdit.tensao == '220' ? 'selected' : ''}>220V</option>
+                                <option value="127V" ${assayToEdit.tensao == '127V' ? 'selected' : ''}>127V</option>
+                                <option value="220V" ${assayToEdit.tensao == '220V' ? 'selected' : ''}>220V</option>
                             </select>
                         </div>
                         <div>
@@ -7745,7 +8277,7 @@ openEditCalibrationModal: (calibrationId) => {
                     </div>
                 </div>
 
-                <!-- Tipo e Motivo -->
+                <!-- Ensaio -->
                 <div class="bg-gray-50 p-4 rounded-lg">
                     <h3 class="text-lg font-bold mb-4 text-gray-800">Classificação</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -7753,15 +8285,10 @@ openEditCalibrationModal: (calibrationId) => {
                             <label class="block text-sm font-medium text-gray-700">Tipo de Ensaio</label>
                             <select name="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                                 <option value="homologation" ${assayToEdit.type === 'homologation' ? 'selected' : ''}>Homologação</option>
-                <option value="acp" ${assayToEdit.type === 'acp' ? 'selected' : ''}>AcP</option>
-                <option value="secadora" ${assayToEdit.type === 'secadora' ? 'selected' : ''}>Ensaio de Secadora</option>
-                <option value="seguranca-eletrica" ${assayToEdit.type === 'seguranca-eletrica' ? 'selected' : ''}>Segurança Elétrica</option>
-                <option value="acao-corretiva" ${assayToEdit.type === 'acao-corretiva' ? 'selected' : ''}>Ação Corretiva</option>
+                                <option value="acp" ${assayToEdit.type === 'acp' ? 'selected' : ''}>AcP</option>
+                                <option value="acreditado" ${assayToEdit.type === 'acreditado' ? 'selected' : ''}>Não Acreditado</option>
+                                <option value="acao-corretiva" ${assayToEdit.type === 'acao-corretiva' ? 'selected' : ''}>Ação Corretiva</option>
                             </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Motivo</label>
-                            <input type="text" name="reason" value="${assayToEdit.reason || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                 </div>
@@ -7816,14 +8343,21 @@ openEditCalibrationModal: (calibrationId) => {
                 const lotsArray = assayToEdit.lots && assayToEdit.lots[reagentKey] ? assayToEdit.lots[reagentKey] : [];
                 const lotsHtml = state.inventory
                     .filter(item => item.reagent === reagentName)
-                    .map(item => `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
+                    .map(item => {
+                        const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
+                        return `<option value="${item.lot}">${item.lot} (${item.quantity.toLocaleString('pt-BR')} ${unit})</option>`;
+                    })
                     .join('');
 
                 let fieldsHtml = lotsArray.map(lotEntry => {
                     const lotOptions = state.inventory
                         .filter(item => item.reagent === reagentName)
-                        .map(item => `<option value="${item.lot}" ${item.lot === lotEntry.lot ? 'selected' : ''}>${item.lot} (${item.quantity.toLocaleString('pt-BR')} g)</option>`)
-                        .join('');
+                        .map(item => {
+                        const unit = item.reagent === 'Tiras de sujidade' ? 'un' : 'g';
+                        const isSelected = item.lot === lotEntry.lot ? 'selected' : '';
+                        return `<option value="${item.lot}" ${isSelected}>${item.lot} (${item.quantity.toLocaleString('pt-BR')} ${unit})</option>`;
+                    })                        
+                    .join('');
                     
                     return `
                     <div class="lote-entry flex items-center space-x-2 mt-2">
@@ -7919,16 +8453,19 @@ openEditCalibrationModal: (calibrationId) => {
         return utils.showToast("Erro: Ensaio não encontrado no cronograma.", true);
     }
 
-    // --- INÍCIO DA NOVA LÓGICA PARA SEGURANÇA ELÉTRICA ---
     if (assay.type === 'seguranca-eletrica') {
         undoManager.saveState();
 
         // 1. Encontra o ensaio diretamente na sua array original para o modificar
         const assayToUpdate = state.safetyScheduledAssays.find(a => a.id === assayId);
         if (assayToUpdate) {
-            // 2. Altera APENAS o status para o estado final
-            assayToUpdate.status = 'relatorio'; // Define o status final diretamente
-            assayToUpdate.report = 'Pendente';  // Marca que o relatório está pendente
+            // 2. Altera o status baseado no parâmetro newStatus (incompleto ou relatório)
+            if (newStatus === 'concluido') {
+            assayToUpdate.status = 'relatorio';
+        } else {
+            assayToUpdate.status = 'incompleto';
+        }
+        assayToUpdate.report = 'Pendente';
         }
 
         // 3. Ativa o estado de "alterações não salvas"
@@ -7942,7 +8479,6 @@ openEditCalibrationModal: (calibrationId) => {
 
         return; // Termina a função aqui para não abrir o modal de lotes
     }
-    // --- FIM DA NOVA LÓGICA ---
 
     // O fluxo para ensaios de eficiência continua normalmente abaixo
     const title = `Concluir Ensaio: ${assay.protocol}`;
@@ -8011,6 +8547,14 @@ openEditCalibrationModal: (calibrationId) => {
         const form = document.getElementById('form-finish-assay');
         if (form) {
             form.addEventListener('submit', (e) => dataHandlers.handleFinishAssay(e, assayId, newStatus));
+
+            const cancelButton = form.querySelector('.btn-close-modal');
+            if (cancelButton) {
+                cancelButton.addEventListener('click', () => {
+                    utils.closeModal();
+                });
+            }
+
             form.addEventListener('click', (e) => {
                 if (e.target.classList.contains('btn-add-lote')) {
                     const container = e.target.closest('.lote-container');
@@ -8529,7 +9073,7 @@ openEditCalibrationModal: (calibrationId) => {
             document.getElementById('view-dryer-manufacturer').textContent = assay.assayManufacturer || 'N/A';
             document.getElementById('view-dryer-model').textContent = assay.model || 'N/A';
             document.getElementById('view-dryer-nominal-load').textContent = assay.nominalLoad ? `${assay.nominalLoad} kg` : 'N/A';
-            document.getElementById('view-dryer-humidity').textContent = assay.humidity ? `${assay.humidity}%` : 'N/A';
+            document.getElementById('view-dryer-humidity').textContent = assay.humidity ? `${assay.humidity}` : 'N/A';
             document.getElementById('view-dryer-tensao').textContent = assay.tensao ? `${assay.tensao}V` : 'N/A';
             document.getElementById('view-dryer-period').textContent = `${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}`;
             document.getElementById('view-dryer-terminal').textContent = assay.setup || 'N/A';
@@ -9088,6 +9632,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     console.log("Dados recebidos da extensão:", message.data);
                     const data = message.data && typeof message.data === 'object' ? message.data : {};
+                    // Captura página corrente antes de atualizar estado
+                    const currentVisiblePage = document.querySelector('.page:not(.hidden)')?.id || 'page-dashboard';
                     
                     // Verifica se há informações de usuário para login automático
                       if (message.currentUser) {
@@ -9146,10 +9692,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || []; // Carrega os equipamentos de calibração
                     
-                    // 🔍 DEBUG - Verificar calibrationEquipments recebidos
-                    // Equipamentos de calibração recebidos
-                    // Dados de calibração processados
-                    // Quantidade de equipamentos processada
+                    // Log específico para verificar datas de calibração
+                    console.log('[LOAD] Equipamentos de calibração carregados:', 
+                        state.calibrationEquipments.map(eq => ({
+                            tag: eq.tag,
+                            calibrationStatus: eq.calibrationStatus,
+                            lastCalibrationDate: eq.lastCalibrationDate,
+                            calibrationStartDate: eq.calibrationStartDate
+                        }))
+                    );
                     
                     // Log específico para equipamentos em calibração
                     const equipmentsInCalibration = state.calibrationEquipments.filter(eq => eq.calibrationStatus === 'em_calibracao');
@@ -9177,12 +9728,71 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.hasUnsavedChanges = false;
                     ui.toggleScheduleActions(false);
                     renderers.renderAll();
-                    renderers.switchPage('page-dashboard');
+                    // Mantém página corrente se solicitado e se não for restrita para visualizador
+                    if (message.preservePage) {
+                        const restrictedPages = ['page-inventory', 'page-assays', 'page-calibrations', 'page-settings'];
+                        const isViewer = message.readonly || (state.currentUser && state.currentUser.type === 'visualizador');
+                        if (isViewer && restrictedPages.includes(currentVisiblePage)) {
+                            renderers.switchPage('page-dashboard');
+                        } else {
+                            renderers.switchPage(currentVisiblePage);
+                        }
+                    } else {
+                        renderers.switchPage('page-dashboard');
+                    }
                 } catch (error) {
                     console.error("Erro durante o processamento de 'loadData':", error);
                     utils.showToast("Ocorreu um erro ao carregar os dados.", true);
                 } finally {
                     utils.hideLoading();
+                }
+                break;
+                case 'forceDataRefresh':
+                try {
+                    console.log("Recebida atualização forçada do backend:", message.data);
+                    const data = message.data && typeof message.data === 'object' ? message.data : {};
+
+                    // Atualiza todo o estado da aplicação com os novos dados
+                    state.inventory = data.inventory || [];
+                    state.historicalAssays = data.historicalAssays || [];
+                    state.scheduledAssays = data.scheduledAssays || [];
+                    state.safetyScheduledAssays = data.safetyScheduledAssays || [];
+                    state.holidays = data.holidays || [];
+                    state.calibrations = data.calibrations || [];
+                    state.calibrationEquipments = data.calibrationEquipments || [];
+                    state.settings = { ...state.settings, ...(data.settings || {}) };
+                    state.systemUsers = data.systemUsers || {};
+                    state.efficiencyCategories = data.efficiencyCategories || state.efficiencyCategories;
+                    state.safetyCategories = data.safetyCategories || state.safetyCategories;
+
+                    // Salva o estado original dos agendamentos para permitir o cancelamento
+                    state.originalScheduledAssays = JSON.parse(JSON.stringify(data.scheduledAssays || []));
+                    state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(data.safetyScheduledAssays || []));
+
+                    // Redesenha toda a interface
+                    renderers.renderAll();
+
+                    // Notifica o usuário de forma sutil, apenas 1x por ação
+                    const now = Date.now();
+                    const signature = JSON.stringify({
+                        invLen: (data.inventory || []).length,
+                        histLen: (data.historicalAssays || []).length,
+                        schLen: (data.scheduledAssays || []).length,
+                        safSchLen: (data.safetyScheduledAssays || []).length,
+                        holLen: (data.holidays || []).length,
+                        calLen: (data.calibrations || []).length
+                    });
+                    const withinCooldown = (now - state.lastForceRefreshToastAt) < state.forceRefreshToastCooldownMs;
+                    const isDuplicateAction = signature === state.lastForceRefreshSignature;
+                    if (!withinCooldown || !isDuplicateAction) {
+                        utils.showToast("Os dados foram atualizados automaticamente.", false);
+                        state.lastForceRefreshToastAt = now;
+                        state.lastForceRefreshSignature = signature;
+                    }
+
+                } catch (error) {
+                    console.error("Erro durante o processamento de 'forceDataRefresh':", error);
+                    utils.showToast("Erro ao sincronizar dados.", true);
                 }
                 break;
             case "executeDeleteReagent":
@@ -9234,6 +9844,25 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.btnSaveSchedule?.addEventListener('click', () => {
         // Com o sistema de hierarquia, não é mais necessário solicitar senha
         dataHandlers.saveScheduleData();
+        
+        // Limpa as propriedades temporárias após salvar
+        state.scheduledAssays.forEach(assay => {
+            if (assay.previousStatus) {
+                delete assay.previousStatus;
+            }
+            if (assay.originalData) {
+                delete assay.originalData;
+            }
+        });
+        state.safetyScheduledAssays.forEach(assay => {
+            if (assay.previousStatus) {
+                delete assay.previousStatus;
+            }
+            if (assay.originalData) {
+                delete assay.originalData;
+            }
+        });
+        
         state.originalScheduledAssays = JSON.parse(JSON.stringify(state.scheduledAssays));
         state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
         state.hasUnsavedChanges = false;
@@ -9241,6 +9870,64 @@ document.addEventListener('DOMContentLoaded', () => {
         utils.showToast("Alterações guardadas com sucesso!");
     });
     DOM.btnCancelSchedule?.addEventListener('click', () => {
+        // Restaura completamente os dados originais dos ensaios modificados
+        state.scheduledAssays.forEach(assay => {
+            if (assay.originalData) {
+                console.log(`[WEBVIEW] Restaurando dados originais do ensaio ${assay.id}:`, assay.originalData);
+                assay.status = assay.originalData.status;
+                assay.startDate = assay.originalData.startDate;
+                assay.endDate = assay.originalData.endDate;
+                assay.cycles = assay.originalData.cycles;
+                assay.lots = assay.originalData.lots ? JSON.parse(JSON.stringify(assay.originalData.lots)) : null;
+                assay.nominalLoad = assay.originalData.nominalLoad;
+                
+                // Remove todas as flags temporárias
+                delete assay.originalData;
+                delete assay.pendingHistoryAdd;
+                delete assay.previousStatus;
+                delete assay.pendingStockDeduction;
+            } else if (assay.pendingHistoryAdd && assay.previousStatus) {
+                // Fallback para o sistema anterior
+                console.log(`[WEBVIEW] Revertendo status do ensaio ${assay.id} de '${assay.status}' para '${assay.previousStatus}'`);
+                assay.status = assay.previousStatus;
+                delete assay.pendingHistoryAdd;
+                delete assay.previousStatus;
+                delete assay.pendingStockDeduction;
+            }
+        });
+        
+        // Restaura dados originais dos ensaios de segurança também
+        state.safetyScheduledAssays.forEach(assay => {
+            if (assay.originalData) {
+                console.log(`[WEBVIEW] Restaurando dados originais do ensaio de segurança ${assay.id}:`, assay.originalData);
+                assay.status = assay.originalData.status;
+                assay.startDate = assay.originalData.startDate;
+                assay.endDate = assay.originalData.endDate;
+                assay.cycles = assay.originalData.cycles;
+                assay.lots = assay.originalData.lots ? JSON.parse(JSON.stringify(assay.originalData.lots)) : null;
+                assay.nominalLoad = assay.originalData.nominalLoad;
+                
+                // Remove todas as flags temporárias
+                delete assay.originalData;
+                delete assay.pendingHistoryAdd;
+                delete assay.previousStatus;
+                delete assay.pendingStockDeduction;
+            } else if (assay.pendingHistoryAdd && assay.previousStatus) {
+                // Fallback para o sistema anterior
+                console.log(`[WEBVIEW] Revertendo status do ensaio de segurança ${assay.id} de '${assay.status}' para '${assay.previousStatus}'`);
+                assay.status = assay.previousStatus;
+                delete assay.pendingHistoryAdd;
+                delete assay.previousStatus;
+                delete assay.pendingStockDeduction;
+            }
+        });
+        
+        // Limpa a lista de ensaios pendentes para histórico
+        if (state.pendingHistoricalAssays && state.pendingHistoricalAssays.length > 0) {
+            console.log('[WEBVIEW] Removendo ensaios pendentes do histórico:', state.pendingHistoricalAssays.length);
+            state.pendingHistoricalAssays = [];
+        }
+        
         state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays));
         state.safetyScheduledAssays = JSON.parse(JSON.stringify(state.originalSafetyScheduledAssays)); // Reverte o estado de segurança
         state.calibrations = JSON.parse(JSON.stringify(state.originalCalibrations)); // Reverte o estado das calibrações
@@ -9267,7 +9954,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newPassword = DOM.settingSchedulePasswordInput.value;
         if (newPassword && newPassword.length >= 4) {
             state.settings.schedulePassword = newPassword;
-            dataHandlers.updateSystemSettings(state.settings);
+            dataHandlers.updateSystemSettings({ schedulePassword: newPassword });
             utils.showToast("Senha do cronograma atualizada com sucesso!");
             DOM.settingSchedulePasswordInput.value = '';
         } else {
@@ -9306,6 +9993,12 @@ document.addEventListener('DOMContentLoaded', () => {
             utils.showToast("Limite de alerta salvo com sucesso!");
         }
     });
+    document.querySelectorAll('.btn-manual-refresh').forEach(button => {
+    button.addEventListener('click', () => {
+        utils.showToast('Sincronizando com a rede...', false);
+            window.vscode?.postMessage({ command: 'requestManualRefresh' });
+    });
+});
     
     document.getElementById('btn-save-calibration-threshold')?.addEventListener('click', () => {
         const calibrationThresholdInput = document.getElementById('setting-calibration-threshold');
@@ -9574,16 +10267,31 @@ assaysFilters.forEach(id => {
         const itemId = parseInt(button.dataset.assayId, 10);
         const isDashboard = button.closest('.dashboard-card') !== null;
         if (isNaN(itemId)) return utils.showToast("Erro: ID inválido.", true);
-        
-        if (isDashboard || (state.currentUser && ((state.currentUser.permissions && state.currentUser.permissions.viewOnly) || state.currentUser.type === 'visualizador'))) {
-            // Modal apenas para visualização (sem botões de ação) - usado no dashboard e para visualizadores
+
+        // No dashboard, manter modal somente visualização
+        if (isDashboard) {
             if (isCalibration) modalHandlers.openViewOnlyCalibrationModal(itemId);
             else modalHandlers.openViewOnlyAssayModal(itemId);
-        } else {
-            // Modal completo com botões de ação
+            return;
+        }
+
+        // Visualizadores devem ver o modal completo no cronograma
+        if (state.currentUser && state.currentUser.type === 'visualizador') {
             if (isCalibration) modalHandlers.openViewGanttCalibrationModal(itemId);
             else modalHandlers.openViewGanttAssayModal(itemId);
+            return;
         }
+
+        // Usuários em modo somente visualização (não visualizadores) continuam com modal de visualização
+        if (state.currentUser && state.currentUser.permissions && state.currentUser.permissions.viewOnly) {
+            if (isCalibration) modalHandlers.openViewOnlyCalibrationModal(itemId);
+            else modalHandlers.openViewOnlyAssayModal(itemId);
+            return;
+        }
+
+        // Caso padrão: modal completo com botões de ação
+        if (isCalibration) modalHandlers.openViewGanttCalibrationModal(itemId);
+        else modalHandlers.openViewGanttAssayModal(itemId);
     } else if (button.classList.contains('btn-edit-reagent')) {
         modalHandlers.openEditReagentModal(parseInt(button.dataset.id, 10));
     } else if (button.classList.contains('btn-edit-gantt-assay')) {
@@ -9622,6 +10330,7 @@ assaysFilters.forEach(id => {
                 try {
                     console.log("Dados recebidos da extensão:", message.data);
                     const data = message.data && typeof message.data === 'object' ? message.data : {};
+                    const currentVisiblePage = document.querySelector('.page:not(.hidden)')?.id || 'page-dashboard';
                     state.inventory = data.inventory || [];
                     state.historicalAssays = data.historicalAssays || [];
                     state.scheduledAssays = data.scheduledAssays || [];
@@ -9635,7 +10344,18 @@ assaysFilters.forEach(id => {
                     if(data.efficiencyCategories) state.efficiencyCategories = data.efficiencyCategories;
                     if(data.safetyCategories) state.safetyCategories = data.safetyCategories;
                     renderers.renderAll();
-                    renderers.switchPage('page-dashboard');
+                    // Mantém página corrente se solicitado e se não for restrita para visualizador
+                    if (message.preservePage) {
+                        const restrictedPages = ['page-inventory', 'page-assays', 'page-calibrations', 'page-settings'];
+                        const isViewer = message.readonly || (state.currentUser && state.currentUser.type === 'visualizador');
+                        if (isViewer && restrictedPages.includes(currentVisiblePage)) {
+                            renderers.switchPage('page-dashboard');
+                        } else {
+                            renderers.switchPage(currentVisiblePage);
+                        }
+                    } else {
+                        renderers.switchPage('page-dashboard');
+                    }
                 } catch (error) {
                     console.error("Erro durante o processamento de 'loadData':", error);
                     utils.showToast("Ocorreu um erro ao carregar os dados.", true);
@@ -9656,9 +10376,151 @@ assaysFilters.forEach(id => {
                 if (message.success) {
                     utils.showToast(message.message || 'Exclusão em massa concluída com sucesso!');
                     // Recarrega os dados para refletir as mudanças
-                    vscode.postMessage({ command: 'webviewReady' });
+            window.vscode?.postMessage({ command: 'webviewReady' });
                 } else {
                     utils.showToast(message.error || 'Erro ao realizar exclusão em massa.', true);
+                }
+                break;
+
+            // ==================== HANDLERS PARA OPERAÇÕES GRANULARES ====================
+
+            case 'inventoryGranularOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Item de inventário criado com sucesso!',
+                        'update': 'Item de inventário atualizado com sucesso!',
+                        'updateQuantity': 'Quantidade do inventário atualizada com sucesso!',
+                        'delete': 'Item de inventário removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+            window.vscode?.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de inventário.', true);
+                }
+                break;
+
+            case 'inventoryGranularDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de inventário recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Item específico:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado do inventário
+                            state.inventory = message.data || [];
+                            renderers.renderInventory();
+                            break;
+                        case 'getLowStock':
+                            // Pode ser usado para alertas ou dashboards
+                            console.log('[WEBVIEW] Itens com estoque baixo:', message.data);
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de inventário.', true);
+                }
+                break;
+
+            case 'scheduledAssayOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Ensaio agendado criado com sucesso!',
+                        'update': 'Ensaio agendado atualizado com sucesso!',
+                        'delete': 'Ensaio agendado removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de ensaio agendado.', true);
+                }
+                break;
+
+            case 'safetyScheduledAssayOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Ensaio de segurança agendado criado com sucesso!',
+                        'update': 'Ensaio de segurança agendado atualizado com sucesso!',
+                        'delete': 'Ensaio de segurança agendado removido com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de ensaio de segurança agendado.', true);
+                }
+                break;
+
+            case 'scheduledAssayDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de ensaios agendados recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Ensaio específico:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado dos ensaios agendados
+                            state.scheduledAssays = message.data || [];
+                            renderers.renderGantt();
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de ensaios agendados.', true);
+                }
+                break;
+
+            case 'calibrationOperationResult':
+                if (message.success) {
+                    const operationMessages = {
+                        'create': 'Calibração criada com sucesso!',
+                        'update': 'Calibração atualizada com sucesso!',
+                        'delete': 'Calibração removida com sucesso!'
+                    };
+                    utils.showToast(operationMessages[message.operation] || 'Operação realizada com sucesso!');
+                    
+                    // Recarrega os dados para refletir as mudanças
+            window.vscode?.postMessage({ command: 'webviewReady' });
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de calibração.', true);
+                }
+                break;
+
+            case 'calibrationDataResult':
+                if (message.success) {
+                    console.log('[WEBVIEW] Dados de calibrações recebidos:', message.operation, message.data);
+                    
+                    // Processa os dados conforme a operação
+                    switch (message.operation) {
+                        case 'getById':
+                            // Pode ser usado para preencher formulários de edição
+                            console.log('[WEBVIEW] Calibração específica:', message.data);
+                            break;
+                        case 'getAll':
+                            // Atualiza o estado das calibrações
+                            state.calibrations = message.data || [];
+                            renderers.renderCalibrations();
+                            break;
+                        case 'getUpcoming':
+                            // Pode ser usado para alertas ou dashboards
+                            console.log('[WEBVIEW] Calibrações próximas:', message.data);
+                            break;
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro ao buscar dados de calibrações.', true);
+                }
+                break;
+
+            case 'deleteCalibrationEquipmentResult':
+                if (message.success) {
+                    utils.showToast('Equipamento removido com sucesso!');
+                    // Recarrega apenas os dados de calibração sem mudar de página
+                    window.vscode?.postMessage({ command: 'getAllCalibrations' });
+                } else {
+                    utils.showToast(message.error || 'Erro ao remover equipamento.', true);
                 }
                 break;
             
@@ -9764,6 +10626,29 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         
         document.addEventListener('click', (e) => {
             if (!efficiencyAssayMenu.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    // Lógica do menu dropdown para agendamentos (calibração e férias)
+    const scheduleMenu = document.getElementById('schedule-menu');
+    if (scheduleMenu) {
+        const toggleButton = document.getElementById('btn-toggle-schedule-menu');
+        const dropdown = document.getElementById('schedule-dropdown');
+
+        toggleButton?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            // Ignora cliques durante drag and drop
+            if (state.isDragging) {
+                return;
+            }
+
+            if (!scheduleMenu.contains(e.target)) {
                 dropdown.classList.add('hidden');
             }
         });
@@ -9886,10 +10771,24 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
                 const calibrationButtonText = isInCalibration ? 'Calibração Finalizada' : 'Equip. Calibrando';
                 const calibrationButtonClass = isInCalibration ? 'btn-finish-calibration' : 'btn-start-calibration';
                 const calibrationButtonColor = isInCalibration ? 'text-green-600 hover:text-green-900' : 'text-blue-600 hover:text-blue-900';
+                
+                // Define o ícone baseado no status
+                const calibrationButtonIcon = isInCalibration ? 
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>` :
+                    `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>`;
 
                 return `
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${equipment.tag}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <button class="btn-view-equipment-details text-blue-600 hover:text-blue-900 font-medium" data-id="${equipment.id}" title="Ver detalhes do equipamento">
+                                ${equipment.tag}
+                            </button>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${equipment.equipment}</td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">
@@ -9898,12 +10797,8 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${utils.formatDate(equipment.validity)}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <button class="${calibrationButtonClass} ${calibrationButtonColor} mr-2" data-id="${equipment.id}" title="${calibrationButtonText}">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                ${calibrationButtonText}
+                            <button class="${calibrationButtonClass} ${calibrationButtonColor} mr-2 p-2 rounded hover:bg-gray-100" data-id="${equipment.id}" title="${calibrationButtonText}">
+                                ${calibrationButtonIcon}
                             </button>
                             <button class="btn-edit-calibration-equipment text-gray-600 hover:text-gray-900 mr-2" data-id="${equipment.id}" title="Editar">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -10007,11 +10902,13 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
             }
             
             // Atualiza equipamento
+            const finalizationDate = new Date().toISOString().split('T')[0];
+            
             equipment.calibrationStatus = 'operacional';
             equipment.validity = newValidity;
-            equipment.lastCalibrationDate = new Date().toISOString().split('T')[0];
+            equipment.lastCalibrationDate = finalizationDate; // Data de finalização da calibração
             equipment.calibrationNotes = calibrationNotes;
-            delete equipment.calibrationStartDate;
+            // Mantém equipment.calibrationStartDate para histórico de quantos dias demorou a calibração
             
             dataHandlers.saveData();
             calibrationsHandlers.renderCalibrationsTable();
@@ -10111,10 +11008,66 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
 
             const message = `Tem certeza que deseja excluir o equipamento "${equipment.equipment}" (TAG: ${equipment.tag})?`;
             ui.showConfirmationModal(message, () => {
-                state.calibrationEquipments = state.calibrationEquipments.filter(e => e.id != equipmentId);
-                dataHandlers.saveData();
-                calibrationsHandlers.renderCalibrationsTable();
-                utils.showToast('Equipamento excluído com sucesso!');
+                // Enviar comando para o backend excluir do banco de dados
+                vscode.postMessage({
+                    command: 'deleteCalibrationEquipment',
+                    data: { id: equipmentId }
+                });
+            });
+        },
+
+        openEquipmentDetailsModal: (equipmentId) => {
+            const equipment = state.calibrationEquipments.find(e => e.id == equipmentId);
+            if (!equipment) {
+                utils.showToast('Equipamento não encontrado.', true);
+                return;
+            }
+
+            const modalContent = document.getElementById('equipment-details-modal-content').innerHTML;
+            utils.openModal('Detalhes do Equipamento', modalContent, () => {
+                // Preenche as informações do equipamento
+                document.getElementById('equipment-details-tag').textContent = equipment.tag;
+                document.getElementById('equipment-details-name').textContent = equipment.equipment;
+                document.getElementById('equipment-details-validity').textContent = utils.formatDate(equipment.validity);
+                document.getElementById('equipment-details-notes').textContent = equipment.observations || 'Nenhuma observação registrada';
+
+                // Define o status com as classes corretas
+                const statusElement = document.getElementById('equipment-details-status');
+                const today = new Date();
+                const validityDate = new Date(equipment.validity);
+                const daysUntilExpiry = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
+                
+                let statusClass, statusText;
+                if (equipment.calibrationStatus === 'em_calibracao') {
+                    statusClass = 'bg-blue-100 text-blue-800';
+                    statusText = 'Em calibração';
+                } else if (daysUntilExpiry < 0) {
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusText = 'Vencido';
+                } else if (daysUntilExpiry <= 15) {
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                    statusText = 'Próximo do vencimento';
+                } else {
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusText = 'Em dia';
+                }
+                
+                statusElement.className = `inline-flex px-3 py-1 text-xs font-semibold rounded-full ${statusClass}`;
+                statusElement.textContent = statusText;
+
+                // Observações
+                const notesElement = document.getElementById('equipment-details-notes');
+                if (equipment.observations && equipment.observations.trim()) { 
+                    notesElement.textContent = equipment.observations;         
+                } else {
+                    notesElement.textContent = 'Nenhuma observação registrada';
+                }
+
+                // Event listener para o botão fechar
+                const closeButton = document.querySelector('.btn-close-modal');
+                if (closeButton) {
+                    closeButton.addEventListener('click', () => utils.closeModal());
+                }
             });
         }
     };
@@ -10145,6 +11098,9 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         } else if (e.target.closest('.btn-finish-calibration')) {
             const equipmentId = e.target.closest('.btn-finish-calibration').dataset.id;
             calibrationsHandlers.openFinishCalibrationModal(parseInt(equipmentId));
+        } else if (e.target.closest('.btn-view-equipment-details')) {
+            const equipmentId = e.target.closest('.btn-view-equipment-details').dataset.id;
+            calibrationsHandlers.openEquipmentDetailsModal(parseInt(equipmentId));
         }
     });
 
@@ -10161,6 +11117,11 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         if (state.ganttZoomLevel < maxZoom) {
             state.ganttZoomLevel += 5; // Aumenta a largura em 5px
             state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
+            // Atualiza escala de texto proporcional ao zoom
+            const base = 25; // nível base corresponde a escala 1
+            const scale = Math.max(0.6, Math.min(1.6, state.ganttZoomLevel / base));
+            const scroll = DOM.ganttScrollContainer;
+            if (scroll) scroll.style.setProperty('--gantt-text-scale', String(scale));
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
             
@@ -10172,6 +11133,11 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
         if (state.ganttZoomLevel > minZoom) {
             state.ganttZoomLevel -= 5; // Diminui a largura em 5px
             state.ganttRowHeightLevel = state.ganttZoomLevel * 3.2;
+            // Atualiza escala de texto proporcional ao zoom
+            const base = 25;
+            const scale = Math.max(0.6, Math.min(1.6, state.ganttZoomLevel / base));
+            const scroll = DOM.ganttScrollContainer;
+            if (scroll) scroll.style.setProperty('--gantt-text-scale', String(scale));
             renderers.renderGanttChart();
             ui.scrollToTodayInGantt();
         }

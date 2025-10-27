@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Carga</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        .enhanced-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .enhanced-table th,
+        .enhanced-table td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: left;
+        }
+        .enhanced-table th {
+            background-color: #1f2937;
+            font-weight: 600;
+            color: #ffffff;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .enhanced-table tbody tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        .enhanced-table tbody tr:hover {
+            background-color: #f3f4f6;
+        }
+        .table-scroll-container {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .page {
+            min-height: 100vh;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .active {
+            border-bottom-color: #3b82f6 !important;
+            color: #3b82f6 !important;
+        }
+        
+        /* Animações do sistema de loading */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+
+        
+        .loading-content {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .loading-status {
+            animation: pulse 2s ease-in-out infinite;
+            transition: all 0.3s ease;
+        }
+        
+        .main-interface {
+            animation: slideUp 0.6s ease-out;
+        }
+        
+        .loading-screen {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: opacity 0.5s ease-out;
+        }
+        
+        .loading-card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        /* Sidebar responsivo */
+        aside {
+            width: 64px;
+            transition: width 0.3s ease;
+        }
+        
+        aside:hover {
+            width: 256px;
+        }
+
+        /* Logo no topo */
+        aside .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 80px;
+            padding: 0 1rem;
+            transition: justify-content 0.3s ease;
+        }
+
+        aside:hover .logo-container {
+            justify-content: flex-start;
+        }
+
+        aside .logo-container img {
+            height: 32px;
+            width: 32px;
+            transition: all 0.3s ease;
+        }
+        
+        aside:hover .logo-container img {
+            height: 48px;
+            width: 48px;
+        }
+
+        aside .logo-container span {
+            display: none;
+            margin-left: 1.25rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+            white-space: nowrap;
+            transition: opacity 0.3s ease;
+        }
+
+        aside:hover .logo-container span {
+            display: inline;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Tela de Loading -->
+    <div id="loading-spinner" class="loading-screen fixed inset-0 z-50 flex items-center justify-center">
+        <div class="loading-content text-center">
+            <div class="loading-card bg-white rounded-2xl p-8 max-w-md mx-4">
+                <!-- Loading Animation -->
+                <div class="mb-6 flex justify-center">
+                    <img src="{{wmGifUri}}" alt="Carregando..." class="w-64 h-auto">
+                </div>
+            
+            <!-- Título -->
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Controle de Carga</h2>
+            
+                <!-- Status Text -->
+                <div class="space-y-2">
+                    <p class="text-gray-700 font-medium">Carregando sistema...</p>
+                    <p id="loading-status" class="loading-status text-sm text-gray-500">Inicializando controle de carga</p>
+                </div>
+                
+                <!-- Footer -->
+                <div class="text-center mt-8 pt-6 border-t border-gray-200">
+                    <p class="text-xs text-gray-500">Controle de Insumos para Laboratório</p>
+                    <p class="text-xs text-gray-400 mt-1">Módulo de Controle de Carga</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interface principal (inicialmente oculta) -->
+    <div id="main-interface" class="main-interface hidden">
+        <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gray-800 shadow-lg border-b border-gray-700">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center">
+                        <img src="{{iconUri}}" class="h-12 w-12 mr-4" alt="LabControl Icon">
+                        <h1 class="text-2xl font-bold text-white">Controle de Carga</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span id="user-info" class="text-sm text-gray-300"></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="border-b mb-6">
+                <nav class="flex space-x-2">
+                    <button id="tab-controle-dashboard" class="px-4 py-2 text-sm font-medium rounded-t border-b-2 border-transparent active text-gray-700">Dashboard</button>
+                    <button id="tab-controle-processos" class="px-4 py-2 text-sm font-medium rounded-t border-b-2 border-transparent text-gray-700">Processos de Carga</button>
+                </nav>
+            </div>
+
+            <!-- Dashboard Panel -->
+            <div id="controle-dashboard-panel">
+                <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <button id="btn-cadastrar-carga-nova" class="flex items-center justify-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M12 5v14m-7-7h14"/></svg>
+                        <span>Cadastrar Carga Nova</span>
+                    </button>
+                    <button id="btn-cadastrar-protocolo" class="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        <span>Cadastrar Carga</span>
+                    </button>
+                    
+                    <button id="btn-peca-danificada" class="flex items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span>Peça Danificada</span>
+                    </button>
+                    <button id="btn-pecas-inativas" class="flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M3 3h18v18H3zM9 9l6 6m0-6l-6 6"/></svg>
+                        <span>Peças Inativas</span>
+                    </button>
+                    <button id="btn-consultar-protocolo" class="flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span>Consultar Protocolo</span>
+                    </button>
+                    <button id="btn-descadastrar-protocolo" class="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        <span>Descadastrar Carga</span>
+                    </button>
+
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <h3 class="font-bold text-lg text-gray-700 mb-4">Fronhas</h3>
+                        <div class="h-64"><canvas id="chart-fronhas"></canvas></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <h3 class="font-bold text-lg text-gray-700 mb-4">Toalhas de Rosto</h3>
+                        <div class="h-64"><canvas id="chart-toalhas"></canvas></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <h3 class="font-bold text-lg text-gray-700 mb-4">Lençóis</h3>
+                        <div class="h-64"><canvas id="chart-lencol"></canvas></div>
+                    </div>
+                </div>
+                <!-- Tabelas de peças ativas por tipo -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-lg text-gray-700">Fronhas Ativas</h3>
+                            <input id="filter-fronhas" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />
+                        </div>
+                        <div id="table-fronhas-container" class="max-h-80 overflow-y-auto"></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-lg text-gray-700">Toalhas de Rosto Ativas</h3>
+                            <input id="filter-toalhas" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />
+                        </div>
+                        <div id="table-toalhas-container" class="max-h-80 overflow-y-auto"></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-lg text-gray-700">Lençóis Ativos</h3>
+                            <input id="filter-lencol" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />
+                        </div>
+                        <div id="table-lencol-container" class="max-h-80 overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processos Panel -->
+            <div id="controle-processos-panel" class="hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-semibold text-gray-800">Processos de Carga</h2>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center space-x-2">
+                                <label for="filter-prep-protocol" class="text-sm text-gray-700">Filtrar por protocolo:</label>
+                                <input id="filter-prep-protocol" type="text" placeholder="Ex.: ENA-123" class="p-2 border border-gray-300 rounded-md text-black" />
+                                <span id="prep-filter-count" class="text-xs text-gray-600"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Seção de Exclusão em Massa de Protocolos -->
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                        <h3 class="text-lg font-semibold text-red-800 mb-3">Exclusão em Massa de Protocolos</h3>
+                        <div class="flex items-center gap-3">
+                            <label for="bulk-delete-protocols-year" class="text-sm text-red-700">Excluir protocolos criados em:</label>
+                            <select id="bulk-delete-protocols-year" class="p-2 border border-red-300 rounded-md text-black bg-white">
+                                <option value="">Selecione o ano</option>
+                            </select>
+                            <button id="bulk-delete-protocols-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                                Excluir Protocolos
+                            </button>
+                        </div>
+                        <p class="text-xs text-red-600 mt-2">⚠️ Esta ação é irreversível e excluirá todos os protocolos criados no ano selecionado.</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                        <div class="table-scroll-container overflow-auto max-h-[75vh]">
+                            <table class="enhanced-table min-w-full">
+            <thead class="bg-gray-800">
+                            <tr>
+                                <th class="text-left w-1/4 px-4 py-2 text-xs font-medium text-white uppercase tracking-wider">Protocolo</th>
+                                <th class="text-left w-1/4 px-4 py-2 text-xs font-medium text-white uppercase tracking-wider">Ciclo Frio</th>
+                                <th class="text-left w-1/4 px-4 py-2 text-xs font-medium text-white uppercase tracking-wider">Ciclo Quente</th>
+                                <th class="text-left w-1/4 px-4 py-2 text-xs font-medium text-white uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                                <tbody id="preparacao-carga-table-body" class="text-gray-700 divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                 <!-- Rodapé da Extensão -->
+            <footer class="bg-gray-100 border-t border-gray-200 py-4 mt-8" style="display: block !important; visibility: visible !important; position: relative !important; z-index: 10;">
+                <div class="container mx-auto px-4 text-center">
+                    <div class="text-sm text-gray-600 mb-1">
+                        <span class="font-medium">Criado por:</span> Rodrigo da Rocha Melo
+                        <span class="mx-4">|</span>
+                        <span class="font-medium">Revisado por:</span> Marcio Pinheiro Machado
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Versão {{version}}
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        let scriptLoadedFlag = false;
+        
+        // Function called when script is loaded
+        function scriptLoaded() {
+            console.log('📦 main-cargo.js script loaded');
+            scriptLoadedFlag = true;
+            tryInitialize();
+        }
+        
+        // Try to initialize when both script and DOM are ready
+         function tryInitialize() {
+             if (scriptLoadedFlag && document.readyState === 'complete') {
+                 console.log('🚀 Attempting to initialize...');
+                 if (typeof window.initializeLoadControl === 'function') {
+                     window.initializeLoadControl();
+                 } else {
+                     console.error('❌ initializeLoadControl function not found on window object');
+                     console.log('Available window properties:', Object.keys(window).filter(key => key.includes('initialize')));
+                 }
+             }
+         }
+    </script>
+    
+    <!-- Include the main JavaScript file -->
+    <script src="{{scriptUriCargo}}" onload="scriptLoaded()"></script>
+    
+    <script>
+        
+        // Debug logger para exibir logs na página
+        function addDebugLog(message) {
+            const debugLogs = document.getElementById('debug-logs');
+            if (debugLogs) {
+                const logEntry = document.createElement('div');
+                logEntry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                debugLogs.appendChild(logEntry);
+                debugLogs.scrollTop = debugLogs.scrollHeight;
+            }
+        }
+
+        // Interceptar console.log para exibir na página
+        const originalConsoleLog = console.log;
+        const originalConsoleWarn = console.warn;
+        const originalConsoleError = console.error;
+
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            addDebugLog(args.join(' '));
+        };
+
+        console.warn = function(...args) {
+            originalConsoleWarn.apply(console, args);
+            addDebugLog('⚠️ ' + args.join(' '));
+        };
+
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            addDebugLog('❌ ' + args.join(' '));
+        };
+
+        // Initialize the load control interface when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM Content Loaded');
+            
+            // Set up tab switching
+            // Alternância de abas agora é gerenciada pelo main-cargo.js
+            // para evitar conflitos e múltiplas renderizações dos gráficos
+
+            // Try to initialize now that DOM is ready
+            tryInitialize();
+        });
+        
+        // Also try when window is fully loaded
+        window.addEventListener('load', function() {
+            console.log('🌐 Window fully loaded');
+            tryInitialize();
+        });
+    </script>
+    </div> <!-- Fechamento do main-interface -->
+
+    <!-- Modal Template -->
+    <div id="modal-template" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 text-gray-800 relative">
+            <h3 class="modal-title text-xl font-bold mb-4"></h3>
+            <button class="modal-close-btn absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-content max-h-[80vh] overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div id="confirmation-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md mx-4">
+            <div class="text-center mb-6">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                </div>
+                <h3 id="confirmation-title" class="text-lg font-semibold text-gray-800 mb-2">Confirmar Ação</h3>
+                <p id="confirmation-message" class="text-sm text-gray-600">Tem certeza que deseja continuar?</p>
+            </div>
+            <div class="flex justify-end gap-4">
+                <button id="btn-confirm-cancel" class="px-4 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400">
+                    Cancelar
+                </button>
+                <button id="btn-confirm-action" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -267,10 +267,15 @@ export class DataValidator {
     private static readonly SETTINGS_SCHEMA: ValidationRule[] = [
         {
             field: 'notificationEmail',
-            type: 'email',
-            required: true,
-            pattern: DataValidator.EMAIL_PATTERN,
-            sanitizer: (value: string) => value.trim().toLowerCase()
+            type: 'string',
+            required: false,
+            sanitizer: (value: string) => value ? value.trim().toLowerCase() : '',
+            customValidator: (value: string) => {
+                // Permite valores vazios ou emails válidos (incluindo múltiplos emails separados por vírgula)
+                if (!value || value.trim() === '') return true;
+                const emails = value.split(',').map(email => email.trim()).filter(email => email);
+                return emails.length === 0 || emails.every(email => DataValidator.EMAIL_PATTERN.test(email));
+            }
         },
         {
             field: 'alertThreshold',
@@ -281,10 +286,18 @@ export class DataValidator {
             sanitizer: (value: any) => Math.max(1, Math.min(365, Number(value) || 30))
         },
         {
+            field: 'calibrationAlertDays',
+            type: 'number',
+            required: true,
+            min: 1,
+            max: 365,
+            sanitizer: (value: any) => Math.max(1, Math.min(365, Number(value) || 30))
+        },
+        {
             field: 'schedulePassword',
             type: 'string',
             required: false,
-            minLength: 4,
+            minLength: 3,
             maxLength: 50,
             sanitizer: (value: string) => value ? value.trim() : undefined
         }
@@ -476,7 +489,7 @@ export class DataValidator {
             case 'date':
                 return typeof value === 'string' && !isNaN(Date.parse(value));
             case 'email':
-                return typeof value === 'string' && this.EMAIL_PATTERN.test(value);
+                return typeof value === 'string' && (value === '' || this.EMAIL_PATTERN.test(value));
             case 'array':
                 return Array.isArray(value);
             case 'object':

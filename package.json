@@ -3,7 +3,7 @@
   "publisher": "LABELO-EFI-LAV",
   "displayName": "Controle de Insumos",
   "description": "Uma extensão para gestão do setor de Eficiência Energética em máquinas de lavar",
-  "version": "1.2.2",
+  "version": "1.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/LABELO-EFI-LAV/controle_insumos.git"
@@ -18,13 +18,18 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onCommand:controle-de-insumos.abrir"
+    "onCommand:controle-de-insumos.abrir",
+    "onCommand:controle-de-carga.abrir"
   ],
   "contributes": {
     "commands": [
       {
         "command": "controle-de-insumos.abrir",
         "title": "Abrir Controle de Insumos"
+      },
+      {
+        "command": "controle-de-carga.abrir",
+        "title": "Abrir Controle de Carga"
       }
     ]
   },
@@ -70,7 +75,8 @@
     "ml-regression-simple-linear": "^3.0.1",
     "pdfkit": "^0.17.1",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
   },
   "overrides": {
     "ajv": "^8.17.1"

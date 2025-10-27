@@ -1,9 +1,32 @@
 Histórico de Alterações (Changelog)
 Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
-O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento Semântico.
+O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
+Semântico.
 
-[1.1.0] - 2025-01-28
+[1.4.0] - 2025-11-23
+
+### Adicionado
+
+- **Módulo de Controle de Carga:** Adicionado novo módulo para monitorar e controlar cargas de ensaio, garantindo o controle de vida útil e rastreabilidade de cargas utilizadas nos ensaios.
+
+### Ajustes
+
+- **Ajustes na comunicação com o banco de dados:** Otimização de consultas e operações para melhorar a performance e reduzir o tempo de resposta.
+
+[1.3.0] - 2025-10-23
+### Ajustes no sistema de backup incremental
+
+- **Limite alterado para 30 arquivos na pasta de backups incrementais**
+- **Limpeza automática após criar cada backup incremental**
+- **Backups completos foram mantidos fora desse limite**
+
+
+[1.2.0] - 2025-09-23
+Esta versão introduz melhorias significativas na manipulação dos dados utilizando um banco de dados sqlite.
+
+
+[1.1.0] - 2025-08-28
 Esta versão introduz melhorias significativas na experiência visual, sistema de permissões aprimorado, qualidade dos gráficos e correções importantes na interface.
 
 ### Adicionado
@@ -27,7 +50,7 @@ Esta versão introduz melhorias significativas na experiência visual, sistema d
 - **Erro JavaScript de Elementos Indefinidos:** Corrigido erro "Cannot set properties of undefined" na função showMainInterface, removendo referências aos elementos do cabeçalho removido.
 - **Detecção de Visualizadores:** Implementada verificação dupla para detecção de visualizadores (por permissões e por tipo de usuário), garantindo compatibilidade com autenticação automática.
 
-[1.0.9] - 2025-01-27
+[1.0.9] - 2025-08-27
 Esta versão introduz melhorias significativas na experiência do usuário, sistema de hierarquia, notificações aprimoradas e correções importantes na interface.
 
 ### Adicionado
