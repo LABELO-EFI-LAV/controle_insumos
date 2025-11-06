@@ -118,7 +118,9 @@ export class DatabaseManager {
     private incrementalBackup: IncrementalBackup;
     private operationQueue: Promise<any> = Promise.resolve();
     private activeOperations: number = 0;
-    private maxConcurrentOperations: number = 3;
+    private maxConcurrentOperations: number = 6;
+    // Fila de operações pendentes para concorrência limitada
+    private pendingOperations: Array<() => void> = [];
     private vacuumTimer: NodeJS.Timeout | null = null;
     private vacuumDelayMs: number = 30000; // 30s de inatividade antes de VACUUM
     private enableAutoVacuum: boolean = false; // Flag para desativar VACUUM automático por padrão
@@ -523,38 +525,51 @@ export class DatabaseManager {
      * Controla operações concorrentes para evitar sobrecarga do banco
      */
     private async queueOperation<T>(operation: () => Promise<T>): Promise<T> {
-        // Se há muitas operações ativas, aguarda na fila
-        if (this.activeOperations >= this.maxConcurrentOperations) {
-            await this.operationQueue;
-        }
+        // Permite até maxConcurrentOperations em paralelo; excedente entra na fila.
+        return new Promise<T>((resolve, reject) => {
+            const start = async () => {
+                try {
+                    const result = await operation();
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                } finally {
+                    this.activeOperations--;
+                    this.processQueue();
 
-        this.activeOperations++;
-        
-        const currentOperation = this.operationQueue.then(async () => {
-            try {
-                return await operation();
-            } finally {
-                this.activeOperations--;
-                // Se ficou ocioso, agenda VACUUM (se habilitado)
-                if (this.activeOperations === 0 && this.enableAutoVacuum) {
-                    if (this.vacuumTimer) {
-                        clearTimeout(this.vacuumTimer);
-                    }
-                    this.vacuumTimer = setTimeout(async () => {
-                        try {
-                            // Executa VACUUM fora de transação e em momento ocioso
-                            await this.runQuery('VACUUM');
-                            console.log('✅ VACUUM executado durante período ocioso');
-                        } catch (vacErr) {
-                            console.warn('⚠️ Falha ao executar VACUUM:', vacErr);
+                    // Se ficou ocioso, agenda VACUUM (se habilitado)
+                    if (this.activeOperations === 0 && this.enableAutoVacuum) {
+                        if (this.vacuumTimer) {
+                            clearTimeout(this.vacuumTimer);
                         }
-                    }, this.vacuumDelayMs);
+                        this.vacuumTimer = setTimeout(async () => {
+                            try {
+                                // Executa VACUUM fora de transação e em momento ocioso
+                                await this.runQuery('VACUUM');
+                                console.log('✅ VACUUM executado durante período ocioso');
+                            } catch (vacErr) {
+                                console.warn('⚠️ Falha ao executar VACUUM:', vacErr);
+                            }
+                        }, this.vacuumDelayMs);
+                    }
                 }
+            };
+
+            if (this.activeOperations < this.maxConcurrentOperations) {
+                this.activeOperations++;
+                start();
+            } else {
+                this.pendingOperations.push(start);
             }
         });
+    }
 
-        this.operationQueue = currentOperation.catch(() => {}); // Ignora erros na fila
-        return currentOperation;
+    private processQueue(): void {
+        while (this.activeOperations < this.maxConcurrentOperations && this.pendingOperations.length > 0) {
+            const next = this.pendingOperations.shift()!;
+            this.activeOperations++;
+            next();
+        }
     }
 
     private async createTables(): Promise<void> {
@@ -2994,6 +3009,71 @@ export class DatabaseManager {
             await tx.runQuery('DELETE FROM assay_lots WHERE assay_id = ?', [id]);
             await tx.runQuery('DELETE FROM historical_assays WHERE id = ?', [id]);
         });
+    }
+
+    /**
+     * Atualiza campos de um ensaio histórico de forma granular
+     */
+    async updateHistoricalAssayGranular(id: number, updates: Partial<{
+        protocol: string;
+        orcamento: string;
+        assay_manufacturer: string;
+        model: string;
+        nominal_load: number;
+        tensao: string;
+        start_date: string;
+        end_date: string;
+        setup: number;
+        status: string;
+        type: string;
+        observacoes: string;
+        cycles: number;
+        report: string;
+        consumption: string;
+        total_consumption: number;
+    }>): Promise<void> {
+        const validColumns = new Set([
+            'protocol',
+            'orcamento',
+            'assay_manufacturer',
+            'model',
+            'nominal_load',
+            'tensao',
+            'start_date',
+            'end_date',
+            'setup',
+            'status',
+            'type',
+            'observacoes',
+            'cycles',
+            'report',
+            'consumption',
+            'total_consumption',
+        ]);
+
+        const setClauses: string[] = [];
+        const params: any[] = [];
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (!validColumns.has(key)) continue;
+            setClauses.push(`${key} = ?`);
+            params.push(value);
+        }
+
+        if (setClauses.length === 0) {
+            return; // nada para atualizar
+        }
+
+        // Atualiza o timestamp
+        setClauses.push('updated_at = CURRENT_TIMESTAMP');
+
+        const sql = `UPDATE historical_assays SET ${setClauses.join(', ')} WHERE id = ?`;
+        params.push(id);
+
+        await this.runQuery(sql, params);
+
+        // Registrar mudança no backup incremental
+        this.incrementalBackup.logChange('historical_assays', 'UPDATE', id, undefined, updates);
     }
 
     /**

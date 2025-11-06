@@ -5,8 +5,13 @@
 
 (function () {
     // Registrar plugin ChartDataLabels se disponível
-    if (window.ChartDataLabels) {
-        Chart.register(ChartDataLabels);
+    if (window.ChartDataLabels && typeof Chart !== 'undefined') {
+        try {
+            Chart.register(ChartDataLabels);
+            console.log('ChartDataLabels plugin registrado com sucesso');
+        } catch (error) {
+            console.warn('Erro ao registrar ChartDataLabels:', error);
+        }
     }
 
     // Configuração da API do VS Code
@@ -25,7 +30,8 @@
         modalPreselect: null,
         currentUser: null,
         isAuthenticated: false,
-        accessDenied: false
+        accessDenied: false,
+        chartData: { active: null, available: null }
     };
 
     let pecasParaCadastrar = [];
@@ -626,6 +632,8 @@
             } else if (action === 'delete-row') {
                 // Botão "Excluir Linha"
                 handleExcluirLinha(protocolo);
+            } else if (action === 'edit-protocol') {
+                modalHandlers.openEditProtocolModal(protocolo);
             }
         });
     }
@@ -735,7 +743,7 @@
         
         loadInitialDataTimeout = setTimeout(() => {
             const execTimestamp = new Date().toISOString();
-            vscode.postMessage({ command: 'getPecasCycleDistribution', source: 'loadControl' });
+            vscode.postMessage({ command: 'getDashboardData', source: 'loadControl' });
             vscode.postMessage({ command: 'getAllPecasAtivas', source: 'loadControl' });
             vscode.postMessage({ command: 'getProtocolosComStatus', source: 'loadControl' });
             
@@ -831,7 +839,7 @@
      */
     function checkAndRenderAfterRefresh() {
         // Se ainda não estamos aguardando todos os dados, não faz nada.
-        if (pendingDataRefresh.charts || pendingDataRefresh.activePieces || pendingDataRefresh.protocols) {
+        if (pendingDataRefresh.charts || pendingDataRefresh.activePieces || pendingDataRefresh.protocols || pendingDataRefresh.availableCharts) {
             return;
         }
 
@@ -845,16 +853,20 @@
         if (state.chartDistributionData) {
             renderers.renderPecasCargaCharts(state.chartDistributionData);
         }
+        if (state.availableChartDistributionData) {
+            renderers.renderAvailablePecasCharts(state.availableChartDistributionData);
+        }
         
         // Reseta o objeto de controle para a próxima operação
-        pendingDataRefresh = { charts: false, activePieces: false, protocols: false };
+        pendingDataRefresh = { charts: false, activePieces: false, protocols: false, availableCharts: false };
     }
     
     // Objeto para rastrear os dados pendentes durante um refresh completo
     let pendingDataRefresh = {
         charts: false,
         activePieces: false,
-        protocols: false
+        protocols: false,
+        availableCharts: false
     };
 
     /**
@@ -877,7 +889,6 @@
         }
 
         tbody.innerHTML = filteredData.map(p => {
-            // A verificação continua existindo para controlar o botão de "Adicionar Peça"
             const isDesvinculado = p.vinculo_status === 'desvinculado';
             
             return `
@@ -893,9 +904,18 @@
                         Consultar
                     </button>
                 </td>
-                <td class="space-x-2">
-                    
+                <td class="flex items-center space-x-2">
                     ${!isDesvinculado ? `
+                    <button class="hover:bg-blue-50 p-1 rounded text-blue-600" data-protocolo="${p.protocolo}" data-action="edit-protocol" title="Editar Nome do Protocolo">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <path d="M16 13l-4 4-4-4"></path>
+                            <path d="M12 17l0-8"></path>
+                            <path d="M17 12l-2 2-2-2"></path>
+                            <path d="M13 14l-2-2 2-2"></path>
+                        </svg>
+                    </button>
                     <button class="hover:bg-green-50 p-1 rounded" data-protocolo="${p.protocolo}" data-action="add-piece" title="Adicionar Peça">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 5v14m-7-7h14"/>
@@ -903,15 +923,14 @@
                     </button>
                     ` : ''}
 
-                    <button class="hover:bg-red-50 p-1 rounded" data-protocolo="${p.protocolo}" data-action="delete-row" title="Excluir Linha">
+                    <button class="hover:bg-red-50 p-1 rounded" data-protocolo="${p.protocolo}" data-action="delete-row" title="Excluir Protocolo">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                         </svg>
                     </button>
                     
-                    ${isDesvinculado ? '<span class="text-gray-400 text-sm">Protocolo desvinculado</span>' : ''}
-
-                    </td>
+                    ${isDesvinculado ? '<span class="text-gray-400 text-xs ml-2 uppercase font-semibold tracking-wider">Finalizado</span>' : ''}
+                </td>
             </tr>
             `;
         }).join('');
@@ -920,6 +939,48 @@
 
 // Funções de modal para controle de carga
 const modalHandlers = {
+        openEditProtocolModal: (protocoloAtual) => {
+            const title = 'Editar Protocolo';
+            const contentHTML = `
+                <form id="form-edit-protocol" class="space-y-4 p-4 text-black">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Protocolo Atual</label>
+                        <input type="text" value="${protocoloAtual}" disabled class="w-full p-2 border rounded bg-gray-100 text-gray-500 mt-1">
+                    </div>
+                    <div>
+                        <label for="new-protocol-name" class="block text-sm font-medium text-gray-700">Novo Protocolo</label>
+                        <input type="text" id="new-protocol-name" name="new_protocol" required class="w-full p-2 border rounded text-black mt-1" placeholder="Digite o novo nome">
+                    </div>
+                    <div class="flex justify-end pt-4">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">
+                            Salvar Alterações
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            utils.openModal(title, contentHTML, () => {
+                document.getElementById('new-protocol-name').focus();
+                document.getElementById('form-edit-protocol').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const newName = document.getElementById('new-protocol-name').value.trim();
+                    if (!newName) return;
+                    
+                    if (newName === protocoloAtual) {
+                        utils.closeModal();
+                        return;
+                    }
+
+                    vscode.postMessage({ 
+                        command: 'updateProtocoloName', 
+                        data: { oldName: protocoloAtual, newName: newName } 
+                    });
+                    utils.closeModal();
+                    utils.showToast('Atualizando protocolo...', false, 2000);
+                });
+            });
+        },
+
         // Abre o modal de cadastro de novo protocolo de carga
         openCadastrarProtocoloModal: () => {
             if (!authSystem.hasAccess()) {
@@ -1598,8 +1659,10 @@ const renderers = {
                         clearInterval(window.chartMonitorInterval);
                         window.chartMonitorInterval = null;
                     }
-                    // Solicita novos dados dos gráficos
+                    // Solicita novos dados dos gráficos de peças ativas
                     vscode.postMessage({ command: 'getPecasCycleDistribution', source: 'dashboardActivation' });
+                    // Solicita novos dados dos gráficos de peças disponíveis
+                    vscode.postMessage({ command: 'getAvailablePecasCycleDistribution', source: 'dashboardActivation' });
                 }, 150); // Delay para garantir que o painel esteja visível
             };
             const activateProc = () => {
@@ -1626,201 +1689,86 @@ const renderers = {
             }
         }
     },
-    renderPecasCargaCharts : (distributionData) => {
-        const timestamp = new Date().toISOString();
-        
-        if (!distributionData || !Array.isArray(distributionData)) {
-            return;
-        }
-        
-        // Verifica se o dashboard está visível antes de renderizar
-        const dashboardPanel = document.getElementById('controle-dashboard-panel');
-                
-        if (!dashboardPanel || dashboardPanel.classList.contains('hidden')) {
-            state.chartDistributionData = distributionData;
-            pendingDataRefresh.charts = true;
-            return;
-        }
-        
-        // Proteção contra múltiplas chamadas simultâneas
-        if (window.isRenderingCharts) {
-            return;
-        }
-        
-        window.isRenderingCharts = true;
-        
-        // Timeout de segurança para liberar a flag em caso de erro
-        const safetyTimeout = setTimeout(() => {
-            if (window.isRenderingCharts) {
-                window.isRenderingCharts = false;
-            }
-        }, 10000); // 10 segundos de timeout
-        
-        const chartLabels = ['0-19', '20-39', '40-59', '60-79'];
-        
-        // Verificar se os elementos canvas existem
-        const canvasTypes = ['fronhas', 'toalhas', 'lencol'];
-        canvasTypes.forEach(canvasType => {
-            const canvasId = `chart-${canvasType}`;
-            const canvas = document.getElementById(canvasId);
-        });
-        
-        // Contador para rastrear gráficos criados com sucesso
-        let chartsCreated = 0;
-        let chartsAttempted = 0;
-        const totalCharts = canvasTypes.length;
-        
-        const createChart = (canvasId, type, retryCount = 0) => {
-            const maxRetries = 3; // Reduzido para 3 tentativas para evitar loops
-            
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) {
-                chartsAttempted++;
-                checkIfFinished();
-                return false;
-            }
-            
-            // Verifica se o canvas está visível no DOM
-            const rect = canvas.getBoundingClientRect();
-            const isVisible = rect.width > 0 && rect.height > 0;
-            const parentVisible = canvas.offsetParent !== null;
-           
-           
-            if (!isVisible || !parentVisible) {
-                if (retryCount >= maxRetries) {
-                    chartsAttempted++;
-                    checkIfFinished();
-                    return false;
-                }
-                
-                // Tenta novamente após um pequeno delay, mas sem recursão infinita
-                setTimeout(() => {
-                    createChart(canvasId, type, retryCount + 1);
-                }, 300);
-                return false;
-            }
-            
-            const data = distributionData.find(d => d.type === type);
-            const chartData = data ? [data.range1, data.range2, data.range3, data.range4] : [0,0,0,0];
-            
-            try {
-                const chartResult = renderers.createOrUpdateChart(canvasId, 'bar', {
-                    labels: chartLabels,
-                    datasets: [{
-                        label: 'Quantidade de Peças',
-                        data: chartData,
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280']
-                    }]
-                }, {
-                    plugins: { 
-                        legend: { display: false },
-                        datalabels: {
-                            display: function(context) {
-                                return context.parsed && context.parsed.y > 0;
-                            },
-                            color: '#ffffff',
-                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                            borderRadius: 4,
-                            padding: 4,
-                            font: {
-                                weight: 'bold',
-                                size: 12
-                            },
-                            anchor: 'center',
-                            align: 'center',
-                            formatter: function(value) {
-                                return value;
-                            }
-                        }
-                    },
-                    scales: { 
-                        y: { 
-                            ticks: { stepSize: 1 }, 
-                            grid: { display: false } 
-                        } 
-                    },
-                    // Desabilita animação para evitar conflitos
-                    animation: {
-                        duration: 0
-                    },
-                    responsive: true,
-                    maintainAspectRatio: false
-                });
-                
-                if (chartResult) {
-                    chartsCreated++;
-                }
-                
-                chartsAttempted++;
-                checkIfFinished();
-                return chartResult !== null;
-                
-            } catch (error) {
-                chartsAttempted++;
-                checkIfFinished();
-                return false;
-            }
-        };
+    renderPecasCargaCharts: (data) => {
+    console.log('Dados recebidos para renderização dos gráficos:', data);
+    if (!data || (!data.active && !data.available)) {
+        console.log('Dados inválidos ou ausentes para renderização');
+        return;
+    }
 
-        // Função para verificar se o processo terminou
-        function checkIfFinished() {
-            if (chartsAttempted >= totalCharts) {
-                finishRenderingProcess();
-            }
-        }
+    // Garantir que os dados estão no formato correto
+    const validateChartData = (chartData) => {
+        if (!Array.isArray(chartData)) return false;
+        return chartData.every(item => 
+            item && 
+            typeof item === 'object' && 
+            typeof item.type === 'string' &&
+            typeof item.range1 === 'number' &&
+            typeof item.range2 === 'number' &&
+            typeof item.range3 === 'number' &&
+            typeof item.range4 === 'number'
+        );
+    };
+
+    // Função auxiliar para renderizar um conjunto de 3 gráficos
+    const renderChartSet = (distributionData, suffix, colorScheme) => {
+        if (!distributionData) return;
         
-        // Verificar se os elementos canvas estão disponíveis antes de criar os gráficos
-        const chartTypes = [
-            { id: 'chart-fronhas', type: 'fronhas' },
-            { id: 'chart-toalhas', type: 'toalhas' },
-            { id: 'chart-lencol', type: 'lencol' }
-        ];
-        
-        chartTypes.forEach(({ id, type }) => {
-            const canvas = document.getElementById(id);
-            if (canvas) {
-                createChart(id, type);
-            } else {
-                chartsAttempted++;
-            }
-        });
-        
-        // Se nenhum canvas foi encontrado, finaliza imediatamente
-        if (chartsAttempted >= totalCharts) {
-            finishRenderingProcess();
-        }
-        
-        // Função para finalizar o processo de renderização - SEM LOOPS INFINITOS
-        function finishRenderingProcess() {
-            // Cancela o timeout de segurança
-            clearTimeout(safetyTimeout);
+        const types = ['fronhas', 'toalhas', 'lencol'];
+        types.forEach(type => {
+            const canvasId = `chart-${type}${suffix}`; // Ex: chart-fronhas ou chart-fronhas-avail
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            const typeData = distributionData.find(d => d.type === type);
+            const chartData = typeData && typeof typeData.range1 === 'number' ? 
+                [typeData.range1, typeData.range2, typeData.range3, typeData.range4] : [0,0,0,0];
             
-            // Libera a flag de renderização SEMPRE
-            window.isRenderingCharts = false;
-            const endTimestamp = new Date().toISOString();
-            
-            // Log final do estado dos gráficos (apenas para debug, sem tentar recriar)
-            const chartIds = ['chart-fronhas', 'chart-toalhas', 'chart-lencol'];
-            chartIds.forEach(chartId => {
-                const canvas = document.getElementById(chartId);
-                const chart = window.charts && window.charts[chartId];
-                
-                if (canvas && chart) {
-                    console.log(`✅ Gráfico ${chartId} finalizado com sucesso`);
-                } else {
-                    console.log(`⚠️ Gráfico ${chartId} não foi criado ou foi perdido`);
-                }
+            // Usar as mesmas cores para ambos os gráficos (ativos e disponíveis)
+            const bgColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']; // Cores padrão para todos os gráficos
+
+            renderers.createOrUpdateChart(canvasId, 'bar', {
+                labels: ['0-19', '20-39', '40-59', '60-79'],
+                datasets: [{
+                    label: 'Qtd',
+                    data: chartData,
+                    backgroundColor: bgColors
+                }]
+            }, {
+                 plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        display: true, // Habilitar rótulos de dados
+                        color: '#fff', // Cor branca para os números
+                        font: { weight: 'bold', size: 12 },
+                        anchor: 'center', // Centralizar o rótulo
+                        align: 'center' // Alinhar ao centro da coluna
+                    }
+                },
+                scales: { y: { ticks: { stepSize: 1 }, grid: { display: false } } },
+                animation: { duration: 0 }, // Performance
+                maintainAspectRatio: false
             });
-        }
-        
-        // Configura um timeout de segurança para liberar a flag caso algo dê errado
-        setTimeout(() => {
-            if (window.isRenderingCharts) {
-                window.isRenderingCharts = false;
-            }
-        }, 5000); // 5 segundos de timeout
-        
-    },
+        });
+    };
+
+    // Renderiza os dois conjuntos
+    // Sufixo vazio '' para os gráficos originais (Ativos Total)
+    if (validateChartData(data.active)) {
+        console.log('Renderizando gráficos de peças ativas:', data.active);
+        renderChartSet(data.active, '', 'default');
+    } else {
+        console.warn('Dados de peças ativas inválidos:', data.active);
+    }
+    
+    // Sufixo '-avail' para os novos gráficos (Disponíveis)
+    if (validateChartData(data.available)) {
+        console.log('Renderizando gráficos de peças disponíveis:', data.available);
+        renderChartSet(data.available, '-avail', 'green');
+    } else {
+        console.warn('Dados de peças disponíveis inválidos:', data.available);
+    }
+},
 
     // Função de debug para forçar criação dos gráficos
     forceCreateCharts: () => {
@@ -1832,6 +1780,78 @@ const renderers = {
         if (state.chartDistributionData) {
             renderers.renderPecasCargaCharts(state.chartDistributionData);
         }
+    },
+
+    renderAvailablePecasCharts: (data) => {
+        console.log('Dados recebidos para renderização dos gráficos de peças disponíveis:', data);
+        if (!data || !Array.isArray(data)) {
+            console.log('Dados inválidos ou ausentes para renderização de peças disponíveis');
+            return;
+        }
+
+        // Valida os dados
+        const validateChartData = (chartData) => {
+            if (!Array.isArray(chartData)) return false;
+            return chartData.every(item => 
+                item && 
+                typeof item === 'object' && 
+                typeof item.type === 'string' &&
+                typeof item.range1 === 'number' &&
+                typeof item.range2 === 'number' &&
+                typeof item.range3 === 'number' &&
+                typeof item.range4 === 'number'
+            );
+        };
+
+        if (!validateChartData(data)) {
+            console.warn('Dados de peças disponíveis inválidos:', data);
+            return;
+        }
+
+        // Inicializa window.availableCharts se não existir
+        if (!window.availableCharts) {
+            window.availableCharts = {};
+        }
+
+        // Renderiza os gráficos de peças disponíveis
+        const types = ['fronhas', 'toalhas', 'lencol'];
+        types.forEach(type => {
+            const canvasId = `chart-${type}-avail`;
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            const typeData = data.find(d => d.type === type);
+            const chartData = typeData && typeof typeData.range1 === 'number' ? 
+                [typeData.range1, typeData.range2, typeData.range3, typeData.range4] : [0,0,0,0];
+            
+            // Usa as mesmas cores dos gráficos de peças ativas
+            const bgColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
+            renderers.createOrUpdateChart(canvasId, 'bar', {
+                labels: ['0-19', '20-39', '40-59', '60-79'],
+                datasets: [{
+                    label: 'Qtd',
+                    data: chartData,
+                    backgroundColor: bgColors
+                }]
+            }, {
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        display: true,
+                        color: '#fff',
+                        font: { weight: 'bold', size: 12 },
+                        anchor: 'center',
+                        align: 'center'
+                    }
+                },
+                scales: { y: { ticks: { stepSize: 1 }, grid: { display: false } } },
+                animation: { duration: 0 },
+                maintainAspectRatio: false
+            });
+        });
+
+        console.log('Gráficos de peças disponíveis renderizados com sucesso');
     },
 
      createOrUpdateChart: (canvasId, type, data, options) => {
@@ -1873,6 +1893,44 @@ const renderers = {
         });
     },
 
+    createOrUpdateAvailableChart: (canvasId, type, data, options) => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+
+        if (!window.availableCharts) window.availableCharts = {};
+
+        if (window.availableCharts[canvasId]) {
+            // Atualiza em vez de destruir
+            window.availableCharts[canvasId].data = data;
+            window.availableCharts[canvasId].update();
+            return;
+        }
+
+        const defaultOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 1.8,
+            layout: {
+                padding: { top: 10, bottom: 10, left: 10, right: 10 }
+            }
+        };
+
+        const mergedOptions = {
+            ...defaultOptions,
+            ...options,
+            layout: { ...defaultOptions.layout, ...(options?.layout || {}) }
+        };
+
+        window.availableCharts[canvasId] = new Chart(ctx, {
+            type,
+            data,
+            options: mergedOptions
+        });
+    },
 
     renderProtocolosTable: (data) => {
         const tbody = document.getElementById('preparacao-carga-table-body');
@@ -1918,6 +1976,10 @@ const renderers = {
                         <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
                     </svg>
                 </button>
+                
+                <button class="link-btn text-blue-500 hover:text-blue-700" data-action="edit-protocol" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Editar Protocolo" aria-label="Editar Protocolo">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </button>
                 ` : ''}
 
                 <button class="link-btn" data-action="delete-row" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Excluir Linha" aria-label="Excluir Linha">
@@ -1949,6 +2011,10 @@ const renderers = {
                     case 'consult-prep':
                         // Consultar peças vinculadas ao protocolo, por ciclo
                         modalHandlers.openVisualizarCargaModal(protocolo, tipoCiclo, timestamp);
+                        break;
+                    case 'edit-protocol':
+                        // Abrir modal de edição de protocolo
+                        modalHandlers.openEditProtocolModal(protocolo);
                         break;
                     case 'delete-row':
                         // Chamar a função de exclusão com modal de confirmação
@@ -2062,6 +2128,76 @@ const renderers = {
                     }
                 }
                 break;
+            case 'availablePecasCycleDistributionResult':
+                if (message.data) {
+                    
+                    // Armazena os dados dos gráficos de peças disponíveis
+                    state.availableChartDistributionData = message.data;
+                    
+                    // Cancela qualquer timeout anterior para evitar múltiplas renderizações
+                    if (window.availableChartUpdateTimeout) {
+                        clearTimeout(window.availableChartUpdateTimeout);
+                    }
+                    
+                    // Verifica se o dashboard está visível antes de renderizar
+                    const dashboardPanel = document.getElementById('controle-dashboard-panel');
+                    const isDashboardVisible = dashboardPanel && !dashboardPanel.classList.contains('hidden');
+                    
+                    if (isDashboardVisible) {
+                        // Implementa debounce para evitar múltiplas renderizações
+                        window.availableChartUpdateTimeout = setTimeout(() => {
+                            // Verifica se já há gráficos funcionais antes de renderizar
+                            const chartIds = ['chart-fronhas-avail', 'chart-toalhas-avail', 'chart-lencol-avail'];
+                            const existingCharts = chartIds.filter(id => {
+                                const chart = window.charts && window.charts[id];
+                                return chart && chart.data && typeof chart.update === 'function';
+                            });
+                            
+                            if (existingCharts.length === chartIds.length && !window.isRenderingAvailableCharts) {
+                                // Marca que está atualizando para evitar conflitos
+                                window.isUpdatingAvailableCharts = true;
+                                
+                                try {
+                                    // Atualiza apenas os dados dos gráficos existentes
+                                    chartIds.forEach(chartId => {
+                                        const chart = window.charts[chartId];
+                                        if (chart && chart.data && chart.data.datasets && chart.data.datasets[0]) {
+                                            const type = chartId.replace('chart-', '').replace('-avail','');
+                                            const data = message.data.find(d => d.type === type);
+                                            const chartData = data ? [data.range1, data.range2, data.range3, data.range4] : [0,0,0,0];
+                                            
+                                            // Verifica se os dados realmente mudaram
+                                            const currentData = chart.data.datasets[0].data;
+                                            const hasChanged = !currentData || 
+                                                currentData.length !== chartData.length ||
+                                                currentData.some((val, idx) => val !== chartData[idx]);
+                                            
+                                            if (hasChanged) {
+                                                chart.data.datasets[0].data = chartData;
+                                                chart.update('none'); // Atualização sem animação para evitar conflitos
+                                            }
+                                        }
+                                    });
+                                } catch (error) {
+                                    // Se houver erro na atualização, força re-renderização
+                                    if (!window.isRenderingAvailableCharts) {
+                                        renderers.renderAvailablePecasCharts(message.data);
+                                    }
+                                } finally {
+                                    window.isUpdatingAvailableCharts = false;
+                                }
+                            } else if (!window.isRenderingAvailableCharts && !window.isUpdatingAvailableCharts) {
+                                renderers.renderAvailablePecasCharts(message.data);
+                            }
+                            
+                            window.availableChartUpdateTimeout = null;
+                        }, 100); // Debounce de 100ms
+                    } else {
+                        // Marca que há dados pendentes para renderização
+                        pendingDataRefresh.availableCharts = true;
+                    }
+                }
+                break;
             case 'allPecasAtivasResult': 
     const activeModalTitle = document.querySelector('#modal-template .modal-title')?.textContent || '';
     // Atualiza cache global e renderiza tabelas se estiver na página Controle
@@ -2146,10 +2282,20 @@ const renderers = {
                 utils.showToast('Nome do protocolo e ao menos uma peça são obrigatórios.', true);
                 return;
             }
+            const cicloTexto = tipoCicloGlobal === 'frio' ? 'Ciclo Frio ❄️' : 'Ciclo Quente 🔥';
+            const confirmMsg = `Confirma o cadastro do protocolo "${protocolo}"?\n\nCiclo: ${cicloTexto}\nQuantidade de peças: ${peca_ids_selecionadas.length}`;
+
+            ui.showConfirmationModal(confirmMsg, () => {
+                // Ação confirmada: envia para o backend
+                const pecas_vinculadas = peca_ids_selecionadas.map(pecaId => ({
+                    peca_id: pecaId,
+                    tipo_ciclo: tipoCicloGlobal
+                }));
             // ENVIA A NOVA ESTRUTURA DE DADOS
             vscode.postMessage({ command: 'saveProtocoloCarga', data: { protocolo, pecas_vinculadas } });
             utils.closeModal();
         });
+    });
 
         // Lógica de filtro para peças (já existente, mas agora o input está acima da tabela)
         const pecaFilterInput = document.getElementById('peca-filter-input');
@@ -2431,8 +2577,15 @@ const renderers = {
                             utils.showToast('Nome do protocolo e ao menos uma peça são obrigatórios.', true);
                             return;
                         }
-                        vscode.postMessage({ command: 'saveProtocoloCarga', data: { protocolo, pecas_vinculadas } });
-                        utils.closeModal();
+
+                        // Modal de confirmação antes de cadastrar
+                        ui.showConfirmationModal(
+                            `Confirmação de Cadastro do Protocolo: ${protocolo}\nCiclo: ${tipoCicloGlobal === 'frio' ? 'Frio' : 'Quente'}. Deseja confirmar o cadastro deste protocolo?`,
+                            () => {
+                                vscode.postMessage({ command: 'saveProtocoloCarga', data: { protocolo, pecas_vinculadas } });
+                                utils.closeModal();
+                            }
+                        );
                     });
 
                     // Filtro para peças
@@ -2624,6 +2777,7 @@ const renderers = {
                     
                     // Mostrar toast com a mensagem do backend
                     utils.showToast(message.message);
+                    console.log('Operação bem-sucedida:', message.message);
                     
                     // Se houver peças existentes, mostrar informações adicionais
                     if (message.existingPecas && message.existingPecas.length > 0) {
@@ -2636,8 +2790,20 @@ const renderers = {
                     // Atualizar a tabela de peças ativas após operação bem-sucedida
                     vscode.postMessage({command: 'getAllPecasAtivas', source: 'afterOperation'});
                     
+                    // **ATUALIZAR OS GRÁFICOS APÓS OPERAÇÃO BEM-SUCEDIDA**
+                    vscode.postMessage({ command: 'getPecasCycleDistribution', source: 'afterOperation' });
+                    
+                    // Forçar atualização imediata da tabela de processos se estiver visível
+                    setTimeout(() => {
+                        if (document.getElementById('controle-processos-panel') && 
+                            !document.getElementById('controle-processos-panel').classList.contains('hidden')) {
+                            renderers.renderPreparacaoCargaPage();
+                        }
+                    }, 500);
+                    
                 } else {
                     utils.showToast(message.error || 'Erro ao processar operação', true);
+                    console.error('Erro na operação:', message.error);
                 }
                 break;
             case 'bulkDeleteInactivePiecesResult':
@@ -2821,8 +2987,13 @@ const renderers = {
                         acc[t] = (acc[t] || 0) + 1;
                         return acc;
                     }, {});
+                    
+                    // Calcular média dos ciclos
+                    const totalCiclos = pecasVinculadas.reduce((acc, p) => acc + (p.ciclos_no_vinculo || 0), 0);
+                    const mediaCiclos = pecasVinculadas.length > 0 ? (totalCiclos / pecasVinculadas.length).toFixed(0) : '0';
+                    
                     const typeMap = { lencol: 'Lençol', fronhas: 'Fronha', toalhas: 'Toalha de Rosto' };
-                    const summaryText = Object.keys(counts).map(k => `${typeMap[k] || k}: ${counts[k]}`).join(' • ');
+                    const summaryText = Object.keys(counts).map(k => `${typeMap[k] || k}: ${counts[k]}`).join(' • ') + ` • Média de Ciclos: ${mediaCiclos}`;
                     if (summaryEl) {
                         summaryEl.textContent = summaryText;
                     }
@@ -3194,6 +3365,13 @@ targetContainer.innerHTML = tableHTMLResult;
             case 'loadControlProtocolosWithStatusResult':
                 // Usar o mesmo handler que protocolosComStatusResult
                 renderers.renderProtocolosTable(message.data);
+                break;
+            case 'dashboardDataResult':
+                state.chartData = message.data;
+                // Verifica se o painel está visível antes de renderizar
+                if (!document.getElementById('controle-dashboard-panel')?.classList.contains('hidden')) {
+                    renderers.renderPecasCargaCharts(message.data);
+                }
                 break;
                 
 

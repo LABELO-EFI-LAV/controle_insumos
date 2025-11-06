@@ -3654,9 +3654,13 @@ export async function activate(context: vscode.ExtensionContext) {
                                 cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peça cadastrada com sucesso!' });
                             }
                             
-                            // Atualizar distribuição de ciclos após adicionar peça
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Atualizar gráficos (ativos e disponíveis) após adicionar peça
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                         } catch (err) {
                             handleError(err, 'ERRO AO ADICIONAR PEÇA DE CARGA:');
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
@@ -3706,6 +3710,14 @@ export async function activate(context: vscode.ExtensionContext) {
                                 if (pecasAfetadas && pecasAfetadas.length > 0) {
                                     cargoPanel.webview.postMessage({ command: 'pecasAfetadasNotification', data: { pecasAfetadas, pecasVencidas } });
                                 }
+
+                                // Atualiza os gráficos (ativos e disponíveis) após descadastro
+                                const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                    cargoManager.getPecasCycleDistribution(),
+                                    cargoManager.getAvailablePecasCycleDistribution()
+                                ]);
+                                cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                                cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                             } catch (err) {
                                 handleError(err, 'ERRO AO DESCADASTRAR PROTOCOLO DE CARGA:');
                                 cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' });
@@ -3729,6 +3741,14 @@ export async function activate(context: vscode.ExtensionContext) {
                                     
                                     // Atualizar a lista de protocolos
                                     cargoPanel.webview.postMessage({ command: 'refreshProtocolos' });
+
+                                    // Atualiza os gráficos (ativos e disponíveis) após exclusão
+                                    const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                        cargoManager.getPecasCycleDistribution(),
+                                        cargoManager.getAvailablePecasCycleDistribution()
+                                    ]);
+                                    cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                                    cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                                 } else {
                                     cargoPanel.webview.postMessage({ 
                                         command: 'pecaCargaOperationResult', 
@@ -3750,9 +3770,13 @@ export async function activate(context: vscode.ExtensionContext) {
                             if (!cargoManager) throw new Error('CargoManager não inicializado');
                             await cargoManager.updatePecaStatus(message.tag_id, 'inativa');
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peça marcada como inativa.' });
-                            // Refresh charts
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Refresh charts (ativos e disponíveis)
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                         } catch (err) {
                             handleError(err, 'ERRO AO MARCAR PEÇA COMO DANIFICADA:');
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
@@ -3764,9 +3788,13 @@ export async function activate(context: vscode.ExtensionContext) {
                             const { tag_id, status } = message.data;
                             await cargoManager.updatePecaStatus(tag_id, status);
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: `Peça ${tag_id} atualizada para status ${status}.` });
-                            // Refresh charts
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Refresh charts (ativos e disponíveis)
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                         } catch (err) {
                             handleError(err, 'ERRO AO ATUALIZAR STATUS DA PEÇA:');
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
@@ -3793,9 +3821,13 @@ export async function activate(context: vscode.ExtensionContext) {
                             const pecasVencidas = await cargoManager.getAllPecasVencidas();
                             cargoPanel.webview.postMessage({ command: 'allPecasVencidasResult', data: pecasVencidas });
 
-                            // Refresh charts
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Refresh charts (ativos e disponíveis)
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                         } catch (err) {
                             handleError(err, 'ERRO AO EXCLUIR PEÇAS INATIVAS EM MASSA:');
                             cargoPanel.webview.postMessage({ command: 'bulkDeleteInactivePiecesResult', success: false, error: (err as Error).message });
@@ -3835,9 +3867,13 @@ export async function activate(context: vscode.ExtensionContext) {
                                 cargoPanel.webview.postMessage({ command: 'pecasVencidasNotification', data: pecasVencidas });
                             }
 
-                            // Atualiza os gráficos
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Atualiza os gráficos (ativos e disponíveis)
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                         } catch (err) {
                             handleError(err, 'ERRO AO SALVAR PROTOCOLO DE CARGA:');
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
@@ -3851,9 +3887,13 @@ export async function activate(context: vscode.ExtensionContext) {
                             
                             cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Peças adicionadas ao protocolo com sucesso!' });
 
-                            // Atualiza os gráficos
-                            const updatedDistribution = await cargoManager.getPecasCycleDistribution();
+                            // Atualiza os gráficos (ativos e disponíveis)
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
                             cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
                             
                             // Atualiza a tabela de protocolos
                             const protocolosComStatus = await cargoManager.getProtocolosComStatus();
@@ -3957,6 +3997,41 @@ export async function activate(context: vscode.ExtensionContext) {
                             cargoPanel.webview.postMessage({ command: 'protocolosComStatusResult', data: protocolos });
                         } catch (err) {
                             handleError(err, 'ERRO AO BUSCAR PROTOCOLOS COM STATUS:');
+                        }
+                        break;
+                    case 'getDashboardData':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            
+                            // Busca as duas distribuições em paralelo
+                            const [activeDistribution, availableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
+                            
+                            cargoPanel.webview.postMessage({ 
+                                command: 'dashboardDataResult', 
+                                data: {
+                                    active: activeDistribution,
+                                    available: availableDistribution
+                                }
+                            });
+                        } catch (err) {
+                            handleError(err, 'ERRO AO BUSCAR DADOS DO DASHBOARD:');
+                        }
+                        break;
+
+                    case 'updateProtocoloName':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            const { oldName, newName } = message.data;
+                            await cargoManager.updateProtocoloName(oldName, newName);
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: true, message: 'Protocolo renomeado com sucesso!' });
+                            // Atualiza a lista de protocolos
+                            const protocolos = await cargoManager.getProtocolosComStatus();
+                            cargoPanel.webview.postMessage({ command: 'protocolosComStatusResult', data: protocolos });
+                        } catch (err) {
+                            cargoPanel.webview.postMessage({ command: 'pecaCargaOperationResult', success: false, error: (err as Error).message });
                         }
                         break;
                     

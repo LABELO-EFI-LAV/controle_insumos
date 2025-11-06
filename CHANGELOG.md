@@ -4,6 +4,25 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
+[1.4.1] - 2025-11-24
+
+### Adicionado
+
+- **Gráficos de Peças Disponíveis:** Implementados gráficos de barras para visualizar a quantidade de peças disponíveis (fronhas, toalhas e lençóis) por faixa de ciclos, similar aos gráficos de peças ativas.
+- **Botão de Edição de Protocolos:** Adicionado botão de edição nos protocolos de carga, permitindo modificar as informações do protocolo de forma rápida e intuitiva.
+- **Média de Ciclos no Modal:** O modal "Peças do Protocolo" agora exibe a média dos ciclos de todas as cargas, além da quantidade de peças para cada tipo, fornecendo informações mais completas sobre o estado do protocolo.
+
+### Ajustes no Módulo de Controle de Carga
+
+- **Padronização de Cores nos Gráficos:** As colunas dos gráficos de peças disponíveis agora possuem as mesmas cores dos gráficos de peças ativas (#3b82f6, #10b981, #f59e0b, #ef4444), garantindo consistência visual.
+- **Rótulos de Dados nos Gráficos:** Adicionados rótulos numéricos brancos no centro das colunas dos gráficos de peças, melhorando a legibilidade dos dados.
+- **Botão de Edição Padronizado:** O botão de edição de protocolo foi padronizado com o botão de edição de insumo do módulo de Controle de Insumos, utilizando as mesmas classes CSS (text-blue-500 hover:text-blue-700) e ícone SVG.
+
+### Correções
+
+- **Correção de Erro nos Gráficos:** Resolvido o erro "Cannot read properties of undefined (reading 'y')" nos gráficos do módulo de Controle de Carga através de validação robusta dos dados antes da renderização.
+- **Validação de Dados de Gráficos:** Implementada função de validação para garantir que os dados de entrada dos gráficos estejam no formato correto antes da renderização.
+
 [1.4.0] - 2025-11-23
 
 ### Adicionado

@@ -977,7 +977,65 @@ export class CargoManager implements ICargoManager, IModuleDatabase {
         `;
         return this.runQuery(sql);
     }
+    /**
+     * Obtém a distribuição de ciclos APENAS para peças disponíveis (sem vínculo ativo)
+     */
+    async getAvailablePecasCycleDistribution(): Promise<Array<{ type: string; range1: number; range2: number; range3: number; range4: number }>> {
+        // Seleciona peças ativas que NÃO têm um vínculo ativo na tabela carga_ensaio
+        const sql = `
+            SELECT pc.type, pc.cycles 
+            FROM pecas_carga pc
+            LEFT JOIN carga_ensaio ce ON pc.id = ce.peca_id AND ce.vinculo_status = 'ativo'
+            WHERE pc.status = 'ativa' AND ce.id IS NULL
+        `;
+        const rows = await this.runQuery(sql);
 
+        const types = ['fronhas', 'toalhas', 'lencol'];
+        const dist: Record<string, { range1: number; range2: number; range3: number; range4: number }> = {
+            fronhas: { range1: 0, range2: 0, range3: 0, range4: 0 },
+            toalhas: { range1: 0, range2: 0, range3: 0, range4: 0 },
+            lencol: { range1: 0, range2: 0, range3: 0, range4: 0 }
+        };
+
+        for (const r of rows) {
+            const t: string = (r.type || '').toLowerCase();
+            const normalizedType = t === 'lençol' ? 'lencol' : t;
+
+            if (!types.includes(normalizedType)) continue;
+            
+            const c = Number(r.cycles) || 0;
+            if (c <= 19) dist[normalizedType].range1++;
+            else if (c <= 39) dist[normalizedType].range2++;
+            else if (c <= 59) dist[normalizedType].range3++;
+            else dist[normalizedType].range4++;
+        }
+
+        return types.map(t => ({ type: t, ...dist[t] }));
+    }
+
+    /**
+     * Atualiza o nome de um protocolo ativo
+     */
+    async updateProtocoloName(oldName: string, newName: string): Promise<void> {
+        try {
+            // Verifica se o novo nome já existe (se for diferente do atual)
+            if (oldName !== newName) {
+                const exists = await this.runQuery('SELECT 1 FROM carga_ensaio WHERE protocolo = ? AND vinculo_status = "ativo" LIMIT 1', [newName]);
+                if (exists.length > 0) {
+                    throw new Error(`O protocolo "${newName}" já existe e está ativo.`);
+                }
+            }
+
+            const result = await this.runQuery(
+                'UPDATE carga_ensaio SET protocolo = ? WHERE protocolo = ? AND vinculo_status = "ativo"',
+                [newName, oldName]
+            );
+            console.log(`Protocolo atualizado: ${oldName} -> ${newName}, linhas afetadas:`, result.changes);
+        } catch (error) {
+            console.error('Erro ao atualizar protocolo:', error);
+            throw error;
+        }
+    }
 
 
 
