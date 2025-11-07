@@ -6676,8 +6676,9 @@ handleUpdateCalibration: (e) => {
             // Atualiza o ensaio no histórico, se existir
             historicalAssay.report = reportNumber;
             historicalAssay.status = 'relatorio';
-            // Para ensaios no histórico, salva imediatamente pois não afeta o cronograma
-            dataHandlers.saveData();
+            // Não salvar imediatamente; alinhar com o comportamento de "Guardar Alterações"
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
         } else if (!scheduledAssay) {
             // Se o ensaio não foi encontrado em nenhum dos locais, mostra um erro.
             utils.showToast("Erro: Ensaio não encontrado para adicionar relatório.", true);
