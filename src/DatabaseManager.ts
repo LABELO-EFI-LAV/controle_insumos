@@ -736,8 +736,9 @@ export class DatabaseManager {
         // Migração: Adicionar colunas de consumo na tabela historical_assays se não existirem
         await this.migrateConsumptionColumns();
 
-        // Migração: Adicionar coluna humidity na tabela historical_assays se não existir
+        // Migração: Adicionar coluna humidity e report nas tabelas agendadas
         await this.migrateHumidityColumn();
+        await this.migrateReportColumns();
 
 
 
@@ -812,11 +813,18 @@ export class DatabaseManager {
      */
     private async migrateHumidityColumn(): Promise<void> {
         try {
-            const tableInfo = await this.selectQuery("PRAGMA table_info(scheduled_assays)");
-            const hasHumidity = tableInfo.some((col: any) => col.name === 'humidity');
-            if (!hasHumidity) {
+            const scheduledInfo = await this.selectQuery("PRAGMA table_info(scheduled_assays)");
+            const scheduledHasHumidity = scheduledInfo.some((col: any) => col.name === 'humidity');
+            if (!scheduledHasHumidity) {
                 await this.runQuery("ALTER TABLE scheduled_assays ADD COLUMN humidity TEXT");
                 console.log('✅ Coluna humidity adicionada à tabela scheduled_assays');
+            }
+
+            const safetyInfo = await this.selectQuery("PRAGMA table_info(safety_scheduled_assays)");
+            const safetyHasHumidity = safetyInfo.some((col: any) => col.name === 'humidity');
+            if (!safetyHasHumidity) {
+                await this.runQuery("ALTER TABLE safety_scheduled_assays ADD COLUMN humidity TEXT");
+                console.log('✅ Coluna humidity adicionada à tabela safety_scheduled_assays');
             }
         } catch (error) {
             console.error('❌ Erro na migração da coluna humidity:', error);
@@ -869,7 +877,7 @@ export class DatabaseManager {
             console.error('❌ Erro na migração de carga_ensaio:', error);
         }
     }
-      private async migrateReportDateColumns(): Promise<void> {
+    private async migrateReportDateColumns(): Promise<void> {
         try {
             // Verificar tabela scheduled_assays
             const scheduledInfo = await this.selectQuery("PRAGMA table_info(scheduled_assays)");
@@ -892,6 +900,25 @@ export class DatabaseManager {
             }
         } catch (error) {
             console.error('❌ Erro na migração da coluna report_date:', error);
+        }
+    }
+    private async migrateReportColumns(): Promise<void> {
+        try {
+            const scheduledInfo = await this.selectQuery("PRAGMA table_info(scheduled_assays)");
+            const hasScheduledReport = scheduledInfo.some((col: any) => col.name === 'report');
+            if (!hasScheduledReport) {
+                await this.runQuery("ALTER TABLE scheduled_assays ADD COLUMN report TEXT");
+                console.log('✅ Coluna report adicionada à tabela scheduled_assays');
+            }
+
+            const safetyInfo = await this.selectQuery("PRAGMA table_info(safety_scheduled_assays)");
+            const hasSafetyReport = safetyInfo.some((col: any) => col.name === 'report');
+            if (!hasSafetyReport) {
+                await this.runQuery("ALTER TABLE safety_scheduled_assays ADD COLUMN report TEXT");
+                console.log('✅ Coluna report adicionada à tabela safety_scheduled_assays');
+            }
+        } catch (error) {
+            console.error('❌ Erro na migração da coluna report:', error);
         }
     }
     /**
@@ -1805,7 +1832,7 @@ export class DatabaseManager {
     
 
     private async saveScheduledAssays(tx: any, assays: any[]) {
-        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers'];
+        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'planned_suppliers', 'humidity', 'report'];
         await this.bulkInsert(tx, 'scheduled_assays', columns, assays, assay => [
             assay.id,
             assay.protocol || 'Não especificado',
@@ -1824,6 +1851,7 @@ export class DatabaseManager {
             assay.cycles,
             JSON.stringify(assay.plannedSuppliers || null),
             assay.humidity || null,
+            assay.report || '',
         ]);
     }
 
@@ -1836,8 +1864,8 @@ export class DatabaseManager {
         }
         const sql = `
             INSERT OR REPLACE INTO scheduled_assays 
-            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers, humidity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers, humidity, report)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const batchSize = 100;
         for (let i = 0; i < assays.length; i += batchSize) {
@@ -1861,6 +1889,7 @@ export class DatabaseManager {
                     assay.cycles,
                     JSON.stringify(assay.plannedSuppliers || null),
                     assay.humidity || null,
+                    assay.report || '',
                 ]);
 
                 // Log para backup incremental
@@ -1870,7 +1899,7 @@ export class DatabaseManager {
     }
 
     private async saveSafetyScheduledAssays(tx: any, assays: any[]) {
-        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers'];
+        const columns = ['id', 'protocol', 'orcamento', 'report_date', 'assay_manufacturer', 'model', 'nominal_load', 'tensao', 'start_date', 'end_date', 'setup', 'status', 'type', 'observacoes', 'cycles', 'sub_row_index', 'planned_suppliers', 'humidity', 'report'];
         await this.bulkInsert(tx, 'safety_scheduled_assays', columns, assays, assay => [
             assay.id,
             assay.protocol || 'Não especificado',
@@ -1889,6 +1918,8 @@ export class DatabaseManager {
             assay.cycles,
             assay.subRowIndex || assay.sub_row_index || 0,
             JSON.stringify(assay.plannedSuppliers || null),
+            assay.humidity || null,
+            assay.report || '',
         ]);
     }
 
@@ -1901,8 +1932,8 @@ export class DatabaseManager {
         }
         const sql = `
             INSERT OR REPLACE INTO safety_scheduled_assays 
-            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers, humidity, report)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const batchSize = 100;
         for (let i = 0; i < assays.length; i += batchSize) {
@@ -1926,6 +1957,8 @@ export class DatabaseManager {
                     assay.cycles,
                     assay.subRowIndex || assay.sub_row_index || 0,
                     JSON.stringify(assay.plannedSuppliers || null),
+                    assay.humidity || null,
+                    assay.report || '',
                 ]);
 
                 // Log para backup incremental
@@ -2573,10 +2606,11 @@ export class DatabaseManager {
         const safeReportDate = (assay as any).reportDate || '';
         const safePlannedSuppliers = JSON.stringify((assay as any).plannedSuppliers || null);
         const safeHumidity = assay.humidity || null;
+        const safeReport = assay.report || '';
 
         const result = await this.runQuery(
-            'INSERT INTO scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers, humidity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers, safeHumidity]
+            'INSERT INTO scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, planned_suppliers, humidity, report) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safePlannedSuppliers, safeHumidity, safeReport]
         );
 
         return result.id;
@@ -2600,10 +2634,12 @@ export class DatabaseManager {
         const safeReportDate = (assay as any).reportDate || '';
         const safePlannedSuppliers = JSON.stringify((assay as any).plannedSuppliers || null);
         const safeSubRowIndex = assay.subRowIndex || 0;
+        const safeHumidity = assay.humidity || null;
+        const safeReport = assay.report || '';
 
         const result = await this.runQuery(
-            'INSERT INTO safety_scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers]
+            'INSERT INTO safety_scheduled_assays (protocol, orcamento, report_date, assay_manufacturer, model, nominal_load, tensao, start_date, end_date, setup, status, type, observacoes, cycles, sub_row_index, planned_suppliers, humidity, report) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            [safeProtocol, safeOrcamento, safeReportDate, safeAssayManufacturer, safeModel, safeNominalLoad, safeTensao, safeStartDate, safeEndDate, safeSetup, safeStatus, safeType, assay.observacoes, assay.cycles, safeSubRowIndex, safePlannedSuppliers, safeHumidity, safeReport]
         );
 
         return result.id;
@@ -2647,6 +2683,8 @@ export class DatabaseManager {
             observacoes: assay.observacoes,
             cycles: assay.cycles,
             reportDate: assay.report_date,
+            report: assay.report,
+            humidity: assay.humidity,
             plannedSuppliers: plannedSuppliers,
             lots: { poBase: [], perborato: [], taed: [], tiras: [] }
         };
@@ -2690,6 +2728,8 @@ export class DatabaseManager {
             observacoes: assay.observacoes,
             cycles: assay.cycles,
             reportDate: assay.report_date,
+            report: assay.report,
+            humidity: assay.humidity,
             plannedSuppliers: plannedSuppliers,
             subRowIndex: assay.sub_row_index,
             lots: { poBase: [], perborato: [], taed: [], tiras: [] }
@@ -2727,6 +2767,8 @@ export class DatabaseManager {
                 observacoes: assay.observacoes,
                 cycles: assay.cycles,
                 reportDate: assay.report_date,
+                report: assay.report,
+                humidity: assay.humidity,
                 plannedSuppliers: plannedSuppliers,
                 lots: { poBase: [], perborato: [], taed: [], tiras: [] }
             };
@@ -2764,6 +2806,8 @@ export class DatabaseManager {
                 observacoes: assay.observacoes,
                 cycles: assay.cycles,
                 reportDate: assay.report_date,
+                report: assay.report,
+                humidity: assay.humidity,
                 plannedSuppliers: plannedSuppliers,
                 subRowIndex: assay.sub_row_index,
                 lots: { poBase: [], perborato: [], taed: [], tiras: [] }
@@ -2837,6 +2881,10 @@ export class DatabaseManager {
         if ((updates as any).plannedSuppliers !== undefined) {
             fields.push('planned_suppliers = ?');
             values.push(JSON.stringify((updates as any).plannedSuppliers));
+        }
+        if (updates.report !== undefined) {
+            fields.push('report = ?');
+            values.push(updates.report);
         }
         if (updates.humidity !== undefined) {
             fields.push('humidity = ?');
@@ -2923,6 +2971,14 @@ export class DatabaseManager {
         if ((updates as any).plannedSuppliers !== undefined) {
             fields.push('planned_suppliers = ?');
             values.push(JSON.stringify((updates as any).plannedSuppliers));
+        }
+        if (updates.report !== undefined) {
+            fields.push('report = ?');
+            values.push(updates.report);
+        }
+        if (updates.humidity !== undefined) {
+            fields.push('humidity = ?');
+            values.push(updates.humidity);
         }
 
         if (fields.length === 0) {

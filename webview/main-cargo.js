@@ -939,6 +939,68 @@
 
 // Funções de modal para controle de carga
 const modalHandlers = {
+        openPromoteColdToHotModal: (protocolo) => {
+            const title = 'Promover Carga Fria para Quente';
+            const contentHTML = `
+                <form id="form-promote-cold-to-hot" class="space-y-4 p-4 text-black">
+                    <p class="text-sm text-gray-700">
+                        Esta ação irá dar baixa no ciclo frio do protocolo <strong class="text-blue-600">${protocolo}</strong> 
+                        e, em seguida, cadastrar as mesmas peças no ciclo quente.
+                    </p>
+                    
+                    <div>
+                        <label for="promote-cycles-to-add" class="block text-sm font-medium text-gray-700">Ciclos a adicionar (pelo ciclo frio):</label>
+                        <input type="number" id="promote-cycles-to-add" name="cycles_to_add" value="1" min="0" required class="w-full p-2 border rounded text-black mt-1">
+                    </div>
+
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mt-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-yellow-700">
+                                    Peças que atingirem 80 ciclos ou mais com esta adição serão <strong>inativadas</strong> e não serão promovidas para o ciclo quente.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end pt-4">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded">
+                            Confirmar e Promover
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            utils.openModal(title, contentHTML, () => {
+                document.getElementById('form-promote-cold-to-hot').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const cyclesToAdd = parseInt(document.getElementById('promote-cycles-to-add').value, 10);
+                    
+                    if (isNaN(cyclesToAdd)) {
+                        utils.showToast("Número de ciclos inválido.", true);
+                        return;
+                    }
+
+                    // Envia o novo comando para o backend
+                    vscode.postMessage({ 
+                        command: 'promoteColdToHot', 
+                        data: { 
+                            protocolo: protocolo,
+                            cycles_to_add: cyclesToAdd
+                        } 
+                    });
+                    
+                    utils.closeModal();
+                    utils.showToast('Processando promoção de carga...', false, 2000);
+                });
+            });
+        },
+
         openEditProtocolModal: (protocoloAtual) => {
             const title = 'Editar Protocolo';
             const contentHTML = `
@@ -1933,99 +1995,122 @@ const renderers = {
     },
 
     renderProtocolosTable: (data) => {
-        const tbody = document.getElementById('preparacao-carga-table-body');
-        const filterEl = document.getElementById('filter-prep-protocol');
-        const countEl = document.getElementById('prep-filter-count');
-        if (!tbody || !data) return;
+    const tbody = document.getElementById('preparacao-carga-table-body');
+    const filterEl = document.getElementById('filter-prep-protocol');
+    const countEl = document.getElementById('prep-filter-count');
+    if (!tbody || !data) return;
 
-        const list = Array.isArray(data) ? data : [];
-        // Atualiza estado para uso em verificações (ex.: bloqueio do ciclo quente)
-        state.preparacaoCargaProtocols = list;
-        const filter = (filterEl?.value || state.filters?.prepProtocol || '').toLowerCase();
-        const filtered = filter ? list.filter(p => (p.protocolo || '').toLowerCase().includes(filter)) : list;
-
-        tbody.innerHTML = '';
-        if (filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Nenhum protocolo encontrado para o filtro.</td></tr>';
-            if (countEl) countEl.textContent = filter ? '0 encontrados' : '';
-            return;
-        }
-        if (countEl) countEl.textContent = filter ? `${filtered.length} encontrados` : '';
-
-        filtered.forEach(protocolo => {
-    const tr = document.createElement('tr');
+    const list = Array.isArray(data) ? data : [];
     
-    // Verifica se o protocolo está desvinculado para controlar as ações
-    const isDesvinculado = protocolo.vinculo_status === 'desvinculado';
+    // Armazena a lista completa no estado para validação futura
+    state.protocolsWithStatus = list;
 
-    const createConsultButton = (tipoCiclo) => {
+    const filter = (filterEl?.value || state.filters?.prepProtocol || '').toLowerCase();
+    const filtered = filter ? list.filter(p => (p.protocolo || '').toLowerCase().includes(filter)) : list;
+
+    tbody.innerHTML = '';
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Nenhum protocolo encontrado para o filtro.</td></tr>';
+        if (countEl) countEl.textContent = filter ? '0 encontrados' : '';
+        return;
+    }
+    if (countEl) countEl.textContent = filter ? `${filtered.length} encontrados` : '';
+
+    filtered.forEach(protocolo => {
+        const tr = document.createElement('tr');
+        
+        // Verifica se o protocolo está desvinculado para controlar as ações
+        const isDesvinculado = protocolo.vinculo_status === 'desvinculado';
+        
+        // Verifica se o ciclo frio está pronto e o quente está vazio
+        const canPromote = !isDesvinculado && 
+                           protocolo.ciclo_frio_status === 'Disponível' && 
+                           protocolo.ciclo_quente_status === 'Não disponível';
+
+        // Botão de "Promover Carga Fria"
+        const promoteButtonHTML = canPromote ? `
+            <button class="link-btn" data-action="promote-cold-to-hot" data-protocolo="${protocolo.protocolo}" title="Promover Carga Fria para Quente" aria-label="Promover Carga Fria para Quente">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-indigo-600">
+                    <path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+            </button>
+        ` : '';
+        
+        const createConsultButton = (tipoCiclo) => {
         const label = tipoCiclo === 'frio' ? 'Consultar (Frio)' : 'Consultar (Quente)';
         return `<button class="link-btn link-btn-view" data-protocolo="${protocolo.protocolo}" data-tipo-ciclo="${tipoCiclo}" data-timestamp="${protocolo.created_at}" data-action="consult-prep">${label}</button>`;
     };
 
-    tr.innerHTML = `
-        <td class="py-3 px-4 text-left font-semibold text-gray-800">${protocolo.protocolo}</td>
-        <td class="py-3 px-4 text-left text-gray-800">${createConsultButton('frio')}</td>
-        <td class="py-3 px-4 text-left text-gray-800">${createConsultButton('quente')}</td>
-        <td class="py-3 px-4 text-left text-gray-800">
-            <div class="flex justify-start gap-3">
-                
-                ${!isDesvinculado ? `
-                <button class="link-btn" data-action="add-piece" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Adicionar Peça" aria-label="Adicionar Peça">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600">
-                        <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
-                    </svg>
-                </button>
-                
-                <button class="link-btn text-blue-500 hover:text-blue-700" data-action="edit-protocol" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Editar Protocolo" aria-label="Editar Protocolo">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                </button>
-                ` : ''}
+        tr.innerHTML = `
+            <td class="py-3 px-4 text-left font-semibold text-gray-800">${protocolo.protocolo}</td>
+            <td class="py-3 px-4 text-left text-gray-800">${createConsultButton('frio', protocolo.ciclo_frio_status)}</td>
+            <td class="py-3 px-4 text-left text-gray-800">${createConsultButton('quente', protocolo.ciclo_quente_status)}</td>
+            <td class="py-3 px-4 text-left text-gray-800">
+                <div class="flex justify-start gap-3">
+                    
+                    ${promoteButtonHTML} ${!isDesvinculado ? `
+                    <button class="link-btn" data-action="add-piece" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Adicionar Peça" aria-label="Adicionar Peça">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600">
+                            <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
+                        </svg>
+                    </button>
+                    
+                    <button class="link-btn text-blue-500 hover:text-blue-700" data-action="edit-protocol" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Editar Protocolo" aria-label="Editar Protocolo">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    ` : ''}
 
-                <button class="link-btn" data-action="delete-row" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Excluir Linha" aria-label="Excluir Linha">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-red-600"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </button>
-                
-                ${isDesvinculado ? `<span class="text-gray-400 text-sm">Protocolo desvinculado</span>` : ''}
+                    <button class="link-btn" data-action="delete-row" data-protocolo="${protocolo.protocolo}" data-timestamp="${protocolo.created_at}" title="Excluir Linha" aria-label="Excluir Linha">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-red-600"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </button>
+                    
+                    ${isDesvinculado ? `<span class="text-gray-400 text-sm">Protocolo finalizado</span>` : ''}
 
-                </div>
-        </td>
+                    </div>
+            </td>
+        </tr>
     `;
     tbody.appendChild(tr);
 });
 
-        // Delegação de cliques para ações da tabela Processos
-        if (!tbody.dataset.hasDelegation) {
-            tbody.dataset.hasDelegation = 'true';
-            tbody.addEventListener('click', (e) => {
-                const btn = e.target.closest('[data-action]');
-                if (!btn) return;
-                const action = btn.getAttribute('data-action');
-                const protocolo = btn.getAttribute('data-protocolo') || '';
-                const tipoCiclo = btn.getAttribute('data-tipo-ciclo') || '';
-                const timestamp = btn.getAttribute('data-timestamp') || '';
-                switch (action) {
-                    case 'add-piece':
-                        modalHandlers.openAdicionarPecaProtocoloModal(protocolo, timestamp);
-                        break;
-                    case 'consult-prep':
-                        // Consultar peças vinculadas ao protocolo, por ciclo
-                        modalHandlers.openVisualizarCargaModal(protocolo, tipoCiclo, timestamp);
-                        break;
-                    case 'edit-protocol':
-                        // Abrir modal de edição de protocolo
-                        modalHandlers.openEditProtocolModal(protocolo);
-                        break;
-                    case 'delete-row':
-                        // Chamar a função de exclusão com modal de confirmação
-                        handleExcluirLinha(protocolo, tipoCiclo, timestamp);
-                        break;
-                    default:
-                        break;
-                }
-            });
-        }
+    // Delegação de cliques para ações da tabela Processos
+    if (!tbody.dataset.hasDelegation) {
+        tbody.dataset.hasDelegation = 'true';
+        tbody.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const protocolo = btn.getAttribute('data-protocolo') || '';
+            const tipoCiclo = btn.getAttribute('data-tipo-ciclo') || '';
+            const timestamp = btn.getAttribute('data-timestamp') || '';
+            switch (action) {
+                // --- NOVA AÇÃO ---
+                case 'promote-cold-to-hot':
+                    modalHandlers.openPromoteColdToHotModal(protocolo);
+                    break;
+                // --- FIM DA NOVA AÇÃO ---
+                
+                case 'add-piece':
+                    modalHandlers.openAdicionarPecaProtocoloModal(protocolo, timestamp);
+                    break;
+                case 'consult-prep':
+                    // Consultar peças vinculadas ao protocolo, por ciclo
+                    modalHandlers.openVisualizarCargaModal(protocolo, tipoCiclo, timestamp);
+                    break;
+                case 'edit-protocol':
+                    // Abrir modal de edição de protocolo
+                    modalHandlers.openEditProtocolModal(protocolo);
+                    break;
+                case 'delete-row':
+                    // Chamar a função de exclusão com modal de confirmação
+                    handleExcluirLinha(protocolo, tipoCiclo, timestamp);
+                    break;
+                default:
+                    break;
+            }
+        });
     }
+},
 };
 
     // Listener para receber mensagens do backend (extension.ts)

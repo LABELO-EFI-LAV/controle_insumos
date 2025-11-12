@@ -2830,6 +2830,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         });
                     }
                     break;
+                    
                     // ==================== COMANDOS GRANULARES PARA ENSAIOS AGENDADOS ====================
 
                 case 'createScheduledAssay':
@@ -3962,6 +3963,47 @@ export async function activate(context: vscode.ExtensionContext) {
                             cargoPanel.webview.postMessage({ command: 'getAllProtocolosCargaResult', data: protocolos.map((p: any) => p.protocolo) });
                         } catch (err) {
                             handleError(err, 'ERRO AO BUSCAR PROTOCOLOS DE CARGA:');
+                        }
+                        break;
+                    case 'promoteColdToHot':
+                        try {
+                            if (!cargoManager) throw new Error('CargoManager não inicializado');
+                            
+                            const { protocolo, cycles_to_add } = message.data;
+                            
+                            // Chama a nova função no CargoManager
+                            const result = await cargoManager.promoteColdToHot(protocolo, cycles_to_add);
+
+                            // Envia o resultado da operação principal
+                            cargoPanel.webview.postMessage({ 
+                                command: 'pecaCargaOperationResult', 
+                                success: true, 
+                                message: `Protocolo ${protocolo} promovido com sucesso para ciclo quente!` 
+                            });
+
+                            // Notifica sobre peças vencidas, se houver
+                            if (result.pecasVencidas && result.pecasVencidas.length > 0) {
+                                cargoPanel.webview.postMessage({ 
+                                    command: 'pecasVencidasNotification', 
+                                    data: result.pecasVencidas 
+                                });
+                            }
+
+                            // Atualiza os gráficos (ativos e disponíveis) após a promoção
+                            const [updatedDistribution, updatedAvailableDistribution] = await Promise.all([
+                                cargoManager.getPecasCycleDistribution(),
+                                cargoManager.getAvailablePecasCycleDistribution()
+                            ]);
+                            cargoPanel.webview.postMessage({ command: 'pecasCycleDistributionResult', data: updatedDistribution });
+                            cargoPanel.webview.postMessage({ command: 'availablePecasCycleDistributionResult', data: updatedAvailableDistribution });
+                        
+                        } catch (err) {
+                            handleError(err, 'ERRO AO PROMOVER CARGA DE FRIO PARA QUENTE:');
+                            cargoPanel.webview.postMessage({ 
+                                command: 'pecaCargaOperationResult', 
+                                success: false, 
+                                error: err instanceof Error ? err.message : 'Erro desconhecido' 
+                            });
                         }
                         break;
 

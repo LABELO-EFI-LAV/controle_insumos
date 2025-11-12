@@ -4,6 +4,34 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
+[1.4.3] - 2025-11-12
+
+### Adicionado
+
+- **Tooltips Ricos no Cronograma:** Implementados tooltips detalhados para eventos de ensaio e calibração no Gantt, exibindo protocolo, fabricante, modelo, tensão, carga nominal, terminal/técnico, relatório, período e, quando aplicável, lotes/ciclos/umidade.
+- **Container Global de Tooltip:** Adicionado o elemento `#gantt-tooltip` em `webview/index.html` para exibição dos tooltips ricos com posicionamento dinâmico.
+- **Utilitário de Tooltip:** Criado módulo de tooltip em `webview/main.js` (`tooltip.showAssay`, `tooltip.showCalibration`, `tooltip.position`, `tooltip.hide`) para controlar renderização e posicionamento.
+- **Clique abre Modal:** Eventos do Gantt (ensaios e calibrações) agora abrem diretamente o modal de detalhes ao clicar no cartão.
+- **Promover carga:** Foi adicionada a função de "promover" as peças de carga do ciclo frio para o ciclo quente no módulo Controle de Carga
+- **Menu de Contexto:** Foi adicionado um botão nos elementos Gantt para exibir um menu contextual com opções como "Iniciar ensaio" e "Excluir".
+- **Alças de Elementos:** Foi adicionada a funcionalidade de alças nos elementos Gantt para alterar os dias de ensaio sem acessar o modal de detalhes.
+
+### Alterado
+
+- **Ação “Concluir ensaio” (Contexto/Modal):** O botão/ação passou a abrir o modal de relatório apenas para ensaios de segurança elétrica. Ensaios de eficiência mantêm o fluxo padrão de conclusão.
+- **Botões no Modal de Detalhes:** Ajustada a lógica dos botões de finalizar dentro do modal para respeitar o tipo do ensaio (segurança vs. eficiência) ao decidir entre abrir relatório ou finalizar.
+- **Relatório Ensaios de Segurança e Secadoras:** Agora é possível adicionar relatórios para ensaios de segurança elétrica e secadoras, com opções separadas no modal.
+
+### Removido
+
+- **Tooltips Antigos:** Removidos tooltips nativos e CSS antigos (atributo `title`, `data-tooltip` e estilo `::after` de calibração) para evitar duplicidade de informações.
+- **Atributos `title` nos Botões do Cartão:** Removidos `title` dos botões “Ver Detalhes” e “Menu de Opções” dos eventos do Gantt para eliminar tooltips do navegador.
+
+### Correções
+
+- **Conflito de Tooltips:** Eliminada exibição simultânea de tooltip antigo e novo, garantindo experiência consistente com apenas o tooltip rico.
+- **Posicionamento e Legibilidade:** Ajustes no auto-fit de texto e posicionamento do tooltip para manter legibilidade em diferentes tamanhos de cartão.
+
 [1.4.1] - 2025-11-24
 
 ### Adicionado

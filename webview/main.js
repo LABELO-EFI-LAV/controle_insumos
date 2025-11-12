@@ -1769,6 +1769,8 @@ const state = {
     ganttStart: new Date(),
     ganttEnd: new Date(),
     isDragging: false,
+    isResizing: false,
+    resizeDirection: null,
     dragTarget: null,
     dragOffset: { x: 0, y: 0 },
     initialAssay: null,
@@ -1818,6 +1820,7 @@ const DOM = {
     ganttHeaderContainer: document.getElementById('gantt-header-container'),
     ganttGridContainer: document.getElementById('gantt-grid-container'),
     ganttScrollContainer: document.getElementById('gantt-scroll-container'),
+    ganttTooltip: document.getElementById('gantt-tooltip'),
     ganttPeriodLabel: document.getElementById('gantt-period'),
     ganttGlobalSearchInput: document.getElementById('gantt-global-search'),
     passwordModal: document.getElementById('password-modal'),
@@ -1834,6 +1837,66 @@ const DOM = {
     loadingScreen: document.getElementById('loading-screen'),
     loadingStatus: document.getElementById('loading-status'),
     mainInterface: document.getElementById('main-interface')
+};
+
+// Tooltip utilitário para eventos do Gantt e calibrações
+const tooltip = {
+    showAssay(evt, assay) {
+        if (!DOM.ganttTooltip) return;
+        const terminalName = (typeof getTerminalName === 'function') ? getTerminalName(assay.setup) : (assay.setup || 'N/A');
+        const reportText = assay.report ? assay.report : 'Pendente';
+        const periodo = `${utils.formatDate(assay.startDate)} a ${utils.formatDate(assay.endDate)}`;
+        const html = `
+            <div class="space-y-1">
+                <div class="font-semibold">${assay.protocol || 'Sem protocolo'}</div>
+                <div class="text-[11px] opacity-80">${periodo}</div>
+                <div class="text-xs">Terminal: ${terminalName}</div>
+                <div class="text-xs">Relatório: ${reportText}</div>
+            </div>
+        `;
+        DOM.ganttTooltip.innerHTML = html;
+        DOM.ganttTooltip.classList.remove('hidden');
+        this.position(evt);
+    },
+    showCalibration(evt, calib) {
+        if (!DOM.ganttTooltip) return;
+        const periodo = `${utils.formatDate(calib.startDate)} a ${utils.formatDate(calib.endDate)}`;
+        const tipo = calib.protocol || 'Calibração';
+        const afetados = calib.affectedTerminals || 'Todos';
+        const html = `
+            <div class="space-y-1">
+                <div class="font-semibold">${tipo}</div>
+                <div class="text-[11px] opacity-80">${periodo}</div>
+                <div class="text-xs">Terminais afetados: ${afetados}</div>
+            </div>
+        `;
+        DOM.ganttTooltip.innerHTML = html;
+        DOM.ganttTooltip.classList.remove('hidden');
+        this.position(evt);
+    },
+    position(evt) {
+        if (!DOM.ganttTooltip) return;
+        const padding = 8;
+        let x = evt.clientX + 12;
+        let y = evt.clientY + 12;
+        // Temporariamente torna visível para obter dimensões corretas
+        const el = DOM.ganttTooltip;
+        const rect = el.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        if (x + rect.width + padding > vw) {
+            x = Math.max(padding, vw - rect.width - padding);
+        }
+        if (y + rect.height + padding > vh) {
+            y = Math.max(padding, vh - rect.height - padding);
+        }
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+    },
+    hide() {
+        if (!DOM.ganttTooltip) return;
+        DOM.ganttTooltip.classList.add('hidden');
+    }
 };
 
 // -----------------------------------------------------------------------------
@@ -2843,6 +2906,45 @@ const renderers = {
         }
     },
 
+    populateYearFilter: () => {
+        const yearFilterSelect = document.getElementById('dashboard-year-filter');
+        if (!yearFilterSelect) return;
+
+        // Encontra todos os anos únicos nos ensaios históricos
+        const years = new Set(
+            state.historicalAssays.map(assay => {
+                try {
+                    return new Date(assay.startDate + 'T00:00:00').getFullYear();
+                } catch (e) {
+                    return null;
+                }
+            }).filter(year => year) // Filtra nulos ou inválidos
+        );
+
+        // Ordena os anos (mais recente primeiro)
+        const sortedYears = Array.from(years).sort((a, b) => b - a);
+
+        // Limpa opções antigas e adiciona as novas
+        yearFilterSelect.innerHTML = '';
+        
+        // Adiciona a opção "Todos os Anos"
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = 'Todos os Anos';
+        yearFilterSelect.appendChild(allOption);
+
+        // Adiciona cada ano como uma opção
+        sortedYears.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearFilterSelect.appendChild(option);
+        });
+
+        // Seleciona o ano mais recente ou "Todos"
+        yearFilterSelect.value = sortedYears[0] ? sortedYears[0] : 'all';
+    },
+
     /** Renderiza a tabela de inventário com base no filtro. */
     renderInventoryTable: () => {
         const tbody = document.getElementById('inventory-table-body');
@@ -3350,13 +3452,18 @@ const renderers = {
                 const isMatch = searchUtils.matchesAssay(assay, state.ganttSearchQuery);
                 contentHTML = `
                     <div class="relative w-full h-full gantt-event-content">
-                        <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${assay.id}">
+                        <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" data-assay-id="${assay.id}">
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <line x1="12" y1="16" x2="12" y2="12"></line>
                                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
                             </svg>
                         </button>
+                        
+                        <button class="gantt-task-menu-trigger">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </button>
+
                         ${assay.type === 'férias' ?
                         `<div class="flex items-center justify-center w-full h-full p-1 text-white z-10">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 mr-2 flex-shrink-0">
@@ -3419,9 +3526,17 @@ const renderers = {
                 }
 
                 eventDiv.innerHTML = contentHTML;
-                eventDiv.title = `${assay.protocol} (${assay.startDate} a ${assay.endDate})`;
                 eventDiv.dataset.assayId = assay.id;
                 foregroundGrid.appendChild(eventDiv);
+
+                // Tooltips ricas e click para abrir modal
+                eventDiv.addEventListener('mouseenter', (e) => tooltip.showAssay(e, assay));
+                eventDiv.addEventListener('mousemove', (e) => tooltip.position(e));
+                eventDiv.addEventListener('mouseleave', () => tooltip.hide());
+                eventDiv.addEventListener('click', (e) => {
+                    if (e.target.closest('.gantt-task-menu-trigger')) return;
+                    modalHandlers.openViewGanttAssayModal(assay.id);
+                });
 
                 // Ajuste automático de tamanho do texto dentro do evento (shrink-to-fit)
                 (function autoFitEventText() {
@@ -3562,7 +3677,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
             calibDiv.innerHTML = `
                 <div class="relative w-full h-full flex items-center justify-center p-1 text-center text-white" style="writing-mode: vertical-rl; text-orientation: mixed;">
                     <span class="gantt-text font-semibold">${displayText}</span>
-                    <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" title="Ver Detalhes" data-assay-id="${calib.id}" data-is-calibration="true">
+                    <button class="btn-view-details absolute top-1 right-1 z-20 p-0.5 rounded-full bg-black bg-opacity-20 hover:bg-opacity-40 text-white transition-colors" data-assay-id="${calib.id}" data-is-calibration="true">
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -3571,11 +3686,18 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
                     </button>
                 </div>
             `;
+            // Tooltips para calibração e click abre modal
+            calibDiv.addEventListener('mouseenter', (e) => tooltip.showCalibration(e, calib));
+            calibDiv.addEventListener('mousemove', (e) => tooltip.position(e));
+            calibDiv.addEventListener('mouseleave', () => tooltip.hide());
+            calibDiv.addEventListener('click', () => {
+                modalHandlers.openViewGanttCalibrationModal(calib.id);
+            });
             if (isMatchCalib) {
                 calibDiv.classList.add('gantt-search-highlight');
             }
 
-            calibDiv.setAttribute('data-tooltip', calibrationInfo);
+            // Tooltip antigo removido: não definir atributos nativos
             calibrationContainer.appendChild(calibDiv);
 
             // Ajuste automático para texto de calibração (vertical): shrink-to-fit respeitando a escala herdada
@@ -3605,29 +3727,7 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
         });
 
         // adiciona css tooltip apenas 1x
-        if (!document.querySelector('style#calibration-tooltips')) {
-            const style = document.createElement('style');
-            style.id = 'calibration-tooltips';
-            style.textContent = `
-                .gantt-calibration-event:hover::after {
-                    content: attr(title);
-                    position: absolute;
-                    bottom: 100%;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background-color: rgba(0, 0, 0, 0.8);
-                    color: white;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    font-size: calc(0.75rem * var(--gantt-text-scale, 1));
-                    white-space: nowrap;
-                    z-index: 15;
-                    pointer-events: none;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-                }
-            `;
-            document.head.appendChild(style);
-        }
+        // Tooltip antigo via CSS (::after) removido para evitar conflitos com tooltip rico
 
         // ----------------------------------------------------
         // Callback opcional após renderização
@@ -3659,6 +3759,9 @@ renderDashboard: () => {
 
     const todayAssays = dashboardUtils.getTodayAssays();
     const upcomingAssays = dashboardUtils.getUpcomingAssays(10);
+
+    //Popula o filtro de ano com base nos ensaios históricos
+    renderers.populateYearFilter();
 
     // Atualiza a classe para um layout de 2 colunas para os cards superiores
     cardsContainer.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6';
@@ -3851,8 +3954,7 @@ chartContainers.forEach(container => {
 },
 
     /** Prepara os dados para os gráficos. */
-    prepareChartData: () => {
-        const allAssays = [...state.historicalAssays];
+    prepareChartData: (allAssays) => {
         const manufacturerData = allAssays.reduce((acc, assay) => {
             const manufacturer = assay.assayManufacturer;
             if (!acc[manufacturer]) {
@@ -3901,9 +4003,8 @@ chartContainers.forEach(container => {
      * Renderiza ou atualiza o gráfico de consumo por lote.
      * @param {string[]} allReagents - Lista de todos os reagentes.
      */
-    renderConsumptionByLotChart: (allReagents) => {
+    renderConsumptionByLotChart: (allReagents, allAssays) => {
         const consumptionByLot = {};
-        const allAssays = [...state.historicalAssays];
         allAssays.forEach(assay => {
             if (!assay.lots) return;
             
@@ -4062,9 +4163,8 @@ chartContainers.forEach(container => {
     },
 
     /** Renderiza ou atualiza o gráfico de ensaios ao longo do tempo. */
-    renderAssaysOverTimeChart: () => {
+    renderAssaysOverTimeChart: (allAssays) => {
         const monthlyAssayCounts = {};
-        const allAssays = [...state.historicalAssays];
         allAssays.forEach(assay => {
             const assayDate = utils.parseDate(assay.startDate);
             const yearMonth = `${assayDate.getFullYear()}-${(assayDate.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -4110,10 +4210,8 @@ chartContainers.forEach(container => {
     },
 
     /** Renderiza ou atualiza o gráfico de consumo mensal de reagentes. */
-    renderMonthlyConsumptionChart: () => {
+    renderMonthlyConsumptionChart: (allReagents, allAssays) => {
         const monthlyConsumption = {};
-        const allReagents = safeObjectKeys(REAGENT_COLORS || {});
-        const allAssays = [...state.historicalAssays];
         allAssays.forEach(assay => {
             const assayDate = utils.parseDate(assay.startDate);
             const yearMonth = `${assayDate.getFullYear()}-${(assayDate.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -4226,17 +4324,34 @@ chartContainers.forEach(container => {
         });
     },
 
-    /** Gerencia a criação e atualização de todos os gráficos. */
-    renderCharts: () => {
-        const allReagents = safeObjectKeys(REAGENT_COLORS || {});
-        const { manufacturerData } = renderers.prepareChartData();
-        renderers.renderConsumptionByLotChart(allReagents);
-        renderers.renderStockByLotChart(allReagents);
-        renderers.renderAssaysByManufacturerChart(manufacturerData);
-        renderers.renderConsumptionByManufacturerChart(manufacturerData, allReagents);
-        renderers.renderAssaysOverTimeChart();
-        renderers.renderMonthlyConsumptionChart();
-    },
+    // Em main.js, SUBSTITUA por esta versão
+renderCharts: () => {
+    // LÊ O FILTRO DE ANO
+    const selectedYear = document.getElementById('dashboard-year-filter')?.value;
+    
+    // FILTRA OS ENSAIOS COM BASE NO ANO
+    const allAssays = state.historicalAssays.filter(assay => {
+        if (!selectedYear || selectedYear === 'all') return true; // Mostra todos se "Todos os Anos"
+        try {
+            // Compara o ano do ensaio com o ano selecionado
+            return new Date(assay.startDate + 'T00:00:00').getFullYear() == selectedYear;
+        } catch (e) {
+            return false;
+        }
+    });
+
+    // O restante das funções agora usará 'allAssays' (a lista filtrada)
+    const allReagents = safeObjectKeys(REAGENT_COLORS || {});
+    
+    // PASSA os dados filtrados para as funções filhas
+    const { manufacturerData } = renderers.prepareChartData(allAssays);
+    renderers.renderConsumptionByLotChart(allReagents, allAssays); 
+    renderers.renderAssaysByManufacturerChart(manufacturerData);
+    renderers.renderConsumptionByManufacturerChart(manufacturerData, allReagents);
+    renderers.renderAssaysOverTimeChart(allAssays); 
+    renderers.renderMonthlyConsumptionChart(allReagents, allAssays); 
+    renderers.renderStockByLotChart(allReagents);
+},
 
     /**
      * Cria ou atualiza um gráfico Chart.js.
@@ -7335,6 +7450,7 @@ handleUpdateCalibration: (e) => {
             tensao: form.tensao?.value || 'N/A',
             startDate: form.startDate.value,
             endDate: form.endDate.value,
+            report: assayToEdit.report,
             setup: newSetup,
             status: form.status.value,
             type: 'secadora', // Sempre manter como secadora
@@ -7612,6 +7728,7 @@ handleUpdateCalibration: (e) => {
             setup: parseInt(setupInput.value, 10),
             status: 'aguardando',
             type: 'secadora',
+            report: 'Pendente',
             observacoes: observacoesInput?.value || '',
             cycles: parseInt(cyclesInput?.value) || 0,
             plannedSuppliers: {
@@ -8127,7 +8244,7 @@ openEditCalibrationModal: (calibrationId) => {
                     <p><span class="font-semibold">Tipo:</span> ${ASSAY_TYPE_MAP[assay.type] || 'N/A'}</p>
                     <p><span class="font-semibold">Data do Relatório:</span> ${assay.reportDate ? assay.reportDate.split('-').reverse().join('/') : 'N/A'}</p>
                     <p><span class="font-semibold">Relatório:</span> ${assay.report ? (assay.report === 'Pendente' ? '<span class="text-red-500">Pendente</span>' : assay.report) : '<span class="text-red-500">Pendente</span>'}</p>
-                    <p><span class="font-semibold">Observações:</span> ${assay.observacoes || 'N/A'}</p>
+                    <p><span class="font-semibold">Observações:</span> ${assay.observacoes || 'Nenhuma Observação'}</p>
                 </div>
                 <div class="flex justify-end space-x-2 pt-4 border-t">
                     ${dynamicButtonsHTML}
@@ -8167,7 +8284,18 @@ openEditCalibrationModal: (calibrationId) => {
             finishButtons.forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    modalHandlers.openFinishAssayModal(assayId, btn.dataset.status);
+                    const status = btn.dataset.status;
+                    if (status === 'concluido') {
+                        if (assay.type === 'seguranca-eletrica') {
+                            // Para ensaios de segurança, concluir abre o modal de relatório
+                            modalHandlers.openReportModalGantt(assayId);
+                        } else {
+                            // Para ensaios de eficiência, seguir fluxo padrão de conclusão
+                            modalHandlers.openFinishAssayModal(assayId, status);
+                        }
+                    } else {
+                        modalHandlers.openFinishAssayModal(assayId, status);
+                    }
                 });
             });
             
@@ -9075,16 +9203,43 @@ openEditCalibrationModal: (calibrationId) => {
             document.getElementById('view-dryer-model').textContent = assay.model || 'N/A';
             document.getElementById('view-dryer-nominal-load').textContent = assay.nominalLoad ? `${assay.nominalLoad} kg` : 'N/A';
             document.getElementById('view-dryer-humidity').textContent = assay.humidity ? `${assay.humidity}` : 'N/A';
-            document.getElementById('view-dryer-tensao').textContent = assay.tensao ? `${assay.tensao}V` : 'N/A';
+            document.getElementById('view-dryer-tensao').textContent = assay.tensao ? `${assay.tensao}` : 'N/A';
             document.getElementById('view-dryer-period').textContent = `${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}`;
             document.getElementById('view-dryer-terminal').textContent = assay.setup || 'N/A';
             document.getElementById('view-dryer-status').textContent = ASSAY_STATUS_MAP[assay.status] || assay.status || 'N/A';
-            document.getElementById('view-dryer-report').textContent = assay.reportIssued ? 'Sim' : 'Não';
+            // Número do Relatório: mostrar 'Pendente' quando vazio
+            document.getElementById('view-dryer-report-number').textContent = assay.report ? assay.report : 'Pendente';
+            // Emissão de Relatório: usar data prevista (reportDate) e mostrar 'N/A' quando vazio
+            const reportDateVal = assay.reportDate || assay.report_date;
+            document.getElementById('view-dryer-report').textContent = reportDateVal ? utils.formatDate(reportDateVal) : 'N/A';
             document.getElementById('view-dryer-observacoes').textContent = assay.observacoes || 'Nenhuma observação';
-
+            
+            
             // Configurar botões
             const editBtn = document.querySelector('.btn-edit-dryer-assay');
             const deleteBtn = document.querySelector('.btn-delete-dryer-assay');
+
+            const footer = editBtn.parentElement; 
+            const status = assay.status.toLowerCase();
+
+            // Só mostra o botão de relatório se o ensaio estiver concluído ou incompleto
+            if (status === 'concluido' || status === 'incompleto' || status === 'relatorio') {
+                const reportButton = document.createElement('button');
+                reportButton.className = 'btn-add-report-modal bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg flex items-center';
+                reportButton.dataset.id = assay.id;
+                reportButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                    ${assay.report && assay.report !== 'Pendente' ? 'Editar Relatório' : 'Adicionar Relatório'}
+                `;
+                
+                // Adiciona o botão de relatório antes do botão "Editar"
+                footer.insertBefore(reportButton, editBtn);
+                
+                // Reutiliza a função que já existe para os ensaios de eficiência
+                reportButton.addEventListener('click', () => {
+                    modalHandlers.openReportModalGantt(assay.id);
+                });
+            }
 
             if (editBtn) {
                 editBtn.addEventListener('click', () => {
@@ -9170,83 +9325,155 @@ const dragHandlers = {
      * Inicia o processo de arrastar uma tarefa.
      * @param {Event} e - O evento de `pointerdown`.
      */
-    handleDragStart: (e) => {
-        if (e.target.closest('.btn-view-details') || e.button !== 0) return;
+    // Em main.js, substitua esta função inteira:
+// Em main.js, SUBSTITUA por esta versão
+// Em main.js, SUBSTITUA por esta versão
+handleDragStart: (e) => {
+    // Ignora cliques que não sejam o botão esquerdo ou em botões internos
+if (e.target.closest('.btn-view-details') || e.target.closest('.gantt-task-menu-trigger') || e.button !== 0) return;
 
-        const originalTarget = e.target.closest('.gantt-event');
-        if (!originalTarget) return;
+    const originalTarget = e.target.closest('.gantt-event');
+    if (!originalTarget) return;
 
-        const assayId = parseInt(originalTarget.dataset.assayId, 10);
-        const assay = [...state.scheduledAssays, ...state.safetyScheduledAssays].find(a => a.id === assayId);
+    const assayId = parseInt(originalTarget.dataset.assayId, 10);
+    const assay = [...state.scheduledAssays, ...state.safetyScheduledAssays].find(a => a.id === assayId);
 
-        if (!assay || assay.type === 'férias') return;
+    // Não permite mover ou redimensionar férias
+    if (!assay || assay.type === 'férias') return;
 
-        e.preventDefault();
+    e.preventDefault();
 
-        // 1. Mede o elemento original
-        const targetRect = originalTarget.getBoundingClientRect();
+    // 1. Mede o elemento original
+    const targetRect = originalTarget.getBoundingClientRect();
+    const clickOffsetX = e.clientX - targetRect.left;
+    const handleWidth = 10; // Deve ser o mesmo valor do CSS
 
-        // 2. CRIA O "FANTASMA": Clona o elemento original
-        const ghost = originalTarget.cloneNode(true);
-        ghost.id = 'gantt-ghost-element'; // Atribui um ID para fácil remoção
-
-        // 3. ESTILIZA E POSICIONA O FANTASMA: Usa as medidas do original para posicionar o clone perfeitamente sobre ele.
-        Object.assign(ghost.style, {
-            left: `${targetRect.left}px`,
-            top: `${targetRect.top}px`,
-            width: `${targetRect.width}px`,
-            height: `${targetRect.height}px`,
-        });
-        document.body.appendChild(ghost); // Adiciona o fantasma ao corpo do documento
-
-        // 4. ATUALIZA O ESTADO: Agora, o alvo do arraste é o fantasma.
+    // 2. Define o ESTADO CORRETO (mover vs. redimensionar)
+    if (clickOffsetX < handleWidth) {
+        state.isResizing = true;
+        state.resizeDirection = 'left';
+    } else if (clickOffsetX > targetRect.width - handleWidth) {
+        state.isResizing = true;
+        state.resizeDirection = 'right';
+    } else {
         state.isDragging = true;
-        state.dragTarget = ghost; // O alvo agora é o fantasma!
-        state.originalDragTarget = originalTarget; // Guardamos uma referência ao original
-        state.initialAssay = { ...assay };
-        state.dragOffset = {
-            x: e.clientX - targetRect.left,
-            y: e.clientY - targetRect.top
-        };
-        
-        // 5. "Esconde" o elemento original, marcando sua posição de origem
-        originalTarget.classList.add('dragging-source');
+    }
 
-        document.body.style.userSelect = 'none';
-        document.body.style.cursor = 'grabbing';
-    },
+    // 3. CRIA O "FANTASMA"
+    const ghost = originalTarget.cloneNode(true);
+    ghost.id = 'gantt-ghost-element';
+    Object.assign(ghost.style, {
+        left: `${targetRect.left}px`,
+        top: `${targetRect.top}px`,
+        width: `${targetRect.width}px`,
+        height: `${targetRect.height}px`,
+    });
+    document.body.appendChild(ghost);
+
+    // 4. ATUALIZA O ESTADO (A LINHA COM ERRO FOI REMOVIDA DAQUI)
+    state.dragTarget = ghost;
+    state.originalDragTarget = originalTarget;
+    state.initialAssay = { ...assay };
+    state.dragOffset = {
+        x: e.clientX - targetRect.left,
+        y: e.clientY - targetRect.top
+    };
+    
+    // 5. "Esconde" o elemento original
+    originalTarget.classList.add('dragging-source');
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = state.isResizing ? 'ew-resize' : 'grabbing'; // Define o cursor correto
+},
 
     handleDrag: (e) => {
-        if (!state.isDragging || !state.dragTarget) return;
-        e.preventDefault();
+    if (!state.dragTarget) return;
+    e.preventDefault();
 
-        // Move o fantasma de acordo com o mouse e o offset inicial
+    if (state.isDragging) {
+        // Lógica de MOVER (existente)
         const newX = e.clientX - state.dragOffset.x;
         const newY = e.clientY - state.dragOffset.y;
         state.dragTarget.style.left = `${newX}px`;
         state.dragTarget.style.top = `${newY}px`;
-    },
 
-    handleDragEnd: (e) => {
-        if (!state.isDragging || !state.dragTarget) {
-            dragHandlers.resetDragState();
-            return;
+    } else if (state.isResizing) {
+        const ghostRect = state.dragTarget.getBoundingClientRect();
+        
+        if (state.resizeDirection === 'right') {
+            // Calcula a nova largura baseada na posição do mouse
+            const newWidth = e.clientX - ghostRect.left;
+            state.dragTarget.style.width = `${Math.max(DRAG_CONFIG.CELL_WIDTH, newWidth)}px`; // Garante largura mínima de 1 dia
+        } else if (state.resizeDirection === 'left') {
+            // Calcula a nova posição esquerda e a nova largura
+            const newLeft = e.clientX - state.dragOffset.x;
+            const originalRight = ghostRect.right + window.scrollX;
+            const newWidth = originalRight - (newLeft + window.scrollX);
+            
+            if (newWidth >= DRAG_CONFIG.CELL_WIDTH) {
+                state.dragTarget.style.left = `${newLeft}px`;
+                state.dragTarget.style.width = `${newWidth}px`;
+            }
         }
-        e.preventDefault();
+    }
+},
 
-        // Usa a posição final do FANTASMA para os cálculos
-        const finalRect = state.dragTarget.getBoundingClientRect();
+    // Em main.js, SUBSTITUA por esta versão
+// Em main.js, SUBSTITUA por esta versão
+handleDragEnd: (e) => {
+    // 1. Verifica se uma ação de arrastar OU redimensionar está ativa
+    if ((!state.isDragging && !state.isResizing) || !state.dragTarget) { // <-- CORREÇÃO AQUI
+        dragHandlers.resetDragState();
+        return;
+    }
+    e.preventDefault();
 
-        // A lógica de cálculo da nova posição continua a mesma
-        const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
-        const scrollLeft = DOM.ganttGridContainer.parentElement.scrollLeft;
+    // 2. Obtém as coordenadas finais do "fantasma"
+    const finalRect = state.dragTarget.getBoundingClientRect();
+    const containerRect = DOM.ganttGridContainer.getBoundingClientRect();
+    const scrollLeft = DOM.ganttGridContainer.parentElement.scrollLeft;
+
+    let assayArray, assayIndex;
+    let isSafetyAssay = false; 
+
+    // 3. Encontra o ensaio original que está sendo modificado
+    // CORREÇÃO: A lógica original para encontrar o ensaio estava errada.
+    let assay = state.scheduledAssays.find(a => a.id === state.initialAssay.id);
+    if (assay) {
+        assayArray = state.scheduledAssays;
+        assayIndex = assayArray.findIndex(a => a.id === state.initialAssay.id);
+        isSafetyAssay = false;
+    } else {
+        assay = state.safetyScheduledAssays.find(a => a.id === state.initialAssay.id);
+        if (assay) {
+            assayArray = state.safetyScheduledAssays;
+            assayIndex = assayArray.findIndex(a => a.id === state.initialAssay.id);
+            isSafetyAssay = true;
+        }
+    }
+
+    if (assayIndex === -1 || !assayArray) { // Verificação mais robusta
+        dragHandlers.resetDragState();
+        renderers.renderGanttChart();
+        return;
+    }
+
+    undoManager.saveState();
+
+    // ===============================================
+    // SEPARAÇÃO DA LÓGICA: MOVER VS. REDIMENSIONAR
+    // ===============================================
+
+    if (state.isDragging) {
+        // --- LÓGICA DE MOVER (O CÓDIGO QUE VOCÊ JÁ TINHA) ---
+        
         const relativeLeft = (finalRect.left - containerRect.left) + scrollLeft;
         const startDayIndex = Math.round(relativeLeft / DRAG_CONFIG.CELL_WIDTH);
-
-        // ... (o restante da lógica de cálculo de data e de linha permanece igual)
+        
         const firstDate = utils.parseDate(new Date(state.ganttStart).toISOString().split('T')[0]);
         const newStartDate = new Date(firstDate);
         newStartDate.setDate(newStartDate.getDate() + startDayIndex);
+        
         const originalStart = utils.parseDate(state.initialAssay.startDate);
         const originalEnd = utils.parseDate(state.initialAssay.endDate);
         const durationInMillis = originalEnd.getTime() - originalStart.getTime();
@@ -9261,58 +9488,84 @@ const dragHandlers = {
             }
         });
         
-        // ATUALIZA OS DADOS DO ENSAIO ORIGINAL (não do fantasma)
-        const currentIsSafety = state.safetyCategories.some(cat => cat.id === state.initialAssay.setup);
-        const assayIndex = (currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays).findIndex(a => a.id === state.initialAssay.id);
+        const updatedAssay = { ...assayArray[assayIndex] };
+        updatedAssay.startDate = newStartDate.toISOString().split('T')[0];
+        updatedAssay.endDate = newEndDate.toISOString().split('T')[0];
 
-        if (assayIndex !== -1) {
-            undoManager.saveState();
-            
-            const targetArray = currentIsSafety ? state.safetyScheduledAssays : state.scheduledAssays;
-            const updatedAssay = { ...targetArray[assayIndex] };
-            updatedAssay.startDate = newStartDate.toISOString().split('T')[0];
-            updatedAssay.endDate = newEndDate.toISOString().split('T')[0];
+        let newSetup = updatedAssay.setup;
+        let newIsSafety = isSafetyAssay;
+        let categoryChanged = false;
 
-            let newSetup = updatedAssay.setup;
-            let newIsSafety = currentIsSafety;
-            let categoryChanged = false;
-
-            if (newCategoryName) {
-                const destCategory = state.efficiencyCategories.find(c => c.name === newCategoryName) || 
-                                     state.safetyCategories.find(c => c.name === newCategoryName);
-                if (destCategory) { 
-                    newSetup = destCategory.id;
-                    newIsSafety = state.safetyCategories.some(c => c.id === newSetup);
-                    if (updatedAssay.status === 'pendente') updatedAssay.status = 'aguardando';
-                } else if (newCategoryName === 'Pendentes') {
-                    newSetup = null; 
-                    newIsSafety = false;
-                    updatedAssay.status = 'pendente';
-                }
+        if (newCategoryName) {
+            const destCategory = state.efficiencyCategories.find(c => c.name === newCategoryName) ||
+                                 state.safetyCategories.find(c => c.name === newCategoryName);
+            if (destCategory) { 
+                newSetup = destCategory.id;
+                newIsSafety = state.safetyCategories.some(c => c.id === newSetup);
+                if (updatedAssay.status === 'pendente') updatedAssay.status = 'aguardando';
+            } else if (newCategoryName === 'Pendentes') {
+                newSetup = null; 
+                newIsSafety = false;
+                updatedAssay.status = 'pendente';
             }
-            
-            updatedAssay.setup = newSetup;
-            categoryChanged = currentIsSafety !== newIsSafety;
-
-            if (categoryChanged) {
-                targetArray.splice(assayIndex, 1);
-                if (newIsSafety) {
-                    state.safetyScheduledAssays.push(updatedAssay);
-                } else {
-                    state.scheduledAssays.push(updatedAssay);
-                }
-            } else {
-                targetArray[assayIndex] = updatedAssay;
-            }
-
-            state.hasUnsavedChanges = true;
-            ui.toggleScheduleActions(true);
         }
         
-        // O reset vai remover o fantasma, e o re-render vai mostrar o item original na nova posição
-        dragHandlers.resetDragState();
-        renderers.renderGanttChart();
-    },
+        updatedAssay.setup = newSetup;
+        categoryChanged = isSafetyAssay !== newIsSafety;
+
+        if (categoryChanged) {
+            assayArray.splice(assayIndex, 1);
+            if (newIsSafety) {
+                state.safetyScheduledAssays.push(updatedAssay);
+            } else {
+                state.scheduledAssays.push(updatedAssay);
+            }
+        } else {
+            assayArray[assayIndex] = updatedAssay;
+        }
+
+    } else if (state.isResizing) {
+        // --- LÓGICA DE SALVAR REDIMENSIONAMENTO (ESTAVA FALTANDO) ---
+        
+        const updatedAssay = { ...assayArray[assayIndex] };
+        
+        if (state.resizeDirection === 'right') {
+            // Arrastando a alça direita: muda a data final
+            const newDurationDays = Math.max(1, Math.round(finalRect.width / DRAG_CONFIG.CELL_WIDTH));
+            const startDate = utils.parseDate(updatedAssay.startDate);
+            const newEndDate = new Date(startDate);
+            newEndDate.setDate(newEndDate.getDate() + newDurationDays - 1); // -1 porque o primeiro dia conta
+            
+            updatedAssay.endDate = newEndDate.toISOString().split('T')[0];
+
+        } else if (state.resizeDirection === 'left') {
+            // Arrastando a alça esquerda: muda a data inicial
+            const relativeLeft = (finalRect.left - containerRect.left) + scrollLeft;
+            const startDayIndex = Math.max(0, Math.round(relativeLeft / DRAG_CONFIG.CELL_WIDTH));
+            
+            const firstDate = utils.parseDate(new Date(state.ganttStart).toISOString().split('T')[0]);
+            const newStartDate = new Date(firstDate);
+            newStartDate.setDate(newStartDate.getDate() + startDayIndex);
+            
+            // Garante que a data de início não ultrapasse a data de fim
+            const endDate = utils.parseDate(updatedAssay.endDate);
+            if (newStartDate > endDate) {
+                updatedAssay.startDate = updatedAssay.endDate; // Define para o mesmo dia
+            } else {
+                updatedAssay.startDate = newStartDate.toISOString().split('T')[0];
+            }
+        }
+        
+        // Salva a atualização no array de estado
+        assayArray[assayIndex] = updatedAssay;
+    }
+
+    // 4. Finaliza a operação
+    state.hasUnsavedChanges = true;
+    ui.toggleScheduleActions(true);
+    dragHandlers.resetDragState();
+    renderers.renderGanttChart();
+},
 
     resetDragState: () => {
         // Remove o fantasma do DOM
@@ -9612,6 +9865,281 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.classList.remove('stock-alert-visible');
         });
     }
+    // --- LÓGICA DO MENU DE CONTEXTO ---
+    
+    const contextMenu = document.getElementById('gantt-context-menu');
+    const ganttScrollContainer = document.getElementById('gantt-scroll-container');
+    // Âncora atual do menu de contexto e controle de listeners
+    let activeContextMenuTrigger = null;
+    let contextMenuListenersAttached = false;
+
+    // Função para posicionar o menu próximo ao gatilho (seta)
+    const updateContextMenuPosition = () => {
+        if (!activeContextMenuTrigger || contextMenu.classList.contains('hidden')) return;
+        // Se o elemento âncora saiu do DOM (re-render), fecha o menu
+        if (!document.body.contains(activeContextMenuTrigger)) {
+            contextMenu.classList.add('hidden');
+            detachContextMenuListeners();
+            return;
+        }
+        const rect = activeContextMenuTrigger.getBoundingClientRect();
+
+        // Calcula posição preferida (à direita-alinhado e abaixo do gatilho)
+        const menuWidth = contextMenu.offsetWidth;
+        const menuHeight = contextMenu.offsetHeight;
+        let left = rect.left - menuWidth + rect.width;
+        let top = rect.bottom + 4;
+
+        // Mantém dentro da viewport horizontalmente
+        if (left < 0) left = rect.left; // cai para posicionar à esquerda do gatilho
+        if (left + menuWidth > window.innerWidth) left = Math.max(4, window.innerWidth - menuWidth - 4);
+
+        // Se não cabe abaixo, posiciona acima do gatilho
+        if (top + menuHeight > window.innerHeight) top = rect.top - menuHeight - 4;
+        if (top < 0) top = Math.max(4, rect.bottom + 4); // garante visibilidade mínima
+
+        contextMenu.style.left = `${left}px`;
+        contextMenu.style.top = `${top}px`;
+    };
+
+    const attachContextMenuListeners = () => {
+        if (contextMenuListenersAttached) return;
+        contextMenuListenersAttached = true;
+        // Reposiciona ao rolar página ou container
+        window.addEventListener('scroll', updateContextMenuPosition, { passive: true });
+        DOM.ganttGridContainer?.addEventListener('scroll', updateContextMenuPosition, { passive: true });
+        // O contêiner com overflow-x para o Gantt é o #gantt-scroll-container
+        ganttScrollContainer?.addEventListener('scroll', updateContextMenuPosition, { passive: true });
+        // Fallback para ancestrais caso a estrutura mude
+        DOM.ganttGridContainer?.parentElement?.addEventListener('scroll', updateContextMenuPosition, { passive: true });
+        // Reposiciona ao redimensionar
+        window.addEventListener('resize', updateContextMenuPosition, { passive: true });
+    };
+
+    const detachContextMenuListeners = () => {
+        if (!contextMenuListenersAttached) return;
+        contextMenuListenersAttached = false;
+        window.removeEventListener('scroll', updateContextMenuPosition);
+        DOM.ganttGridContainer?.removeEventListener('scroll', updateContextMenuPosition);
+        ganttScrollContainer?.removeEventListener('scroll', updateContextMenuPosition);
+        DOM.ganttGridContainer?.parentElement?.removeEventListener('scroll', updateContextMenuPosition);
+        window.removeEventListener('resize', updateContextMenuPosition);
+        activeContextMenuTrigger = null;
+    };
+    
+    // 1. Ouve cliques no contêiner do Gantt para ABRIR o menu
+    DOM.ganttGridContainer.addEventListener('click', (e) => {
+    const menuTrigger = e.target.closest('.gantt-task-menu-trigger');
+    if (!menuTrigger) return; // Se não clicou no gatilho, sai
+
+    e.preventDefault();
+    e.stopPropagation(); 
+
+    const targetElement = e.target.closest('.gantt-event');
+    if (!targetElement) return;
+
+    const assayId = parseInt(targetElement.dataset.assayId, 10);
+    const isCalibration = targetElement.classList.contains('gantt-calibration-event');
+    
+    let item;
+    if (isCalibration) {
+        item = state.calibrations.find(c => c.id === assayId);
+    } else {
+        item = [...state.scheduledAssays, ...state.safetyScheduledAssays].find(a => a.id === assayId);
+    }
+
+    if (!item) return;
+
+    // Armazena os dados no menu
+    contextMenu.dataset.itemId = assayId;
+    contextMenu.dataset.isCalibration = isCalibration;
+    
+    // --- NOVA LÓGICA DE EXIBIÇÃO DE BOTÕES ---
+
+    // Referências para os botões dinâmicos e padrão
+    const dynamicActions = contextMenu.querySelector('#context-menu-dynamic-actions');
+    const defaultActions = contextMenu.querySelector('#context-menu-default-actions');
+    
+    // Botões dinâmicos
+    const btnHere = contextMenu.querySelector('[data-action="here-assay"]');
+    const btnStart = contextMenu.querySelector('[data-action="start-assay"]');
+    const btnFinish = contextMenu.querySelector('[data-action="finish-assay"]');
+    const btnIncomplete = contextMenu.querySelector('[data-action="incomplete-assay"]');
+    const btnReport = contextMenu.querySelector('[data-action="add-report"]');
+    
+    // Botões padrão
+    const btnDuplicate = contextMenu.querySelector('[data-action="duplicate"]');
+    const btnPending = contextMenu.querySelector('[data-action="send-to-pending"]');
+
+    // 1. Esconde todos os botões dinâmicos por padrão
+    [btnHere, btnStart, btnFinish, btnIncomplete, btnReport].forEach(btn => btn.style.display = 'none');
+
+    // 2. Mostra/Esconde seções inteiras
+    if (isCalibration || item.type === 'férias') {
+        dynamicActions.style.display = 'none'; // Esconde todas as ações de status
+        btnDuplicate.style.display = 'none';
+        btnPending.style.display = 'none';
+    } else {
+        dynamicActions.style.display = 'block'; // Mostra o container de ações de status
+        
+        // 3. Mostra o botão de ação correto baseado no status
+        const status = item.status.toLowerCase();
+        switch (status) {
+            case 'aguardando':
+                btnHere.style.display = 'flex';
+                break;
+            case 'labelo':
+                btnStart.style.display = 'flex';
+                break;
+            case 'andamento':
+                btnFinish.style.display = 'flex';
+                btnIncomplete.style.display = 'flex';
+                break;
+            case 'concluido':
+            case 'incompleto':
+                btnReport.style.display = 'flex';
+                break;
+            // 'relatorio' ou 'pendente' não mostram botões de ação
+        }
+
+        // 4. Mostra/Esconde ações padrão
+        if (item.status === 'pendente') {
+            btnDuplicate.style.display = 'none';
+            btnPending.style.display = 'none';
+        } else {
+            btnDuplicate.style.display = 'flex';
+            btnPending.style.display = 'flex';
+        }
+    }
+
+    // ----- Posiciona e exibe o menu -----
+    activeContextMenuTrigger = menuTrigger;
+    contextMenu.classList.remove('hidden');
+    // Atualiza posição imediatamente e mantém ancorado em scroll/resize
+    updateContextMenuPosition();
+    attachContextMenuListeners();
+});
+
+    // 2. Ouve cliques NOS ITENS DO MENU para executar ações
+    contextMenu.addEventListener('click', (e) => {
+    const actionButton = e.target.closest('button');
+    if (!actionButton) return;
+
+    const action = actionButton.dataset.action;
+    const itemId = parseInt(contextMenu.dataset.itemId, 10);
+    const isCalibration = contextMenu.dataset.isCalibration === 'true';
+
+    if (isNaN(itemId)) return;
+
+    let item;
+    let isSafetyAssay = false;
+    if (isCalibration) {
+        item = state.calibrations.find(c => c.id === itemId);
+    } else {
+        item = state.scheduledAssays.find(a => a.id === itemId);
+        if (!item) {
+            item = state.safetyScheduledAssays.find(a => a.id === itemId);
+            isSafetyAssay = true;
+        }
+    }
+
+    if (!item) {
+        utils.showToast("Erro: Tarefa não encontrada.", true);
+        return;
+    }
+
+    // Executa a ação
+    switch (action) {
+        
+        // --- NOVAS AÇÕES DE STATUS ---
+        case 'here-assay':
+            dataHandlers.handleHereAssay(itemId);
+            break;
+        case 'start-assay':
+            dataHandlers.handleStartAssay(itemId);
+            break;
+        case 'finish-assay':
+            // Abrir relatório apenas para ensaios de segurança; eficiência segue fluxo padrão
+            if (isCalibration) {
+                // Calibração não deve abrir relatório
+                break;
+            }
+            if (isSafetyAssay || item.type === 'seguranca-eletrica') {
+                modalHandlers.openReportModalGantt(itemId);
+            } else {
+                modalHandlers.openFinishAssayModal(itemId, 'concluido');
+            }
+            break;
+        case 'incomplete-assay':
+            modalHandlers.openFinishAssayModal(itemId, 'incompleto');
+            break;
+        case 'add-report':
+            modalHandlers.openReportModalGantt(itemId);
+            break;
+
+        // --- AÇÕES PADRÃO (EXISTENTES) ---
+        case 'edit':
+            if (isCalibration) {
+                modalHandlers.openEditCalibrationModal(item.id);
+            } else if (item.type === 'férias') {
+                modalHandlers.openEditVacationModal(item.id);
+            } else if (item.type === 'seguranca-eletrica') {
+                modalHandlers.openEditSafetyAssayModal(item.id);
+            } else if (item.type === 'secadora') {
+                modalHandlers.openEditDryerAssayModal(item.id);
+            } else {
+                modalHandlers.openEditGanttAssayModal(item.id);
+            }
+            break;
+
+        case 'duplicate':
+            dragHandlers.duplicateAssay(item);
+            break;
+
+        case 'send-to-pending':
+            undoManager.saveState();
+            item.status = 'pendente';
+            item.setup = null;
+            if (isSafetyAssay) {
+                const index = state.safetyScheduledAssays.findIndex(a => a.id === itemId);
+                const [movedAssay] = state.safetyScheduledAssays.splice(index, 1);
+                state.scheduledAssays.push(movedAssay);
+            }
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+            utils.showToast(`Tarefa '${item.protocol}' movida para Pendentes.`);
+            break;
+
+        case 'delete':
+            const message = `Tem a certeza de que deseja excluir a tarefa "${item.protocol}"?`;
+            ui.showConfirmationModal(message, () => {
+                dataHandlers.handleDeleteGanttItem(item.id);
+            });
+            break;
+    }
+
+    // Esconde o menu após a ação
+    contextMenu.classList.add('hidden');
+    detachContextMenuListeners();
+});
+
+    // 3. FECHA o menu ao clicar em qualquer outro lugar
+    document.addEventListener('click', (e) => {
+        // Se o clique não foi no menu E não foi em um gatilho de menu, esconde-o
+        if (!contextMenu.contains(e.target) && !e.target.closest('.gantt-task-menu-trigger')) {
+            contextMenu.classList.add('hidden');
+            detachContextMenuListeners();
+        }
+    });
+
+    // Listener para o filtro de ano do Dashboard
+    document.getElementById('dashboard-year-filter')?.addEventListener('change', () => {
+
+        const allReagents = safeObjectKeys(REAGENT_COLORS || {});
+        // Apenas re-renderiza os gráficos, não o dashboard inteiro
+        renderers.renderCharts();
+    });
 
     
     // Inicializa sistema de cache

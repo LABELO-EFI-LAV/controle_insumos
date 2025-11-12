@@ -231,6 +231,70 @@ export class CargoManager implements ICargoManager, IModuleDatabase {
         };
     }
 
+    /**
+     * Promove peças de um protocolo de ciclo frio para ciclo quente.
+     * 1. Adiciona ciclos às peças do ciclo frio.
+     * 2. Desvincula as peças do ciclo frio.
+     * 3. Re-vincula as peças (que ainda estão ativas) ao ciclo quente do MESMO protocolo.
+     */
+    async promoteColdToHot(protocolo: string, cycles_to_add: number): Promise<{ pecasPromovidas: any[], pecasVencidas: any[] }> {
+        const pecasPromovidas: any[] = [];
+        const pecasVencidas: any[] = [];
+
+        await this.runTransaction(async () => {
+            // 1. Encontrar peças do ciclo frio ativo
+            const pecasFrias = await this.runQuery(`
+                SELECT pc.id as peca_id, pc.tag_id, pc.type, pc.cycles, pc.status
+                FROM carga_ensaio ce
+                JOIN pecas_carga pc ON ce.peca_id = pc.id
+                WHERE ce.protocolo = ? AND ce.tipo_ciclo = ? AND ce.vinculo_status = 'ativo'
+            `, [protocolo, 'frio']);
+
+            if (pecasFrias.length === 0) {
+                throw new Error('Nenhuma peça ativa encontrada no ciclo frio para este protocolo.');
+            }
+
+            for (const peca of pecasFrias) {
+                const newCycles = peca.cycles + cycles_to_add;
+                let newStatus = 'ativa';
+
+                // 2. Verificar se a peça venceu
+                if (newCycles >= 80) {
+                    newStatus = 'inativa';
+                    pecasVencidas.push({
+                        tag_id: peca.tag_id,
+                        type: peca.type,
+                        cycles: newCycles
+                    });
+                }
+
+                // 3. Atualizar a peça (ciclos e status)
+                await this.runQuery(
+                    'UPDATE pecas_carga SET cycles = ?, status = ?, status_updated_date = datetime(\'now\') WHERE id = ?',
+                    [newCycles, newStatus, peca.peca_id]
+                );
+
+                // 4. Desvincular do ciclo frio
+                await this.runQuery(
+                    'UPDATE carga_ensaio SET vinculo_status = "desvinculado" WHERE protocolo = ? AND peca_id = ? AND tipo_ciclo = ? AND vinculo_status = "ativo"',
+                    [protocolo, peca.peca_id, 'frio']
+                );
+
+                // 5. Vincular ao ciclo quente (APENAS se a peça não venceu)
+                if (newStatus === 'ativa') {
+                    await this.runQuery(
+                        `INSERT INTO carga_ensaio (protocolo, peca_id, tipo_ciclo, vinculo_status, ciclos_no_vinculo, created_at)
+                         VALUES (?, ?, 'quente', 'ativo', ?, datetime('now'))`,
+                        [protocolo, peca.peca_id, newCycles]
+                    );
+                    pecasPromovidas.push({ tag_id: peca.tag_id, cycles: newCycles });
+                }
+            }
+        });
+
+        return { pecasPromovidas, pecasVencidas };
+    }
+
     async addPeca(peca: { tag_id: string; type: string; acquisition_date?: string }): Promise<number> {
         const sql = `
             INSERT INTO pecas_carga (
@@ -959,17 +1023,21 @@ export class CargoManager implements ICargoManager, IModuleDatabase {
                     WHEN SUM(CASE WHEN vinculo_status = 'ativo' THEN 1 ELSE 0 END) > 0 THEN 'ativo'
                     ELSE 'desvinculado'
                 END as vinculo_status,
+                
                 COUNT(CASE WHEN tipo_ciclo = 'frio' AND vinculo_status = 'ativo' THEN 1 END) as ciclo_frio_count,
                 COUNT(CASE WHEN tipo_ciclo = 'quente' AND vinculo_status = 'ativo' THEN 1 END) as ciclo_quente_count,
                 COUNT(CASE WHEN vinculo_status = 'ativo' THEN 1 END) as total_pecas,
+                
                 CASE 
-                    WHEN COUNT(CASE WHEN tipo_ciclo = 'frio' AND vinculo_status = 'ativo' THEN 1 END) > 0 THEN 'Disponível'
+                    WHEN COUNT(CASE WHEN tipo_ciclo = 'frio' THEN 1 END) > 0 THEN 'Disponível'
                     ELSE 'Não disponível'
                 END as ciclo_frio_status,
+                
                 CASE 
-                    WHEN COUNT(CASE WHEN tipo_ciclo = 'quente' AND vinculo_status = 'ativo' THEN 1 END) > 0 THEN 'Disponível'
+                    WHEN COUNT(CASE WHEN tipo_ciclo = 'quente' THEN 1 END) > 0 THEN 'Disponível'
                     ELSE 'Não disponível'
                 END as ciclo_quente_status,
+                
                 datetime(MAX(created_at)) as ensaio_data
             FROM carga_ensaio
             GROUP BY protocolo

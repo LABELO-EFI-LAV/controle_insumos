@@ -1314,3 +1314,98 @@ aside:hover .nav-link span {
 #dashboard-assays-table table tr:hover td:nth-child(-n+4) {
     background-color: #f3f4f6; /* Cor do seu hover:bg-gray-100 */
 }
+
+/* Adiciona alças de redimensionamento às tarefas do Gantt */
+.gantt-event::before,
+.gantt-event::after {
+    content: '';
+    position: relative;
+    top: 0;
+    width: 10px; /* Largura da área de clique */
+    height: 100%;
+    z-index: 20; /* Garante que esteja acima do conteúdo do evento */
+}
+
+/* Alça Esquerda */
+.gantt-event::before {
+    left: 0;
+    cursor: ew-resize; /* Cursor de redimensionamento horizontal */
+}
+
+/* Alça Direita */
+.gantt-event::after {
+    right: 0;
+    cursor: ew-resize;
+}
+
+/* Opcional: Feedback visual ao arrastar a alça */
+.gantt-event.is-resizing {
+    opacity: 0.7;
+    border-style: dashed;
+}
+/* Estilos para o Menu de Contexto */
+.gantt-context-menu-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    color: #374151; 
+}
+.gantt-context-menu-item:hover {
+    background-color: #f3f4f6; /* bg-gray-100 */
+}
+.gantt-context-menu-item svg {
+    margin-right: 10px;
+    opacity: 0.7;
+}
+.gantt-context-menu-item.text-red-600:hover {
+    background-color: #fef2f2; /* bg-red-50 */
+}
+
+/* NOVO: Botão-seta (Gatilho do Menu) */
+.gantt-task-menu-trigger {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    z-index: 21; /* Acima do botão "info" */
+    padding: 2px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.gantt-task-menu-trigger:hover {
+    background-color: rgba(0, 0, 0, 0.4);
+}
+.gantt-task-menu-trigger svg {
+    width: 12px;
+    height: 12px;
+    stroke: white;
+    stroke-width: 2.5;
+    pointer-events: none; /* Garante que o clique seja no botão */
+}
+
+/* Ajuste no botão "info" para não sobrepor */
+.gantt-event-content .btn-view-details {
+    top: 2px;
+    right: 2px;
+    z-index: 20;
+}
+.gantt-context-menu-item[data-action="here-assay"] { color: #D97706; } /* Amarelo Escuro */
+.gantt-context-menu-item[data-action="start-assay"] { color: #374151; } /* Cinza */
+.gantt-context-menu-item[data-action="finish-assay"] { color: #16A34A; } /* Verde */
+.gantt-context-menu-item[data-action="incomplete-assay"] { color: #F59E0B; } /* Laranja */
+.gantt-context-menu-item[data-action="add-report"] { color: #7C3AED; } /* Roxo */
+
+.gantt-context-menu-item[data-action="here-assay"]:hover { background-color: #FFFBEB; }
+.gantt-context-menu-item[data-action="start-assay"]:hover { background-color: #F3F4F6; }
+.gantt-context-menu-item[data-action="finish-assay"]:hover { background-color: #F0FDF4; }
+.gantt-context-menu-item[data-action="incomplete-assay"]:hover { background-color: #FFF7ED; }
+.gantt-context-menu-item[data-action="add-report"]:hover { background-color: #F5F3FF; }
