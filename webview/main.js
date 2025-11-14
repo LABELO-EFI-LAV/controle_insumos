@@ -1866,12 +1866,14 @@ const tooltip = {
         const terminalName = (typeof getTerminalName === 'function') ? getTerminalName(assay.setup) : (assay.setup || 'N/A');
         const reportText = assay.report ? assay.report : 'Pendente';
         const periodo = `${utils.formatDate(assay.startDate)} a ${utils.formatDate(assay.endDate)}`;
+        const obsText = assay.observacoes ? assay.observacoes : 'Nenhuma observação';    
         const html = `
             <div class="space-y-1">
                 <div class="font-semibold">${assay.protocol || 'Sem protocolo'}</div>
                 <div class="text-[11px] opacity-80">${periodo}</div>
                 <div class="text-xs">Terminal: ${terminalName}</div>
                 <div class="text-xs">Relatório: ${reportText}</div>
+                <div class="text-xs">Observações: ${obsText}</div>
             </div>
         `;
         DOM.ganttTooltip.innerHTML = html;

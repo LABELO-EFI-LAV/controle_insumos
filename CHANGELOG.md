@@ -3,6 +3,11 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
+[1.4.5] - 2025-11-14
+
+### Alterado
+
+- **Tooltip de Ensaios e Calibrações:** Adicionado suporte para exibir observações e relatórios nos tooltips do Gantt.
 
 [1.4.4] - 2025-11-14
 
