@@ -771,7 +771,7 @@ function generateTable3(doc: any, assays: any[], inventory: any[], startY: numbe
     doc.fontSize(10)
        .font('Helvetica')
        .fillColor('#6b7280')
-       .text('Detalhamento do consumo de reagentes por fornecedor e lote, incluindo quantidade consumida, estoque atual e data de validade, facilitando o controle de inventário.', 50, startY + 25, {
+       .text('Detalhamento do consumo de reagentes por fornecedor e lote, incluindo quantidade consumida, facilitando o controle de inventário.', 50, startY + 25, {
            width: 500,
            align: 'justify'
        });

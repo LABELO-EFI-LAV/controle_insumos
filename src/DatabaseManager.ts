@@ -2387,6 +2387,17 @@ export class DatabaseManager {
     }
 
     /**
+     * Atualiza um feriado existente (operação granular)
+     */
+    async updateHoliday(holiday: { id: number; name: string; startDate: string; endDate: string }): Promise<void> {
+        await this.runQuery(
+            `UPDATE holidays SET name = ?, start_date = ?, end_date = ? WHERE id = ?`,
+            [holiday.name, holiday.startDate, holiday.endDate, holiday.id]
+        );
+        this.incrementalBackup.logChange('holidays', 'UPDATE', holiday.id, undefined, holiday);
+    }
+
+    /**
      * Adiciona um novo usuário do sistema (operação otimizada com validação)
      */
     async addSystemUser(user: any): Promise<string> {

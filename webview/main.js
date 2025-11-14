@@ -3,6 +3,24 @@
 // -----------------------------------------------------------------------------
 
 // Aplicação iniciada
+document.addEventListener('DOMContentLoaded', () => {
+  const savedTheme = localStorage.getItem('labcontrol-theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+  document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+  const toggleBtn = document.getElementById('theme-toggle');
+  const setIcon = () => { if (!toggleBtn) return; toggleBtn.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙'; };
+  setIcon();
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('labcontrol-theme', isDark ? 'dark' : 'light');
+      setIcon();
+      if (renderers && typeof renderers.renderDashboard === 'function') renderers.renderDashboard();
+      if (renderers && typeof renderers.renderGanttChart === 'function') renderers.renderGanttChart();
+    });
+  }
+});
 
 /**
  * Função segura para obter chaves de objetos
@@ -433,7 +451,7 @@ const notificationSystem = {
             verticalPosition += rect.height + spacing;
         });
         
-        toast.className = `fixed right-5 max-w-md bg-white border-l-4 rounded-lg shadow-xl z-50 transform translate-x-full transition-all duration-300 ease-in-out`;
+        toast.className = `fixed right-5 max-w-md bg-white border-l-4 rounded-lg shadow-xl z-50 transform translate-x-full transition-all duration-300 ease-in-out no-dark`;
         toast.style.bottom = `${verticalPosition}px`;
         
         // Define cor baseada no tipo
@@ -464,9 +482,9 @@ const notificationSystem = {
                     </div>
                     <div class="ml-4 flex-1">
                         <h4 class="text-base font-semibold text-gray-900 mb-2">${notification.title}</h4>
-                        <div class="text-sm text-gray-700 leading-relaxed mb-3">${formattedMessage}</div>
+                        <div class="text-sm text-black leading-relaxed mb-3">${formattedMessage}</div>
                         <div class="flex items-center justify-between">
-                            <p class="text-xs text-gray-500">${notification.timestamp.toLocaleString()}</p>
+                            <p class="text-xs text-black">${notification.timestamp.toLocaleString()}</p>
                             ${notification.actionButton ? `
                                 <button class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md font-medium" onclick="${notification.actionButton.action.toString()}(); notificationSystem.removeToast(this.closest('.fixed'));">
                                     ${notification.actionButton.text}
@@ -1786,6 +1804,8 @@ const state = {
     ganttRowHeighLevel: 80,
     // Busca global no Gantt
     ganttSearchQuery: '',
+    // Paginação de tabelas de ensaios
+    assaysPagination: { dashboard: { page: 1 }, assays: { page: 1 }, pageSize: 10 },
 };
 
 // Referências do DOM
@@ -2989,7 +3009,7 @@ const renderers = {
             <table class="min-w-full bg-white">
                 <thead class="bg-gray-800 text-white sticky top-0 z-10">
                     <tr>
-                        <th class="fixedtext-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Protocolo</th>
+                        <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Protocolo</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Orçamento</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Fabricante</th>
                         <th class="text-left py-3 px-4 uppercase font-semibold text-sm whitespace-nowrap">Modelo</th>
@@ -3156,9 +3176,14 @@ const renderers = {
                         <span class="font-semibold">${holiday.name}</span>
                         <span class="text-sm text-gray-600 ml-2">(${dateText})</span>
                     </div>
-                    <button class="btn-remove-holiday text-red-500 hover:text-red-700" data-id="${holiday.id}" title="Remover Feriado">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button class="btn-edit-holiday text-blue-500 hover:text-blue-700" data-id="${holiday.id}" title="Editar">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button class="btn-remove-holiday text-red-500 hover:text-red-700" data-id="${holiday.id}" title="Remover Feriado">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
                 `;
                 listElement.appendChild(li);
             });
@@ -3277,10 +3302,10 @@ const renderers = {
             else if (isHoliday) { dayClass = 'bg-red-300'; } 
             else if (isWeekend) { dayClass = 'bg-gray-300'; }
 
-            const dayBorderClass = index === 0 ? '' : 'border-l border-black';
+            const dayBorderClass = index === 0 ? '' : 'border-l border-grid';
             daysHtml.push(`
                 <div 
-                    class="flex flex-col items-center justify-center ${dayBorderClass} border-r border-black font-semibold leading-none h-[40px] ${dayClass}" 
+                    class="flex flex-col items-center justify-center ${dayBorderClass} border-r border-grid font-semibold leading-none h-[40px] ${dayClass}" 
                     data-date="${dateStr}"
                 >
                     <span class="text-gray-900" style="font-size: calc(10px * var(--gantt-text-scale, 1));">${dayOfWeek}</span>
@@ -3288,12 +3313,12 @@ const renderers = {
                 </div>
             `);
         });
-        if (daysInMonthCount > 0) { monthsHtml.push(`<div class="text-center font-bold text-gray-700 border-l border-black h-[20px]" style="grid-column: span ${daysInMonthCount};">${monthsHtml.pop()}</div>`); }
+        if (daysInMonthCount > 0) { monthsHtml.push(`<div class="text-center font-bold text-gray-700 h-[20px]" style="grid-column: span ${daysInMonthCount};">${monthsHtml.pop()}</div>`); }
 
         const totalGanttWidth = days.length * ganttColumnWidth;
         DOM.ganttHeaderContainer.innerHTML = `<div class="gantt-month-header-row grid bg-white z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${monthsHtml.join('')}</div><div class="gantt-days-header-row grid bg-gray-50 z-10" style="grid-template-columns: repeat(${days.length}, ${ganttColumnWidth}px);">${daysHtml.join('')}</div>`;
         DOM.ganttHeaderContainer.style.width = `${totalGanttWidth}px`;
-        DOM.ganttHeaderContainer.classList.add('border-b-2', 'border-black');
+        DOM.ganttHeaderContainer.classList.add('border-b-2', 'border-grid');
         if (DOM.ganttPeriodLabel) {
             DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
         }
@@ -3413,8 +3438,10 @@ const renderers = {
                 const isWeekend = ['SÁB', 'DOM'].includes(dayOfWeek);
                 const isHoliday = utils.isHoliday(day);
                 let backgroundClass = 'bg-white';
-                if (isToday) { backgroundClass = 'bg-yellow-500'; } else if (isWeekend || isHoliday) { backgroundClass = 'bg-gray-200'; }
-                dayCell.className = `h-full border-r border-black ${backgroundClass}`;
+                if (isToday) { backgroundClass = 'bg-yellow-500'; }
+                else if (isHoliday) { backgroundClass = 'bg-red-300'; }
+                else if (isWeekend) { backgroundClass = 'bg-gray-300'; }
+                dayCell.className = `h-full border-r border-grid ${backgroundClass}`;
                 backgroundGrid.appendChild(dayCell);
             });
 
@@ -3812,19 +3839,19 @@ renderDashboard: () => {
     // Card: Ensaios em andamento hoje
     const todayAssaysHTML = todayAssays.length > 0 ?
     todayAssays.map(assay => `
-        <div class="${getStatusCardBackground(assay.status, assay.type)} p-3 rounded-lg mb-2 border-l-4 ${getStatusBorderColor(assay.status)}">
+        <div class="${getStatusCardBackground(assay.status, assay.type)} p-3 rounded-lg mb-2 border border-gray-200 dark:border-gray-500 border-l-4 ${getStatusBorderColor(assay.status)}">
             <div class="flex justify-between items-start">
                 <div class="flex-1">
-                    <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">${assay.protocol}</h4>
-                    <p class="text-xs text-gray-600">${getTerminalName(assay.setup)}</p>
-                    <p class="text-xs text-gray-500">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
+                    <h4 class="font-semibold ${getStatusTextColor(assay.status, assay.type)} text-sm truncate" title="${assay.protocol}">${assay.protocol}</h4>
+                    <p class="text-xs ${getStatusTextColor(assay.status, assay.type)}">${getTerminalName(assay.setup)}</p>
+                    <p class="text-xs ${getStatusTextColor(assay.status, assay.type)}">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
                 </div>
-                <span class="text-xs px-2 py-1 rounded-full ${getStatusBadgeClass(assay.status, assay.type)}">
+                <span class="status-badge text-xs px-2 py-1 rounded-full ${getStatusBadgeClass(assay.status, assay.type)}">
                     ${ASSAY_STATUS_MAP[assay.status.toLowerCase()] || assay.status}
                 </span>
             </div>
             <div class="mt-2 flex justify-between items-center text-xs">
-                <span class="text-gray-600">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
+                <span class="${getStatusTextColor(assay.status, assay.type)}">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
                 <button class="btn-view-details text-blue-500 hover:text-blue-700" data-assay-id="${assay.id}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -3867,21 +3894,21 @@ if (upcomingAssays.length > 0) {
 
 
 upcomingAssaysHTML += `
-    <div class="${cardBackground} p-3 rounded-lg mb-2 border-l-4 ${borderColor}">
+    <div class="${cardBackground} p-3 rounded-lg mb-2 border border-gray-200 dark:border-gray-500 border-l-4 ${borderColor}">
         <div class="flex justify-between items-start">
             <div class="flex-1">
-                <h4 class="font-semibold text-gray-600 text-sm truncate" title="${assay.protocol}">
+                <h4 class="font-semibold ${getStatusTextColor(assay.status, assay.type)} text-sm truncate" title="${assay.protocol}">
                     ${assay.protocol}
                 </h4>
-                <p class="text-xs text-gray-600">${getTerminalName(assay.setup)}</p>
-                <p class="text-xs text-gray-500 truncate">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
+                <p class="text-xs ${getStatusTextColor(assay.status, assay.type)}">${getTerminalName(assay.setup)}</p>
+                <p class="text-xs ${getStatusTextColor(assay.status, assay.type)} truncate">${assay.assayManufacturer || 'N/A'} - ${assay.model || 'N/A'}</p>
             </div>
-            <span class="text-xs px-2 py-1 rounded-full ${statusClass}">
+            <span class="status-badge text-xs px-2 py-1 rounded-full ${statusClass}">
                 ${ASSAY_STATUS_MAP[assay.status.toLowerCase()] || assay.status}
             </span>
         </div>
         <div class="mt-2 flex justify-between items-center text-xs">
-            <span class="text-gray-600">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
+            <span class="${getStatusTextColor(assay.status, assay.type)}">${utils.formatDate(assay.startDate)} - ${utils.formatDate(assay.endDate)}</span>
             <button class="btn-view-details text-blue-500 hover:text-blue-700" data-assay-id="${assay.id}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -4113,13 +4140,30 @@ chartContainers.forEach(container => {
                         padding: 15,
                         font: {
                             size: window.innerWidth < 768 ? 10 : 12
-                        }
+                        },
+                        color: (document.documentElement.classList.contains('dark') ? '#f8fafc' : '#111')
                     }
                 },
                 tooltip: {
                     enabled: true,
                     mode: 'index',
-                    intersect: false
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                if (context.dataset.label && context.dataset.label.includes('Quantidade')) {
+                                    label += Math.round(context.parsed.y) + ' un';
+                                } else if (context.dataset.label && context.dataset.label.includes('Consumo')) {
+                                    label += Math.round(context.parsed.y) + ' g';
+                                } else {
+                                    label += Math.round(context.parsed.y);
+                                }
+                            }
+                            return label;
+                        }
+                    }
                 },
                 datalabels: {
                     display: false
@@ -4383,6 +4427,8 @@ renderCharts: () => {
         }
         
         // Configurações padrão para todos os gráficos com interatividade melhorada
+        const isDarkTheme = document.documentElement.classList.contains('dark');
+        const gridColor = isDarkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)';
         const defaultOptions = {
             responsive: true,
             maintainAspectRatio: false,
@@ -4431,6 +4477,7 @@ renderCharts: () => {
                             size: 12,
                             weight: '500'
                         },
+                        color: (document.documentElement.classList.contains('dark') ? '#f8fafc' : '#111'),
                         generateLabels: function(chart) {
                             const original = Chart.defaults.plugins.legend.labels.generateLabels;
                             const labels = original.call(this, chart);
@@ -4481,11 +4528,11 @@ renderCharts: () => {
                             if (context.parsed.y !== null) {
                                 // Formatação personalizada baseada no tipo de dado
                                 if (context.dataset.label && context.dataset.label.includes('Quantidade')) {
-                                    label += context.parsed.y + ' un';
+                                    label += Math.round(context.parsed.y) + ' un';
                                 } else if (context.dataset.label && context.dataset.label.includes('Consumo')) {
-                                    label += context.parsed.y + ' g';
+                                    label += Math.round(context.parsed.y) + ' g';
                                 } else {
-                                    label += context.parsed.y;
+                                    label += Math.round(context.parsed.y);
                                 }
                             }
                             return label;
@@ -4498,42 +4545,13 @@ renderCharts: () => {
                              return `Percentual: ${percentage}%`;
                          }
                      }
-                 },
-                 zoom: {
-                     zoom: {
-                         wheel: {
-                             enabled: true,
-                             speed: 0.1
-                         },
-                         pinch: {
-                             enabled: true
-                         },
-                         mode: 'xy',
-                         scaleMode: 'xy'
-                     },
-                     pan: {
-                         enabled: true,
-                         mode: 'xy',
-                         rangeMin: {
-                             x: null,
-                             y: null
-                         },
-                         rangeMax: {
-                             x: null,
-                             y: null
-                         }
-                     },
-                     limits: {
-                         x: {min: 'original', max: 'original'},
-                         y: {min: 'original', max: 'original'}
-                     }
-                 }
-             },
+                }
+            },
             scales: {
                 x: {
                     grid: {
                         display: true,
-                        color: 'rgba(0, 0, 0, 0.1)',
+                        color: gridColor,
                         lineWidth: 1
                     },
                     ticks: {
@@ -4547,7 +4565,7 @@ renderCharts: () => {
                 y: {
                     grid: {
                         display: true,
-                        color: 'rgba(0, 0, 0, 0.1)',
+                        color: gridColor,
                         lineWidth: 1
                     },
                     ticks: {
@@ -4586,13 +4604,33 @@ renderCharts: () => {
                     );
                 }
             },
-            ...options
         };
+        // Merge profundo para preservar grid claro em todas as variações
+        let mergedOptions = { ...defaultOptions };
+        if (options && typeof options === 'object') {
+            // Scales
+            if (options.scales) {
+                mergedOptions.scales = {
+                    x: { ...(defaultOptions.scales?.x || {}), ...(options.scales.x || {}) },
+                    y: { ...(defaultOptions.scales?.y || {}), ...(options.scales.y || {}) }
+                };
+            }
+            // Plugins
+            if (options.plugins) {
+                mergedOptions.plugins = { ...(defaultOptions.plugins || {}), ...(options.plugins || {}) };
+            }
+            // Demais topo
+            Object.keys(options).forEach(k => {
+                if (k !== 'scales' && k !== 'plugins') {
+                    mergedOptions[k] = options[k];
+                }
+            });
+        }
         
         state.charts[canvasId] = new Chart(ctx, { 
             type, 
             data, 
-            options: defaultOptions 
+            options: mergedOptions 
         });
         
         // Forçar redimensionamento após criação
@@ -4708,9 +4746,14 @@ renderCharts: () => {
                     li.className = 'flex justify-between items-center bg-gray-100 p-2 rounded';
                     li.innerHTML = `
                         <span>${email}</span>
-                        <button class="btn-remove-email text-red-500 hover:text-red-700" data-email="${email}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button class="btn-edit-email text-blue-500 hover:text-blue-700" data-email="${email}" title="Editar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                            <button class="btn-remove-email text-red-500 hover:text-red-700" data-email="${email}" title="Excluir">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
                     `;
                     emailList.appendChild(li);
                 });
@@ -4743,9 +4786,14 @@ renderCharts: () => {
                             <div class="text-sm text-gray-600">@${username}</div>
                         </div>
                         ${username !== '10088141' ? `
-                        <button class="btn-remove-system-user text-red-500 hover:text-red-700" data-username="${username}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button class="btn-edit-system-user text-blue-500 hover:text-blue-700" data-username="${username}" title="Editar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                            <button class="btn-remove-system-user text-red-500 hover:text-red-700" data-username="${username}" title="Excluir">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
                         ` : '<span class="text-xs text-gray-500">Admin Principal</span>'}
                     `;
                     systemUsersList.appendChild(li);
@@ -5166,7 +5214,7 @@ const forecastSystem = {
                     position: "bottom",
                     labels: {
                         font: { size: 13, weight: "600" },
-                        color: "#111"
+                        color: (document.documentElement.classList.contains('dark') ? '#f8fafc' : '#111')
                     }
                 },
                 datalabels: {
@@ -5190,6 +5238,11 @@ const forecastSystem = {
                         autoSkip: true,
                         maxRotation: 45,
                         minRotation: 0
+                    },
+                    grid: {
+                        display: true,
+                        color: (document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)'),
+                        lineWidth: 1
                     }
                 },
                 y: {
@@ -5197,7 +5250,12 @@ const forecastSystem = {
                         display: true,
                         text: "Estoque Disponível"
                     },
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: (document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)'),
+                        lineWidth: 1
+                    }
                 }
             }
         }
@@ -5276,6 +5334,8 @@ const historicalForecastSystem = {
         forecastSystem.charts[canvasId].destroy();
     }
 
+    const isDarkLegend = document.documentElement.classList.contains('dark');
+    const legendTextColor = isDarkLegend ? '#ffffff' : '#111';
     forecastSystem.charts[canvasId] = new Chart(ctx, {
         type: "bar",
         data: chartData,
@@ -5289,18 +5349,34 @@ const historicalForecastSystem = {
                     position: "bottom",
                     labels: {
                         font: { size: 13, weight: "600" },
-                        color: "#111"
+                        color: legendTextColor
                     }
                 },
                 title: { 
                     display: true, 
                     text: "Consumo Mensal Projetado",
                     font: { size: 15, weight: "700" },
-                    color: "#111"
+                    color: legendTextColor
                 },
                 tooltip: {
                     mode: "index",
                     intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                if (context.dataset.label && context.dataset.label.includes('Quantidade')) {
+                                    label += Math.round(context.parsed.y) + ' un';
+                                } else if (context.dataset.label && context.dataset.label.includes('Consumo')) {
+                                    label += Math.round(context.parsed.y) + ' g';
+                                } else {
+                                    label += Math.round(context.parsed.y);
+                                }
+                            }
+                            return label;
+                        }
+                    }
                 },
                 datalabels: { display: false }
             },
@@ -5312,12 +5388,22 @@ const historicalForecastSystem = {
                         autoSkip: true,
                         maxRotation: 45,
                         minRotation: 0
+                    },
+                    grid: {
+                        display: true,
+                        color: (document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)'),
+                        lineWidth: 1
                     }
                 },
                 y: {
                     stacked: true,
                     title: { display: true, text: "Consumo Projetado (g ou un)" },
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: (document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)'),
+                        lineWidth: 1
+                    }
                 }
             }
         }
@@ -5895,6 +5981,13 @@ const dataHandlers = {
             data: { id: holidayId }
         });
     },
+    updateHoliday: (holiday) => {
+        console.log('[WEBVIEW] Atualizando feriado (granular):', holiday);
+        vscode.postMessage({
+            command: 'updateHoliday',
+            data: holiday
+        });
+    },
 
     /**
      * Função otimizada para operações de usuários do sistema
@@ -5907,11 +6000,11 @@ const dataHandlers = {
         });
     },
 
-    updateSystemUser: (user) => {
-        console.log('[WEBVIEW] Atualizando usuário do sistema:', user);
+    updateSystemUser: (username, updates) => {
+        console.log('[WEBVIEW] Atualizando usuário do sistema:', username, updates);
         vscode.postMessage({
             command: 'updateSystemUser',
-            data: user
+            data: { id: username, updates }
         });
     },
 
@@ -6124,6 +6217,25 @@ const dataHandlers = {
         utils.showToast("Feriado removido com sucesso!");
     },
 
+    /** Edita um feriado existente. */
+    handleEditHoliday: (holidayId) => {
+        const holiday = state.holidays.find(h => h.id === holidayId);
+        if (!holiday) return;
+        const newName = prompt('Editar nome do feriado:', holiday.name) || holiday.name;
+        const newStart = prompt('Editar data inicial (YYYY-MM-DD):', holiday.startDate) || holiday.startDate;
+        const newEnd = prompt('Editar data final (YYYY-MM-DD):', holiday.endDate) || holiday.endDate;
+        if (new Date(newEnd) < new Date(newStart)) {
+            utils.showToast('A data de fim não pode ser anterior à data de início.', true);
+            return;
+        }
+        holiday.name = newName;
+        holiday.startDate = newStart;
+        holiday.endDate = newEnd;
+        renderers.renderHolidaysList();
+        dataHandlers.updateHoliday(holiday);
+        utils.showToast('Feriado atualizado com sucesso!');
+    },
+
     /**
      * Remove um email da lista de notificações.
      * @param {string} emailToRemove - O email a ser removido.
@@ -6136,6 +6248,43 @@ const dataHandlers = {
         renderers.populateSettingsForm();
         utils.closeModal();
         utils.showToast("E-mail removido com sucesso!");
+    },
+    saveEditedEmail: (oldEmail, newEmail) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(newEmail)) {
+            utils.showToast('E-mail inválido.', true);
+            return;
+        }
+        let emails = state.settings.notificationEmail ? state.settings.notificationEmail.split(',').filter(e => e) : [];
+        const index = emails.indexOf(oldEmail);
+        if (index !== -1) {
+            emails[index] = newEmail;
+            state.settings.notificationEmail = emails.join(',');
+            dataHandlers.saveSettings();
+            renderers.populateSettingsForm();
+            utils.closeModal();
+            utils.showToast('E-mail atualizado com sucesso!');
+        }
+    },
+
+    /** Edita um e-mail existente na lista de notificações. */
+    handleEditEmail: (currentEmail) => {
+        let emails = state.settings.notificationEmail ? state.settings.notificationEmail.split(',').filter(e => e) : [];
+        const newEmail = prompt('Editar e-mail:', currentEmail);
+        if (!newEmail) return;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(newEmail)) {
+            utils.showToast('E-mail inválido.', true);
+            return;
+        }
+        const index = emails.indexOf(currentEmail);
+        if (index !== -1) {
+            emails[index] = newEmail;
+            state.settings.notificationEmail = emails.join(',');
+            dataHandlers.saveSettings();
+            renderers.populateSettingsForm();
+            utils.showToast('E-mail atualizado com sucesso!');
+        }
     },
 
     /**
@@ -6235,6 +6384,57 @@ const dataHandlers = {
             renderers.populateSettingsForm();
             utils.showToast(`Usuário ${user.displayName} removido com sucesso!`);
         });
+    },
+    saveEditedHoliday: (holiday) => {
+        if (new Date(holiday.endDate) < new Date(holiday.startDate)) {
+            utils.showToast('A data de fim não pode ser anterior à data de início.', true);
+            return;
+        }
+        const idx = state.holidays.findIndex(h => h.id === holiday.id);
+        if (idx !== -1) {
+            state.holidays[idx] = { ...state.holidays[idx], ...holiday };
+            renderers.renderHolidaysList();
+            dataHandlers.updateHoliday(state.holidays[idx]);
+            utils.closeModal();
+            utils.showToast('Feriado atualizado com sucesso!');
+        }
+    },
+    saveEditedSystemUser: (username, { displayName, type }) => {
+        const user = state.systemUsers?.[username];
+        if (!user) {
+            utils.showToast('Usuário não encontrado.', true);
+            return;
+        }
+        if (!['administrador', 'tecnico_eficiencia'].includes(type)) {
+            utils.showToast('Tipo inválido. Use "administrador" ou "tecnico_eficiencia".', true);
+            return;
+        }
+        user.displayName = displayName;
+        user.type = type;
+        dataHandlers.updateSystemUser(username, { display_name: displayName, type });
+        renderers.populateSettingsForm();
+        utils.closeModal();
+        utils.showToast('Usuário atualizado com sucesso!');
+    },
+
+    /** Edita um usuário do sistema (nome e tipo). */
+    handleEditSystemUser: (username) => {
+        const user = state.systemUsers?.[username];
+        if (!user) {
+            utils.showToast('Usuário não encontrado.', true);
+            return;
+        }
+        const newDisplayName = prompt('Editar nome de exibição:', user.displayName) || user.displayName;
+        const newType = prompt('Editar tipo (administrador/tecnico_eficiencia):', user.type) || user.type;
+        if (!['administrador', 'tecnico_eficiencia'].includes(newType)) {
+            utils.showToast('Tipo inválido. Use "administrador" ou "tecnico_eficiencia".', true);
+            return;
+        }
+        user.displayName = newDisplayName;
+        user.type = newType;
+        dataHandlers.updateSystemUser(user);
+        renderers.populateSettingsForm();
+        utils.showToast('Usuário atualizado com sucesso!');
     },
 
     /**
@@ -7958,6 +8158,109 @@ const modalHandlers = {
             submitButton.classList.add('bg-blue-500', 'hover:bg-blue-600');
             form.removeEventListener('submit', dataHandlers.handleAddReagent);
             form.addEventListener('submit', dataHandlers.handleUpdateReagent);
+        });
+    },
+    openEditEmailModal: (currentEmail) => {
+        const contentHTML = `
+            <form id="form-edit-email" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">E-mail</label>
+                    <input type="email" name="email" value="${currentEmail}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                </div>
+            </form>
+        `;
+        utils.openModal('Editar E-mail', contentHTML, () => {
+            const form = document.getElementById('form-edit-email');
+            form?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newEmail = form.querySelector('[name="email"]').value.trim();
+                dataHandlers.saveEditedEmail(currentEmail, newEmail);
+            });
+            const cancelBtn = form?.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openEditHolidayModal: (holidayId) => {
+        const holiday = state.holidays.find(h => h.id === holidayId);
+        if (!holiday) return;
+        const contentHTML = `
+            <form id="form-edit-holiday" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nome</label>
+                    <input type="text" name="name" value="${holiday.name}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data Inicial</label>
+                        <input type="date" name="startDate" value="${holiday.startDate}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data Final</label>
+                        <input type="date" name="endDate" value="${holiday.endDate}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                </div>
+            </form>
+        `;
+        utils.openModal('Editar Feriado', contentHTML, () => {
+            const form = document.getElementById('form-edit-holiday');
+            form?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const updated = {
+                    id: holidayId,
+                    name: form.querySelector('[name="name"]').value.trim(),
+                    startDate: form.querySelector('[name="startDate"]').value,
+                    endDate: form.querySelector('[name="endDate"]').value
+                };
+                dataHandlers.saveEditedHoliday(updated);
+            });
+            const cancelBtn = form?.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openEditSystemUserModal: (username) => {
+        const user = state.systemUsers?.[username];
+        if (!user) return;
+        const contentHTML = `
+            <form id="form-edit-system-user" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Matrícula</label>
+                    <input type="text" name="username" value="${username}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" disabled>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nome de Exibição</label>
+                    <input type="text" name="displayName" value="${user.displayName}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Tipo</label>
+                    <select name="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="administrador" ${user.type==='administrador'?'selected':''}>Administrador</option>
+                        <option value="tecnico_eficiencia" ${user.type==='tecnico_eficiencia'?'selected':''}>Técnico de Eficiência</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                </div>
+            </form>
+        `;
+        utils.openModal('Editar Usuário', contentHTML, () => {
+            const form = document.getElementById('form-edit-system-user');
+            form?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const displayName = form.querySelector('[name="displayName"]').value.trim();
+                const type = form.querySelector('[name="type"]').value;
+                dataHandlers.saveEditedSystemUser(username, { displayName, type });
+            });
+            const cancelBtn = form?.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
         });
     },
     openViewGanttCalibrationModal: (calibrationId) => {
@@ -9731,6 +10034,21 @@ function getStatusCardBackground(status, assayType = null) {
         default: return 'bg-gray-100';
     }
 }
+function getStatusTextColor(status, assayType = null) {
+    if (assayType === 'secadora') {
+        return 'text-pink-800';
+    }
+    switch (status.toLowerCase()) {
+        case 'aguardando': return 'text-red-800';
+        case 'labelo': return 'text-gray-800';
+        case 'andamento': return 'text-gray-800';
+        case 'incompleto': return 'text-orange-800';
+        case 'concluido': return 'text-green-800';
+        case 'relatorio': return 'text-blue-800';
+        case 'pendente': return 'text-yellow-800';
+        default: return 'text-gray-800';
+    }
+}
 /**
  * Inicia a atualização automática do dashboard.
  */
@@ -10499,8 +10817,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('form-add-holiday')?.addEventListener('submit', dataHandlers.handleAddHoliday);
     document.getElementById('holidays-list')?.addEventListener('click', (e) => {
         const removeButton = e.target.closest('.btn-remove-holiday');
+        const editButton = e.target.closest('.btn-edit-holiday');
         if (removeButton) {
             dataHandlers.handleRemoveHoliday(parseInt(removeButton.dataset.id, 10));
+        } else if (editButton) {
+            modalHandlers.openEditHolidayModal(parseInt(editButton.dataset.id, 10));
         }
     });
     
@@ -10508,8 +10829,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('form-add-system-user')?.addEventListener('submit', dataHandlers.handleAddSystemUser);
     document.getElementById('system-users-list')?.addEventListener('click', (e) => {
         const removeButton = e.target.closest('.btn-remove-system-user');
+        const editButton = e.target.closest('.btn-edit-system-user');
         if (removeButton) {
             dataHandlers.handleRemoveSystemUser(removeButton.dataset.username);
+        } else if (editButton) {
+            modalHandlers.openEditSystemUserModal(editButton.dataset.username);
         }
     });
     document.getElementById('filter-inventory')?.addEventListener('input', renderers.renderInventoryTable);
@@ -10564,10 +10888,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('email-list')?.addEventListener('click', (e) => {
         const removeButton = e.target.closest('.btn-remove-email');
+        const editButton = e.target.closest('.btn-edit-email');
         if (removeButton) {
             const emailToRemove = removeButton.dataset.email;
             const message = `Tem a certeza de que deseja remover o e-mail "${emailToRemove}"?`;
             ui.showConfirmationModal(message, () => dataHandlers.handleRemoveEmail(emailToRemove));
+        } else if (editButton) {
+            const emailToEdit = editButton.dataset.email;
+            modalHandlers.openEditEmailModal(emailToEdit);
         }
     });
     document.querySelectorAll('.nav-link').forEach(link => {

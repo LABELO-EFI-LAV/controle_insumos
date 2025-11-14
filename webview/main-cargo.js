@@ -1473,21 +1473,7 @@ const modalHandlers = {
             const modalContent = `
                 <div class="space-y-4">
                     <h3 class="text-lg font-bold text-gray-800">Descadastrar Protocolo</h3>
-                    <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                            <div class="ml-3">
-                                <h3 class="text-sm font-medium text-red-800">Atenção</h3>
-                                <div class="mt-2 text-sm text-red-700">
-                                    <p>Esta ação irá remover permanentemente o protocolo e desvincular todas as peças associadas.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    
                     <form id="form-delete-protocol" class="space-y-4">
                         <div>
                             <label for="protocol-delete-select" class="block text-sm font-medium text-gray-700">Selecione o Protocolo</label>
@@ -2327,13 +2313,21 @@ const renderers = {
                         <tbody class="bg-white divide-y divide-gray-200">
         `;
         message.data.forEach(peca => {
+            const cycles = Number(peca.cycles) || 0;
+            const rowClass = cycles >= 80
+                ? 'row-danger bg-red-100 text-red-800 font-medium'
+                : cycles >= 76
+                ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                : cycles >= 70
+                ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                : '';
             tableHTML += `
-                <tr class="text-black">
+                <tr class="${rowClass}">
                     <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
                     <td class="px-4 py-2 text-sm">${peca.tag_id}</td>
                     <td class="px-4 py-2 text-sm">${peca.type}</td>
                     <td class="px-4 py-2 text-sm">${peca.cycles}</td>
-                    </tr>
+                </tr>
             `;
         });
         tableHTML += `
@@ -2436,8 +2430,16 @@ const renderers = {
                                     <tbody class="bg-white divide-y divide-gray-200">
                     `;
                     message.data.forEach(peca => {
+                        const cycles = Number(peca.cycles) || 0;
+                        const rowClass = cycles >= 80
+                            ? 'row-danger bg-red-100 text-red-800 font-medium'
+                            : cycles >= 76
+                            ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                            : cycles >= 70
+                            ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                            : '';
                         tableHTML += `
-                            <tr class="text-black">
+                            <tr class="${rowClass}">
                                 <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
                                 <td class="px-4 py-2 text-sm">${peca.tag_id}</td>
                                 <td class="px-4 py-2 text-sm">${peca.type}</td>
@@ -2619,12 +2621,14 @@ const renderers = {
                                     <tbody class="bg-white divide-y divide-gray-200">
                     `;
                     message.data.forEach(peca => {
-                        let rowClass = 'text-black'; // Classe padrão
-                            if (peca.cycles >= 75 && peca.cycles <= 79) {
-                                rowClass = 'bg-orange-100 text-orange-800 font-medium';
-                            } else if (peca.cycles >= 70) {
-                                rowClass = 'bg-yellow-100 text-yellow-800 font-medium';
-                            }
+                        const cycles = Number(peca.cycles) || 0;
+                        const rowClass = cycles >= 80
+                            ? 'row-danger bg-red-100 text-red-800 font-medium'
+                            : cycles >= 76
+                            ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                            : cycles >= 70
+                            ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                            : '';
                         tableHTML += `
                             <tr class="${rowClass}">
                                 <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
@@ -2729,8 +2733,16 @@ const renderers = {
                                     <tbody class="bg-white divide-y divide-gray-200">
                     `;
                     message.data.forEach(peca => {
+                        const cycles = Number(peca.cycles) || 0;
+                        const rowClass = cycles >= 80
+                            ? 'row-danger bg-red-100 text-red-800 font-medium'
+                            : cycles >= 76
+                            ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                            : cycles >= 70
+                            ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                            : '';
                         tableHTML += `
-                            <tr class="text-black">
+                            <tr class="${rowClass}">
                                 <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
                                 <td class="px-4 py-2 text-sm">${peca.tag_id}</td>
                                 <td class="px-4 py-2 text-sm">${peca.type}</td>
@@ -2998,21 +3010,6 @@ const renderers = {
         });
         formHTML += `
                 </select>
-                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <h3 class="text-sm font-medium text-yellow-800">Atenção</h3>
-                            <div class="mt-2 text-sm text-yellow-700">
-                                <p>Esta ação irá remover permanentemente todas as entradas do protocolo selecionado do sistema. Esta operação não pode ser desfeita.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <button type="submit" class="w-full bg-red-500 text-white p-2 rounded">Descadastrar Protocolo</button>
             </form>
         `;
@@ -3101,7 +3098,8 @@ pecasVinculadas.forEach(peca => {
     const isDesvinculado = peca.vinculo_status === 'desvinculado';
     const rowClass = isDesvinculado ? 'text-gray-400' : '';
     const statusText = isDesvinculado ? 'Desvinculado' : 'Ativo';
-    const statusClass = isDesvinculado ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold';
+    const statusClass = isDesvinculado ? 'status-desvinculado bg-red-50 text-red-600 font-semibold px-2 py-1 rounded-full inline-block'
+                                        : 'status-active bg-green-50 text-green-600 font-semibold px-2 py-1 rounded-full inline-block';
 
     tableHTMLResult += `
         <tr class="${rowClass}">
@@ -3109,7 +3107,7 @@ pecasVinculadas.forEach(peca => {
             <td class="px-4 py-2 text-sm text-center">${typeMap[peca.type] || peca.type}</td>
             <td class="px-4 py-2 text-sm text-center">${peca.ciclos_no_vinculo}</td>
             <td class="px-4 py-2 text-sm text-center">${peca.tipo_ciclo === 'frio' ? 'Frio' : 'Quente'}</td>
-            <td class="px-4 py-2 text-sm text-center ${statusClass}">${statusText}</td>
+            <td class="px-4 py-2 text-sm text-center"><span class="${statusClass}">${statusText}</span></td>
         </tr>
     `;
 });
@@ -3278,8 +3276,16 @@ targetContainer.innerHTML = tableHTMLResult;
                                     <tbody class="bg-white divide-y divide-gray-200">
                     `;
                     message.data.forEach(peca => {
+                        const cycles = Number(peca.cycles) || 0;
+                        const rowClass = cycles >= 80
+                            ? 'row-danger bg-red-100 text-red-800 font-medium'
+                            : cycles >= 76
+                            ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                            : cycles >= 70
+                            ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                            : '';
                         tableHTML += `
-                            <tr class="text-black">
+                            <tr class="${rowClass}">
                                 <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
                                 <td class="px-4 py-2 text-sm">${peca.tag_id}</td>
                                 <td class="px-4 py-2 text-sm">${peca.type}</td>
@@ -3380,8 +3386,16 @@ targetContainer.innerHTML = tableHTMLResult;
                                     <tbody class="bg-white divide-y divide-gray-200">
                     `;
                     message.data.forEach(peca => {
+                        const cycles = Number(peca.cycles) || 0;
+                        const rowClass = cycles >= 80
+                            ? 'row-danger bg-red-100 text-red-800 font-medium'
+                            : cycles >= 76
+                            ? 'row-dark-orange bg-orange-100 text-orange-800 font-medium'
+                            : cycles >= 70
+                            ? 'row-mustard bg-yellow-100 text-yellow-800 font-medium'
+                            : '';
                         tableHTML += `
-                            <tr class="text-black">
+                            <tr class="${rowClass}">
                                 <td class="px-4 py-2"><input type="checkbox" name="peca_ids" value="${peca.id}" class="h-4 w-4"></td>
                                 <td class="px-4 py-2 text-sm">${peca.tag_id}</td>
                                 <td class="px-4 py-2 text-sm">${peca.type}</td>

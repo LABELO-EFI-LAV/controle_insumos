@@ -7,6 +7,30 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <link href="{{stylesUri}}" rel="stylesheet">
+    <link href="./style.css" rel="stylesheet" media="(min-width:0px)">
+    <script>
+        (function(){
+            var savedTheme = localStorage.getItem('labcontrol-theme');
+            var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+            document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+        })();
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function(){
+            var toggleBtn = document.getElementById('theme-toggle');
+            var setIcon = function(){ if (!toggleBtn) return; toggleBtn.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙'; };
+            setIcon();
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function(){
+                    var isDark = document.documentElement.classList.toggle('dark');
+                    localStorage.setItem('labcontrol-theme', isDark ? 'dark' : 'light');
+                    setIcon();
+                });
+            }
+        });
+    </script>
     <style>
         .enhanced-table {
             border-collapse: collapse;
@@ -32,6 +56,25 @@
         .enhanced-table tbody tr:hover {
             background-color: #f3f4f6;
         }
+        .dark .enhanced-table tbody tr:hover {
+            background-color: #1f2937 !important;
+        }
+        .dark .enhanced-table tbody tr:hover td {
+            background-color: #1f2937 !important;
+        }
+        /* Sombra branca para cartões de gráficos no Dark Mode */
+        .dark .chart-card { box-shadow: 0 10px 15px -3px rgba(255,255,255,0.16), 0 4px 6px -4px rgba(255,255,255,0.12) !important; border: 1px solid var(--border-light) !important; }
+        /* Peças Ativas (gráficos): títulos brancos */
+        .dark .active-pieces-card h3 { color: var(--text-primary) !important; }
+        /* Tabelas de Peças Ativas: texto branco nos textos e cabeçalhos */
+        .dark .active-table-card h3,
+        .dark .active-table-card th,
+        .dark .active-table-card td,
+        .dark .active-table-card p,
+        .dark .active-table-card span { color: var(--text-primary) !important; }
+        .dark .active-table-card { box-shadow: 0 10px 15px -3px rgba(255,255,255,0.16), 0 4px 6px -4px rgba(255,255,255,0.12) !important; border: 1px solid var(--border-light) !important; }
+        /* Modal Cadastrar Protocolo: itens com ciclos > 70 ficam com texto escuro */
+        .dark .modal-content tr.over-limit td { color: #111827 !important; }
         .table-scroll-container {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
@@ -183,6 +226,7 @@
                         <h1 class="text-2xl font-bold text-white">Controle de Carga</h1>
                     </div>
                     <div class="flex items-center space-x-4">
+                        <button id="theme-toggle" class="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors" title="Alternar tema">🌙</button>
                         <span id="user-info" class="text-sm text-gray-300"></span>
                     </div>
                 </div>
@@ -237,15 +281,15 @@
                         <span class="ml-3 bg-green-100 text-green-800 text-sm font-medium px-2.5 py-0.5 rounded-full">Em Estoque</span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500 chart-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Fronhas Disponíveis</h3>
                             <div class="h-48"><canvas id="chart-fronhas-avail"></canvas></div>
                         </div>
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500 chart-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Toalhas Disponíveis</h3>
                             <div class="h-48"><canvas id="chart-toalhas-avail"></canvas></div>
                         </div>
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500 chart-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Lençóis Disponíveis</h3>
                             <div class="h-48"><canvas id="chart-lencol-avail"></canvas></div>
                         </div>
@@ -262,15 +306,15 @@
                         <span class="ml-3 bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded-full">Disponíveis + Em Uso</span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500 chart-card active-pieces-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Total Fronhas</h3>
                             <div class="h-48"><canvas id="chart-fronhas"></canvas></div>
                         </div>
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500 chart-card active-pieces-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Total Toalhas</h3>
                             <div class="h-48"><canvas id="chart-toalhas"></canvas></div>
                         </div>
-                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500">
+                        <div class="bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500 chart-card active-pieces-card">
                             <h3 class="font-bold text-lg text-gray-700 mb-4">Total Lençóis</h3>
                             <div class="h-48"><canvas id="chart-lencol"></canvas></div>
                         </div>
@@ -278,21 +322,21 @@
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                    <div class="bg-white p-4 rounded-xl shadow-lg active-table-card">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="font-bold text-lg text-gray-700">Fronhas Ativas</h3>
                             <input id="filter-fronhas" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />
                         </div>
                         <div id="table-fronhas-container" class="max-h-80 overflow-y-auto"></div>
                     </div>
-                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                    <div class="bg-white p-4 rounded-xl shadow-lg active-table-card">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="font-bold text-lg text-gray-700">Toalhas de Rosto Ativas</h3>
                             <input id="filter-toalhas" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />
                         </div>
                         <div id="table-toalhas-container" class="max-h-80 overflow-y-auto"></div>
                     </div>
-                    <div class="bg-white p-4 rounded-xl shadow-lg">
+                    <div class="bg-white p-4 rounded-xl shadow-lg active-table-card">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="font-bold text-lg text-gray-700">Lençóis Ativos</h3>
                             <input id="filter-lencol" type="text" placeholder="Filtrar por TAG" class="p-2 border rounded text-black w-40" />

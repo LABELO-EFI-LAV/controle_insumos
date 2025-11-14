@@ -4,6 +4,13 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
+[1.4.4] - 2025-11-14
+
+### Adicionado
+
+- **Edição de Configurações:** Adicionada a funcionalidade de edição para email, feriados e usuários no painel de configurações.
+- **Dark Mode:** Adicionado suporte ao modo escuro (dark mode) para a interface do usuário, com estilos personalizados para melhorar a usabilidade em ambientes de alto contraste.
+
 [1.4.3] - 2025-11-12
 
 ### Adicionado
