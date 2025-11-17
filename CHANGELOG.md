@@ -3,6 +3,13 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
+
+[1.4.5] - 2025-11-14
+
+### Correção
+
+- **Finalização de ensaios:** Foi corrigido o desconto de reagentes quando o ensaio é finalizado no cronograma.
+
 [1.4.5] - 2025-11-14
 
 ### Alterado

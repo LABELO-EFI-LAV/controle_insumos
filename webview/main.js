@@ -1650,10 +1650,6 @@ const checkAndDeductStock = (reagentKey, lotsArray, nominalLoad) => {
         console.log(`[INVENTORY] Deduzido ${consumption.toFixed(2)} de ${reagentName} (lote ${lot}). Novo estoque: ${state.inventory[itemIndex].quantity.toFixed(2)}`);
     }
     
-    // Força salvamento imediato após dedução para garantir persistência
-    console.log('[INVENTORY] Salvando inventário após dedução de estoque...');
-    dataHandlers.saveData();
-    
     return true;
 };
 
@@ -6103,7 +6099,8 @@ const dataHandlers = {
             calibrations: state.calibrations,
             efficiencyCategories: state.efficiencyCategories,
             safetyCategories: state.safetyCategories,
-            historicalAssays: state.historicalAssays // Inclui o histórico atualizado
+            historicalAssays: state.historicalAssays,
+            inventory: state.inventory
         };
         
         vscode.postMessage({
@@ -6919,6 +6916,13 @@ handleUpdateCalibration: (e) => {
         // Calcula o consumo total de sabão (soma de todos os reagentes)
         assayToUpdate.totalConsumption = consumption.poBase + consumption.perborato + consumption.taed + consumption.tiras;
         assayToUpdate.consumption = consumption;
+        assayToUpdate.pendingStockDeduction = {
+            poBase: newLots.poBase,
+            perborato: newLots.perborato,
+            taed: newLots.taed,
+            tiras: newLots.tiras,
+            nominalLoad: assayToUpdate.nominalLoad
+        };
     }
     
     // Atualiza as informações comuns a ambos os tipos de ensaio
