@@ -84,6 +84,9 @@
         .accordion-icon.rotated {
             transform: rotate(180deg);
         }
+        /* Contexto do cabeçalho: texto mais escuro no modo claro e claro no modo escuro */
+        .header-context .gantt-context-menu-item { color: #111; }
+        .dark .header-context .gantt-context-menu-item { color: var(--text-primary) !important; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -167,6 +170,22 @@
 
         <div id="context-menu-default-actions">
             <div class="border-t my-1 border-gray-200"></div>
+            <button data-action="schedule-event" class="gantt-context-menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                Agendar Evento
+            </button>
+            <button data-action="schedule-holiday" class="gantt-context-menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18"></path><path d="M8 2v4"></path><path d="M16 2v4"></path><rect x="3" y="8" width="18" height="13" rx="2" ry="2"></rect></svg>
+                Agendar Feriado
+            </button>
+            <button data-action="edit-event" class="gantt-context-menu-item" style="display:none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Editar Evento
+            </button>
+            <button data-action="edit-holiday" class="gantt-context-menu-item" style="display:none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Editar Feriado
+            </button>
             <button data-action="edit" class="gantt-context-menu-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 Editar Tarefa
@@ -175,6 +194,14 @@
             <button data-action="duplicate" class="gantt-context-menu-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                 Duplicar
+            </button>
+            <button data-action="link-to-safety" class="gantt-context-menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 1 7.07 0l3 3a5 5 0 1 1-7.07 7.07l-1-1"></path><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1-1"></path></svg>
+                Criar vínculo com segurança...
+            </button>
+            <button data-action="unlink-assay" class="gantt-context-menu-item">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 1 7.07 0l1 1"></path><path d="M14 11a5 5 0 0 0-7.07 0l-1 1"></path><line x1="3" y1="21" x2="21" y2="3"></line></svg>
+                Desvincular Ensaio
             </button>
             
             <button data-action="send-to-pending" class="gantt-context-menu-item">
@@ -682,6 +709,7 @@
                             <div id="schedule-dropdown" class="hidden absolute left-0 mt-2 w-56 bg-white rounded-md shadow-xl z-20">
                                 <a href="Calibração" id="btn-open-add-calibration-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Agendar Calibração</a>
                                 <a href="Férias" id="btn-open-add-vacation-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Agendar Férias</a>
+                                <a href="Evento" id="btn-open-add-schedule-event-modal" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Agendar Evento</a>
                             </div>
                         </div>
                         
@@ -1200,6 +1228,26 @@
                 <label for="gantt-observacoes" class="block text-sm font-medium text-gray-900">Observações</label>
                 <input type="text" id="gantt-observacoes" name="observacoes" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
             </div>
+            <div class="col-span-1 md:col-span-3">
+                <label class="flex items-center text-sm font-medium text-gray-900">
+                    <input type="checkbox" id="gantt-link-safety" name="linkSafety" class="mr-2">
+                    Esta amostra vai para segurança?
+                </label>
+                <div id="gantt-safety-fields" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                    <div>
+                        <label for="gantt-safety-startDate" class="block text-sm font-medium text-gray-900">Data de Início (Segurança)</label>
+                        <input type="date" id="gantt-safety-startDate" name="safetyStartDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    </div>
+                    <div>
+                        <label for="gantt-safety-endDate" class="block text-sm font-medium text-gray-900">Data de Fim (Segurança)</label>
+                        <input type="date" id="gantt-safety-endDate" name="safetyEndDate" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black">
+                    </div>
+                    <div>
+                        <label for="gantt-safety-setup" class="block text-sm font-medium text-gray-900">Técnico de Segurança</label>
+                        <select id="gantt-safety-setup" name="safetySetup" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black"></select>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="mt-8 flex justify-end">
             <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">Agendar Ensaio</button>
@@ -1712,6 +1760,81 @@
         </div>
     </div>
 </div>
+
+<div id="add-schedule-event-modal-content" class="hidden">
+    <form id="form-add-schedule-event" class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Título</label>
+            <input type="text" name="title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Tipo</label>
+            <input type="text" name="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="bloqueio, manutenção..." required>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Descrição</label>
+            <textarea name="description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" rows="3"></textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Inicial</label>
+                <input type="date" name="startDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Final</label>
+                <input type="date" name="endDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-4">
+            <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+            <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">Agendar Evento</button>
+        </div>
+    </form>
+    </div>
+
+<div id="edit-schedule-event-modal-content" class="hidden">
+    <form id="form-edit-schedule-event" class="space-y-4">
+        <input type="hidden" name="id">
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Título</label>
+            <input type="text" name="title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Tipo</label>
+            <input type="text" name="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Descrição</label>
+            <textarea name="description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" rows="3"></textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Inicial</label>
+                <input type="date" name="startDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Final</label>
+                <input type="date" name="endDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-4">
+            <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+            <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+        </div>
+    </form>
+    </div>
+
+<div id="view-schedule-event-modal-content" class="hidden">
+    <div class="space-y-2">
+        <div><span class="font-semibold">Título:</span> <span data-field="title"></span></div>
+        <div><span class="font-semibold">Tipo:</span> <span data-field="type"></span></div>
+        <div><span class="font-semibold">Período:</span> <span data-field="period"></span></div>
+        <div><span class="font-semibold">Descrição:</span> <span data-field="description"></span></div>
+        <div class="flex justify-end pt-4">
+            <button class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Fechar</button>
+        </div>
+    </div>
+    </div>
 
 <div id="edit-calibration-modal-content" class="hidden">
     <form id="form-edit-calibration" class="space-y-4">

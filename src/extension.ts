@@ -1840,6 +1840,7 @@ export async function activate(context: vscode.ExtensionContext) {
                             scheduledAssays: [],
                             safetyScheduledAssays: [],
                             calibrations: [],
+                            events: [],
                             efficiencyCategories: [],
                             safetyCategories: [],
                             holidays: [],
@@ -2220,6 +2221,77 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                     break;
 
+                case 'addScheduleEvent':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        const eventData = message.data;
+                        const newId = await databaseManager.addScheduleEvent(eventData);
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: true,
+                            operation: 'add',
+                            newId: newId
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ADICIONAR EVENTO:');
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: false,
+                            operation: 'add',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateScheduleEvent':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        const eventData = message.data;
+                        await databaseManager.updateScheduleEvent(eventData);
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: eventData.id
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR EVENTO:');
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: false,
+                            operation: 'update',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'deleteScheduleEvent':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+                        const { id } = message.data;
+                        await databaseManager.deleteScheduleEvent(id);
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: true,
+                            operation: 'delete',
+                            id
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO EXCLUIR EVENTO:');
+                        panel.webview.postMessage({
+                            command: 'eventOperationResult',
+                            success: false,
+                            operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
                 case 'deleteHoliday':
                     try {
                         if (!databaseManager) {
@@ -2242,6 +2314,32 @@ export async function activate(context: vscode.ExtensionContext) {
                             command: 'holidayOperationResult',
                             success: false,
                             operation: 'delete',
+                            error: err instanceof Error ? err.message : 'Erro desconhecido'
+                        });
+                    }
+                    break;
+
+                case 'updateHoliday':
+                    try {
+                        if (!databaseManager) {
+                            throw new Error('DatabaseManager não inicializado');
+                        }
+
+                        const holiday = message.data;
+                        await databaseManager.updateHoliday(holiday);
+
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: true,
+                            operation: 'update',
+                            id: holiday.id
+                        });
+                    } catch (err) {
+                        handleError(err, 'ERRO AO ATUALIZAR FERIADO:');
+                        panel.webview.postMessage({
+                            command: 'holidayOperationResult',
+                            success: false,
+                            operation: 'update',
                             error: err instanceof Error ? err.message : 'Erro desconhecido'
                         });
                     }

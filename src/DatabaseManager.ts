@@ -657,6 +657,16 @@ export class DatabaseManager {
                 end_date TEXT NOT NULL
             )`,
 
+            // Tabela de eventos do cronograma
+            `CREATE TABLE IF NOT EXISTS schedule_events (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                type TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL
+            )`,
+
             // Tabela de calibrações
             `CREATE TABLE IF NOT EXISTS calibrations (
                 id INTEGER PRIMARY KEY,
@@ -739,8 +749,6 @@ export class DatabaseManager {
         // Migração: Adicionar coluna humidity e report nas tabelas agendadas
         await this.migrateHumidityColumn();
         await this.migrateReportColumns();
-
-
 
         // ======= Tabelas de Peças/Cargas/Preparação =======
         // pecas_carga: armazena peças
@@ -1256,6 +1264,14 @@ export class DatabaseManager {
             endDate: holiday.end_date
         }));
 
+        // Eventos do cronograma
+        const scheduleEvents = await this.selectQuery('SELECT * FROM schedule_events ORDER BY id');
+        data.events = scheduleEvents.map(evt => ({
+            ...evt,
+            startDate: evt.start_date,
+            endDate: evt.end_date
+        }));
+
         // Calibrações
         const calibrations = await this.selectQuery('SELECT * FROM calibrations ORDER BY id');
         data.calibrations = calibrations.map(calibration => ({
@@ -1472,6 +1488,23 @@ export class DatabaseManager {
             }
             if (data.holidays) {
                 await this.upsertHolidays(tx, data.holidays);
+                const ids = (data.holidays || []).map((h: any) => h.id).filter((id: any) => id != null);
+                if (ids.length > 0) {
+                    const placeholders = ids.map(() => '?').join(',');
+                    await tx.runQuery(`DELETE FROM holidays WHERE id NOT IN (${placeholders})`, ids);
+                } else {
+                    await tx.runQuery('DELETE FROM holidays');
+                }
+            }
+            if (data.events) {
+                await this.upsertScheduleEvents(tx, data.events);
+                const ids = (data.events || []).map((e: any) => e.id).filter((id: any) => id != null);
+                if (ids.length > 0) {
+                    const placeholders = ids.map(() => '?').join(',');
+                    await tx.runQuery(`DELETE FROM schedule_events WHERE id NOT IN (${placeholders})`, ids);
+                } else {
+                    await tx.runQuery('DELETE FROM schedule_events');
+                }
             }
         });
 
@@ -1552,6 +1585,23 @@ export class DatabaseManager {
     }
     if (data.holidays) {
         await this.upsertHolidays(tx, data.holidays);
+        const ids = (data.holidays || []).map((h: any) => h.id).filter((id: any) => id != null);
+        if (ids.length > 0) {
+            const placeholders = ids.map(() => '?').join(',');
+            await tx.runQuery(`DELETE FROM holidays WHERE id NOT IN (${placeholders})`, ids);
+        } else {
+            await tx.runQuery('DELETE FROM holidays');
+        }
+    }
+    if (data.events) {
+        await this.upsertScheduleEvents(tx, data.events);
+        const ids = (data.events || []).map((e: any) => e.id).filter((id: any) => id != null);
+        if (ids.length > 0) {
+            const placeholders = ids.map(() => '?').join(',');
+            await tx.runQuery(`DELETE FROM schedule_events WHERE id NOT IN (${placeholders})`, ids);
+        } else {
+            await tx.runQuery('DELETE FROM schedule_events');
+        }
     }
 });
 
@@ -2053,6 +2103,39 @@ export class DatabaseManager {
         ]);
     }
 
+    private async saveScheduleEvents(tx: any, events: any[]) {
+        const columns = ['id', 'title', 'description', 'type', 'start_date', 'end_date'];
+        await this.bulkInsert(tx, 'schedule_events', columns, events, e => [
+            e.id,
+            e.title,
+            e.description || '',
+            e.type,
+            e.startDate || e.date || new Date().toISOString(),
+            e.endDate || e.date || new Date().toISOString()
+        ]);
+    }
+
+    private async upsertScheduleEvents(tx: any, events: any[]) {
+        if (!events || events.length === 0) {
+            return;
+        }
+        const sql = `
+            INSERT OR REPLACE INTO schedule_events (id, title, description, type, start_date, end_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        for (const e of events) {
+            await tx.runQuery(sql, [
+                e.id,
+                e.title,
+                e.description || '',
+                e.type,
+                e.startDate || e.date || new Date().toISOString(),
+                e.endDate || e.date || new Date().toISOString()
+            ]);
+            this.incrementalBackup.logChange('schedule_events', 'UPDATE', e.id, undefined, e);
+        }
+    }
+
     private async upsertHolidays(tx: any, holidays: any[]) {
         if (!holidays || holidays.length === 0) {
             return;
@@ -2395,6 +2478,47 @@ export class DatabaseManager {
             [holiday.name, holiday.startDate, holiday.endDate, holiday.id]
         );
         this.incrementalBackup.logChange('holidays', 'UPDATE', holiday.id, undefined, holiday);
+    }
+
+    async addScheduleEvent(event: { title: string; description?: string; type: string; startDate: string; endDate: string }): Promise<number> {
+        const result = await this.runQuery(
+            `INSERT INTO schedule_events (title, description, type, start_date, end_date) VALUES (?, ?, ?, ?, ?)`,
+            [event.title, event.description || '', event.type, event.startDate, event.endDate]
+        );
+        return result.lastID;
+    }
+
+    async deleteScheduleEvent(id: number): Promise<void> {
+        await this.runQuery(`DELETE FROM schedule_events WHERE id = ?`, [id]);
+    }
+
+    async updateScheduleEvent(event: { id: number; title?: string; description?: string; type?: string; startDate?: string; endDate?: string }): Promise<void> {
+        const fields: string[] = [];
+        const values: any[] = [];
+        if (event.title !== undefined) { fields.push('title = ?'); values.push(event.title); }
+        if (event.description !== undefined) { fields.push('description = ?'); values.push(event.description || ''); }
+        if (event.type !== undefined) { fields.push('type = ?'); values.push(event.type); }
+        if (event.startDate !== undefined) { fields.push('start_date = ?'); values.push(event.startDate); }
+        if (event.endDate !== undefined) { fields.push('end_date = ?'); values.push(event.endDate); }
+        if (fields.length === 0) { return; }
+        values.push(event.id);
+        const sql = `UPDATE schedule_events SET ${fields.join(', ')} WHERE id = ?`;
+        await this.runQuery(sql, values);
+        this.incrementalBackup.logChange('schedule_events', 'UPDATE', event.id, undefined, event);
+    }
+
+    async getScheduleEvents(): Promise<any[]> {
+        return this.queueOperation(async () => {
+            const rows = await this.selectQuery('SELECT * FROM schedule_events ORDER BY start_date');
+            return rows.map(row => ({
+                id: row.id,
+                title: row.title,
+                description: row.description,
+                type: row.type,
+                startDate: row.start_date,
+                endDate: row.end_date
+            }));
+        });
     }
 
     /**

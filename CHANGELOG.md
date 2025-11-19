@@ -4,7 +4,15 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
-[1.4.5] - 2025-11-14
+[1.4.7] - 2025-11-19
+
+### Adicionado
+
+- **Dependência entre ensaios:** Foi adicionado o suporte para definir dependências entre ensaios, garantindo que um ensaio só seja iniciado após a conclusão de outro.
+- **Agendamento de eventos e feriados:** Adicionado o suporte para agendar eventos e feriados no cronograma.
+
+
+[1.4.6] - 2025-11-14
 
 ### Correção
 

@@ -1618,3 +1618,38 @@ aside { border-right: 1px solid #e5e7eb; }
 .dark #page-assays select,
 .dark #page-inventory input,
 .dark #page-inventory select { border-color: var(--border-light) !important; }
+
+#gantt-dependency-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 15; /* ACIMA do grid (que costuma ser 0 ou 1) */
+    pointer-events: none; /* Deixa clicar nas tarefas através das setas */
+    overflow: visible;
+}
+
+/* Estilos para as setas de dependência (SVG) */
+.dependency-arrow {
+    fill: none;
+    stroke-width: 4px; /* Linha bem mais grossa */
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 1; /* Totalmente opaco para cor marcante */
+    pointer-events: none;
+    filter: drop-shadow(0px 1px 1px rgba(0,0,0,0.3)); /* Sombra para destacar do grid */
+    transition: stroke-width 0.2s;
+}
+
+/* Ao passar o mouse na tarefa, a seta fica ainda mais grossa */
+.gantt-event:hover ~ svg .dependency-arrow[data-from-id="..."], 
+.gantt-event:hover ~ svg .dependency-arrow[data-to-id="..."] {
+    stroke-width: 6px;
+    z-index: 50;
+}
+/* Tarefas devem ficar acima das setas */
+.gantt-event {
+    z-index: 20; 
+    position: absolute; /* Garante que o offsetLeft funcione bem */
+}

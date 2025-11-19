@@ -1744,6 +1744,7 @@ const state = {
     originalScheduledAssays: [],
     originalSafetyScheduledAssays: [],
     holidays: [],
+    events: [],
     calibrations: [],
     calibrationEquipments: [],
     undoStack: [],
@@ -1774,6 +1775,7 @@ const state = {
     },
     systemUsers: {},
     charts: {},
+    assayLinks: [],
     // Controle de repetição de toast de atualização automática
     lastForceRefreshToastAt: 0,
     lastForceRefreshSignature: '',
@@ -1862,7 +1864,7 @@ const tooltip = {
         const terminalName = (typeof getTerminalName === 'function') ? getTerminalName(assay.setup) : (assay.setup || 'N/A');
         const reportText = assay.report ? assay.report : 'Pendente';
         const periodo = `${utils.formatDate(assay.startDate)} a ${utils.formatDate(assay.endDate)}`;
-        const obsText = assay.observacoes ? assay.observacoes : 'Nenhuma observação';    
+        const obsText = utils.stripLinkTags(assay.observacoes) || 'Nenhuma observação';    
         const html = `
             <div class="space-y-1">
                 <div class="font-semibold">${assay.protocol || 'Sem protocolo'}</div>
@@ -1886,6 +1888,34 @@ const tooltip = {
                 <div class="font-semibold">${tipo}</div>
                 <div class="text-[11px] opacity-80">${periodo}</div>
                 <div class="text-xs">Terminais afetados: ${afetados}</div>
+            </div>
+        `;
+        DOM.ganttTooltip.innerHTML = html;
+        DOM.ganttTooltip.classList.remove('hidden');
+        this.position(evt);
+    },
+    showHoliday(evt, holiday) {
+        if (!DOM.ganttTooltip) return;
+        const periodo = `${utils.formatDate(holiday.startDate)} a ${utils.formatDate(holiday.endDate)}`;
+        const html = `
+            <div class="space-y-1">
+                <div class="font-semibold">${holiday.name}</div>
+                <div class="text-[11px] opacity-80">${periodo}</div>
+            </div>
+        `;
+        DOM.ganttTooltip.innerHTML = html;
+        DOM.ganttTooltip.classList.remove('hidden');
+        this.position(evt);
+    },
+    showEvent(evt, event) {
+        if (!DOM.ganttTooltip) return;
+        const periodo = `${utils.formatDate(event.startDate)} a ${utils.formatDate(event.endDate)}`;
+        const obsText = (event.description && event.description.trim()) ? event.description : 'Nenhuma Observação';
+        const html = `
+            <div class="space-y-1">
+                <div class="font-semibold">${event.title}</div>
+                <div class="text-[11px] opacity-80">${periodo}</div>
+                <div class="text-xs">Observações: ${obsText}</div>
             </div>
         `;
         DOM.ganttTooltip.innerHTML = html;
@@ -2124,8 +2154,35 @@ const utils = {
             }
         }
         return false;
+    },
+    stripLinkTags: (text) => {
+        const s = String(text || '');
+        return s.replace(/\s*\[link_(?:safety|efficiency):\d+\]\s*/g, '').trim();
+    },
+    extractLinkTags: (text) => {
+        const s = String(text || '');
+        const tags = s.match(/\[link_(?:safety|efficiency):\d+\]/g);
+        return tags || [];
+    },
+    mergeObservacoesWithLinkTags: (originalObs, newText) => {
+        const clean = utils.stripLinkTags(newText);
+        const tags = utils.extractLinkTags(originalObs);
+        return tags.length > 0 ? `${clean} ${tags.join(' ')}`.trim() : clean;
     }
 };
+
+// Retorna o evento do cronograma que cobre a data
+function getEventForDate(dateStr) {
+    const checkDate = utils.parseDate(dateStr);
+    for (const evt of state.events || []) {
+        const startDate = utils.parseDate(evt.startDate);
+        const endDate = utils.parseDate(evt.endDate);
+        if (checkDate >= startDate && checkDate <= endDate) {
+            return evt;
+        }
+    }
+    return null;
+}
 const uiHelpers = {
 
     updateNotificationBadge: () => {
@@ -3293,12 +3350,15 @@ const renderers = {
             const dayOfMonth = date.getDate();
             const isWeekend = ['SÁB', 'DOM'].includes(dayOfWeek);
             const isHoliday = utils.isHoliday(dateStr);
+            const scheduleEvent = getEventForDate(dateStr);
             const isToday = dateStr === todayString;
 
             let dayClass = '';
+            const isDark = document.documentElement.classList.contains('dark');
             if (isToday) { dayClass = 'bg-yellow-200 border-2 border-yellow-500'; } 
-            else if (isHoliday) { dayClass = 'bg-red-300'; } 
-            else if (isWeekend) { dayClass = 'bg-gray-300'; }
+            else if (isHoliday) { dayClass = isDark ? 'bg-red-600' : 'bg-red-300'; } 
+            else if (scheduleEvent) { dayClass = isDark ? 'bg-purple-500' : 'bg-blue-300'; }
+            else if (isWeekend) { dayClass = isDark ? 'bg-gray-600' : 'bg-gray-300'; }
 
             const dayBorderClass = index === 0 ? '' : 'border-l border-grid';
             daysHtml.push(`
@@ -3319,6 +3379,27 @@ const renderers = {
         DOM.ganttHeaderContainer.classList.add('border-b-2', 'border-grid');
         if (DOM.ganttPeriodLabel) {
             DOM.ganttPeriodLabel.textContent = `${utils.formatDate(state.ganttStart.toISOString().split('T')[0])} - ${utils.formatDate(state.ganttEnd.toISOString().split('T')[0])}`;
+        }
+
+        const headerRow = DOM.ganttHeaderContainer.querySelector('.gantt-days-header-row');
+        if (headerRow) {
+            headerRow.querySelectorAll('div[data-date]').forEach(cell => {
+                const dateStr = cell.getAttribute('data-date');
+                const holiday = state.holidays.find(h => {
+                    const d = utils.parseDate(dateStr);
+                    return d >= utils.parseDate(h.startDate) && d <= utils.parseDate(h.endDate);
+                });
+                const scheduleEvent = getEventForDate(dateStr);
+                cell.addEventListener('mouseenter', (e) => {
+                    if (holiday) {
+                        tooltip.showHoliday(e, holiday);
+                    } else if (scheduleEvent) {
+                        tooltip.showEvent(e, scheduleEvent);
+                    }
+                });
+                cell.addEventListener('mousemove', (e) => tooltip.position(e));
+                cell.addEventListener('mouseleave', () => tooltip.hide());
+            });
         }
 
         // Agrupa os ensaios por categoria
@@ -3435,11 +3516,24 @@ const renderers = {
                 const dayOfWeek = utils.parseDate(day).toLocaleString('pt-BR', { weekday: 'short' }).slice(0, 3).toUpperCase();
                 const isWeekend = ['SÁB', 'DOM'].includes(dayOfWeek);
                 const isHoliday = utils.isHoliday(day);
+                const scheduleEvent = getEventForDate(day);
                 let backgroundClass = 'bg-white';
+                const isDark = document.documentElement.classList.contains('dark');
                 if (isToday) { backgroundClass = 'bg-yellow-500'; }
-                else if (isHoliday) { backgroundClass = 'bg-red-300'; }
-                else if (isWeekend) { backgroundClass = 'bg-gray-300'; }
+                else if (isHoliday) { backgroundClass = isDark ? 'bg-red-700' : 'bg-red-300'; }
+                else if (scheduleEvent) { backgroundClass = isDark ? 'bg-purple-700' : 'bg-blue-300'; }
+                else if (isWeekend) { backgroundClass = isDark ? 'bg-gray-700' : 'bg-gray-300'; }
                 dayCell.className = `h-full border-r border-grid ${backgroundClass}`;
+                if (isHoliday) {
+                    const holiday = state.holidays.find(h => utils.parseDate(day) >= utils.parseDate(h.startDate) && utils.parseDate(day) <= utils.parseDate(h.endDate));
+                    dayCell.addEventListener('mouseenter', (e) => tooltip.showHoliday(e, holiday));
+                    dayCell.addEventListener('mousemove', (e) => tooltip.position(e));
+                    dayCell.addEventListener('mouseleave', () => tooltip.hide());
+                } else if (scheduleEvent) {
+                    dayCell.addEventListener('mouseenter', (e) => tooltip.showEvent(e, scheduleEvent));
+                    dayCell.addEventListener('mousemove', (e) => tooltip.position(e));
+                    dayCell.addEventListener('mouseleave', () => tooltip.hide());
+                }
                 backgroundGrid.appendChild(dayCell);
             });
 
@@ -3753,6 +3847,9 @@ ${calib.notes ? `Observações: ${calib.notes}` : ''}
 
         // adiciona css tooltip apenas 1x
         // Tooltip antigo via CSS (::after) removido para evitar conflitos com tooltip rico
+
+        // Renderiza setas de vínculo entre ensaios após o Gantt
+        renderers.renderAssayLinks();
 
         // ----------------------------------------------------
         // Callback opcional após renderização
@@ -4175,7 +4272,112 @@ chartContainers.forEach(container => {
             },
             plugins: { datalabels: { display: false } }
         });
+
+        renderers.renderAssayLinks();
     },
+
+renderAssayLinks: () => {
+    setTimeout(() => {
+        const container = DOM.ganttGridContainer;
+        if (!container) return;
+
+        const oldSvg = document.getElementById('gantt-dependency-layer');
+        if (oldSvg) oldSvg.remove();
+
+        const svgLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svgLayer.id = 'gantt-dependency-layer';
+        svgLayer.style.width = `${container.scrollWidth}px`;
+        svgLayer.style.height = `${container.scrollHeight}px`;
+        
+        container.appendChild(svgLayer);
+
+        // Definições dos marcadores (Mantidos iguais)
+        svgLayer.innerHTML = `
+            <defs>
+                <marker id="arrowhead-gray" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280" /></marker>
+                <marker id="arrowhead-blue" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" /></marker>
+                <marker id="arrowhead-green" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#16a34a" /></marker>
+                <marker id="arrowhead-red" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" /></marker>
+                <marker id="arrowhead-orange" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c" /></marker>
+                <marker id="arrowhead-purple" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9333ea" /></marker>
+                <marker id="arrowhead-pink" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#db2777" /></marker>
+                <marker id="arrowhead-cyan" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0891b2" /></marker>
+                <marker id="arrowhead-amber" viewBox="0 0 10 10" markerWidth="6" markerHeight="6" refX="0" refY="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" /></marker>
+            </defs>
+        `;
+
+        const LINK_COLORS = [
+            { stroke: '#2563eb', marker: 'url(#arrowhead-blue)' },
+            { stroke: '#16a34a', marker: 'url(#arrowhead-green)' },
+            { stroke: '#dc2626', marker: 'url(#arrowhead-red)' },
+            { stroke: '#ea580c', marker: 'url(#arrowhead-orange)' },
+            { stroke: '#9333ea', marker: 'url(#arrowhead-purple)' },
+            { stroke: '#db2777', marker: 'url(#arrowhead-pink)' },
+            { stroke: '#0891b2', marker: 'url(#arrowhead-cyan)' },
+            { stroke: '#d97706', marker: 'url(#arrowhead-amber)' }
+        ];
+
+        const containerRect = container.getBoundingClientRect();
+
+        (state.assayLinks || []).forEach((link, index) => {
+            const effEl = container.querySelector(`.gantt-event[data-assay-id="${link.from}"]`);
+            const safEl = container.querySelector(`.gantt-event[data-assay-id="${link.to}"]`);
+
+            if (!effEl || !safEl) return;
+
+            const r1 = effEl.getBoundingClientRect();
+            const r2 = safEl.getBoundingClientRect();
+
+            // Pontos de início e fim (mantendo a lógica correta de posição)
+            const startX = (r1.right - containerRect.left) + container.scrollLeft;
+            const startY = (r1.top - containerRect.top) + container.scrollTop + (r1.height / 2);
+
+            const gapForArrowHead = 25;
+            const endX = (r2.left - containerRect.left) + container.scrollLeft - gapForArrowHead;
+            const endY = (r2.top - containerRect.top) + container.scrollTop + (r2.height / 2);
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            
+            let d;
+            // --- LÓGICA "QUADRADA" (ORTOGONAL) ---
+            
+            if (endX > startX + 20) {
+                // Caso normal: Destino à frente
+                // Desenha: Sai para direita -> Desce/Sobe -> Vai para direita
+                const midX = (startX + endX) / 2;
+                
+                d = `M ${startX} ${startY} 
+                     L ${midX} ${startY} 
+                     L ${midX} ${endY} 
+                     L ${endX} ${endY}`;
+            } else {
+                // Caso de retorno: Destino atrás ou muito perto
+                // Desenha: Sai para direita -> Desce um pouco -> Volta para esquerda -> Desce até o fim -> Vai para direita
+                const loopOut = startX + 40; // Avança 40px
+                const loopBack = endX - 40;  // Recua 40px antes do alvo
+                const midY = (startY + endY) / 2; // Meio do caminho vertical
+
+                d = `M ${startX} ${startY} 
+                     L ${loopOut} ${startY} 
+                     L ${loopOut} ${midY} 
+                     L ${loopBack} ${midY} 
+                     L ${loopBack} ${endY} 
+                     L ${endX} ${endY}`;
+            }
+
+            const colorSet = LINK_COLORS[index % LINK_COLORS.length];
+
+            path.setAttribute("d", d);
+            path.setAttribute("class", "dependency-arrow");
+            path.setAttribute("stroke", colorSet.stroke);
+            path.setAttribute("marker-end", colorSet.marker);
+            // Removemos fill:none do CSS e garantimos aqui para evitar preenchimento acidental em linhas fechadas
+            path.setAttribute("fill", "none"); 
+
+            svgLayer.appendChild(path);
+        });
+    }, 50);
+},
 
     /**
      * Renderiza ou atualiza o gráfico de estoque por lote.
@@ -4664,6 +4866,17 @@ renderCharts: () => {
         if (!select) return;
 
         select.innerHTML = '<option value="">Selecione o Técnico</option>'; // Opção padrão
+        state.safetyCategories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            select.appendChild(option);
+        });
+    },
+    populateSafetyTechnicianSelect: (form) => {
+        const select = form.querySelector('[name="safetySetup"]');
+        if (!select) return;
+        select.innerHTML = '<option value="">Selecione o Técnico</option>';
         state.safetyCategories.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
@@ -5680,7 +5893,7 @@ const dataHandlers = {
             settings: state.settings,
             efficiencyCategories: state.efficiencyCategories,
             safetyCategories: state.safetyCategories,
-            systemUsers: state.systemUsers
+            systemUsers: state.systemUsers,
         };
         try {
             JSON.stringify(dataToSave);
@@ -5965,26 +6178,111 @@ const dataHandlers = {
      * Função otimizada para operações de feriados
      */
     addHoliday: (holiday) => {
-        console.log('[WEBVIEW] Adicionando feriado:', holiday);
-        vscode.postMessage({
-            command: 'addHoliday',
-            data: holiday
-        });
+        undoManager.saveState();
+        const newHoliday = { id: Date.now(), ...holiday };
+        state.holidays.push(newHoliday);
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+        renderers.renderGanttChart();
+        renderers.renderHolidaysList();
+        utils.showToast('Feriado adicionado (pendente de salvar).');
     },
 
     deleteHoliday: (holidayId) => {
-        console.log('[WEBVIEW] Removendo feriado:', holidayId);
-        vscode.postMessage({
-            command: 'deleteHoliday',
-            data: { id: holidayId }
-        });
+        undoManager.saveState();
+        const beforeLen = state.holidays.length;
+        state.holidays = state.holidays.filter(h => Number(h.id) !== Number(holidayId));
+        if (state.holidays.length !== beforeLen) {
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+            renderers.renderHolidaysList();
+            utils.showToast('Feriado removido (pendente de salvar).');
+        }
     },
     updateHoliday: (holiday) => {
-        console.log('[WEBVIEW] Atualizando feriado (granular):', holiday);
-        vscode.postMessage({
-            command: 'updateHoliday',
-            data: holiday
-        });
+        undoManager.saveState();
+        const idx = state.holidays.findIndex(h => Number(h.id) === Number(holiday.id));
+        if (idx !== -1) {
+            state.holidays[idx] = { ...state.holidays[idx], ...holiday };
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+            renderers.renderHolidaysList();
+            utils.showToast('Feriado atualizado (pendente de salvar).');
+        }
+    },
+    addScheduleEvent: (event) => {
+        undoManager.saveState();
+        const newEvent = { id: Date.now(), ...event };
+        state.events.push(newEvent);
+        state.hasUnsavedChanges = true;
+        ui.toggleScheduleActions(true);
+        renderers.renderGanttChart();
+    },
+    updateScheduleEvent: (event) => {
+        undoManager.saveState();
+        const idx = state.events.findIndex(e => Number(e.id) === Number(event.id));
+        if (idx !== -1) {
+            state.events[idx] = { ...state.events[idx], ...event };
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+        }
+    },
+    deleteScheduleEvent: (eventId) => {
+        undoManager.saveState();
+        const beforeLen = state.events.length;
+        state.events = state.events.filter(e => Number(e.id) !== Number(eventId));
+        if (state.events.length !== beforeLen) {
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+            utils.showToast('Evento removido do cronograma (pendente de salvar).');
+        }
+    },
+    deleteHolidayLocal: (holidayId) => {
+        undoManager.saveState();
+        const beforeLen = state.holidays.length;
+        state.holidays = state.holidays.filter(h => Number(h.id) !== Number(holidayId));
+        if (state.holidays.length !== beforeLen) {
+            state.hasUnsavedChanges = true;
+            ui.toggleScheduleActions(true);
+            renderers.renderGanttChart();
+            renderers.renderHolidaysList();
+            utils.showToast('Feriado removido (pendente de salvar).');
+        }
+    },
+    // (Mantido apenas o modo local, sem envio imediato)
+
+    handleAddScheduleEvent: (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const title = form.title.value.trim();
+        const type = form.type.value.trim();
+        const description = form.description.value.trim();
+        const startDate = form.startDate.value;
+        const endDate = form.endDate.value;
+        if (!title || !type || !startDate || !endDate) return;
+        const payload = { title, type, description, startDate, endDate };
+        dataHandlers.addScheduleEvent(payload);
+        utils.closeModal();
+    },
+    handleUpdateScheduleEvent: (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const id = parseInt(form.id.value, 10);
+        if (isNaN(id)) return;
+        const updates = {
+            id,
+            title: form.title.value.trim(),
+            type: form.type.value.trim(),
+            description: form.description.value.trim(),
+            startDate: form.startDate.value,
+            endDate: form.endDate.value
+        };
+        dataHandlers.updateScheduleEvent(updates);
+        utils.closeModal();
     },
 
     /**
@@ -6100,7 +6398,9 @@ const dataHandlers = {
             efficiencyCategories: state.efficiencyCategories,
             safetyCategories: state.safetyCategories,
             historicalAssays: state.historicalAssays,
-            inventory: state.inventory
+            inventory: state.inventory,
+            holidays: state.holidays,
+            events: state.events
         };
         
         vscode.postMessage({
@@ -6210,10 +6510,15 @@ const dataHandlers = {
      */
     handleRemoveHoliday: (holidayId) => {
         undoManager.saveState();
+        // Remove localmente e persiste imediatamente no banco
         state.holidays = state.holidays.filter(h => h.id !== holidayId);
-        dataHandlers.deleteHoliday(holidayId);
         renderers.renderHolidaysList();
-        utils.showToast("Feriado removido com sucesso!");
+        renderers.renderGanttChart();
+        // Envia operação granular ao backend para persistir sem depender de Guardar Alterações
+        vscode.postMessage({
+            command: 'deleteHoliday',
+            data: { id: holidayId }
+        });
     },
 
     /** Edita um feriado existente. */
@@ -6231,8 +6536,12 @@ const dataHandlers = {
         holiday.startDate = newStart;
         holiday.endDate = newEnd;
         renderers.renderHolidaysList();
-        dataHandlers.updateHoliday(holiday);
-        utils.showToast('Feriado atualizado com sucesso!');
+        renderers.renderGanttChart();
+        // Persiste imediatamente no banco sem exigir Guardar Alterações
+        vscode.postMessage({
+            command: 'updateHoliday',
+            data: { id: holiday.id, name: holiday.name, startDate: holiday.startDate, endDate: holiday.endDate }
+        });
     },
 
     /**
@@ -7190,7 +7499,7 @@ handleUpdateCalibration: (e) => {
         setup: form.setup.value, // A, B, ou C para segurança
         status: form.status.value,
         type: 'seguranca-eletrica', // Tipo fixo para este modal
-        observacoes: form.observacoes?.value || '',
+        observacoes: utils.mergeObservacoesWithLinkTags(originalArray[assayIndex].observacoes, form.observacoes?.value || ''),
         cycles: parseInt(form.cycles?.value) || 0,
     };
 
@@ -7266,6 +7575,35 @@ handleUpdateCalibration: (e) => {
             }
         };
         state.scheduledAssays.push(newAssay);
+        const linkSafetyChk = form.querySelector('[name="linkSafety"]');
+        if (linkSafetyChk && linkSafetyChk.checked) {
+            const safetyStart = form.querySelector('[name="safetyStartDate"]')?.value || startDate;
+            const safetyEnd = form.querySelector('[name="safetyEndDate"]')?.value || endDate;
+            const safetySetup = form.querySelector('[name="safetySetup"]')?.value || '';
+            const safetyAssay = {
+                id: Date.now() + 1,
+                protocol: newAssay.protocol,
+                orcamento: newAssay.orcamento,
+                assayManufacturer: newAssay.assayManufacturer,
+                model: newAssay.model,
+                nominalLoad: newAssay.nominalLoad,
+                tensao: newAssay.tensao,
+                startDate: safetyStart,
+                endDate: safetyEnd,
+                reportDate: '',
+                setup: safetySetup || 'A',
+                status: 'aguardando',
+                type: 'seguranca-eletrica',
+                observacoes: '',
+                cycles: 0,
+                plannedSuppliers: null,
+                subRowIndex: 0
+            };
+            state.safetyScheduledAssays.push(safetyAssay);
+            newAssay.observacoes = ((newAssay.observacoes || '') + ` [link_safety:${safetyAssay.id}]`).trim();
+            safetyAssay.observacoes = ((safetyAssay.observacoes || '') + ` [link_efficiency:${newAssay.id}]`).trim();
+            state.assayLinks.push({ from: newAssay.id, to: safetyAssay.id });
+        }
         state.hasUnsavedChanges = true;
         ui.toggleScheduleActions(true);
         renderers.renderGanttChart();
@@ -7551,7 +7889,7 @@ handleUpdateCalibration: (e) => {
     assayToUpdate.reportDate = form.reportDate?.value || '';
     assayToUpdate.setup = form.setup.value;
     assayToUpdate.status = form.status.value;
-    assayToUpdate.observacoes = form.observacoes?.value || '';
+    assayToUpdate.observacoes = utils.mergeObservacoesWithLinkTags(assayToUpdate.observacoes, form.observacoes?.value || '');
 
     state.hasUnsavedChanges = true;
     ui.toggleScheduleActions(true);
@@ -7965,9 +8303,16 @@ const modalHandlers = {
         const form = document.getElementById('form-add-gantt-assay');
         if (form) {
             renderers.populateTerminalSelects(form);
-
-            // --- LÓGICA DE SELEÇÃO AUTOMÁTICA REMOVIDA DAQUI ---
-
+            const linkCheckbox = form.querySelector('#gantt-link-safety');
+            const safetyFields = form.querySelector('#gantt-safety-fields');
+            linkCheckbox?.addEventListener('change', (ev) => {
+                if (ev.target.checked) {
+                    safetyFields?.classList.remove('hidden');
+                    renderers.populateSafetyTechnicianSelect(form);
+                } else {
+                    safetyFields?.classList.add('hidden');
+                }
+            });
             form.addEventListener('submit', dataHandlers.handleAddGanttAssay);
         }
     });
@@ -7988,6 +8333,57 @@ const modalHandlers = {
                 renderers.populateSafetySelects(form); // <-- ADICIONAR AQUI
                 form.addEventListener('submit', dataHandlers.handleAddSafetyAssay);
             }
+        });
+    },
+
+    openLinkEfficiencyToSafetyModal: (efficiencyId) => {
+        const today = new Date();
+        const eligible = (state.safetyScheduledAssays || []).filter(a => {
+            const start = utils.parseDate(a.startDate);
+            const isFuture = start >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const status = String(a.status || '').toLowerCase();
+            const notFinished = !['concluido','incompleto','relatorio'].includes(status);
+            return isFuture && notFinished;
+        });
+        const options = eligible.length > 0
+            ? eligible.map(a => `<option value="${a.id}">${a.protocol} (${utils.formatDate(a.startDate)} a ${utils.formatDate(a.endDate)})</option>`).join('')
+            : '<option value="" disabled>Nenhum ensaio de segurança elegível</option>';
+        const content = `
+            <form id="form-link-efficiency-safety" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Ensaio de Segurança</label>
+                    <select name="safetyId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500">${options}</select>
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Vincular</button>
+                </div>
+            </form>
+        `;
+        utils.openModal('Vincular Eficiência à Segurança', content, () => {
+            const form = document.getElementById('form-link-efficiency-safety');
+            form?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const safetySelect = form.querySelector('[name="safetyId"]');
+                const safetyId = parseInt(safetySelect.value, 10);
+                if (!safetyId || !eligible.find(a => a.id === safetyId)) {
+                    utils.showToast('Selecione um ensaio de segurança elegível.', true);
+                    return;
+                }
+                const eff = state.scheduledAssays.find(a => a.id === efficiencyId);
+                const saf = state.safetyScheduledAssays.find(a => a.id === safetyId);
+                if (!eff || !saf) return;
+                eff.observacoes = ((eff.observacoes || '') + ` [link_safety:${safetyId}]`).trim();
+                saf.observacoes = ((saf.observacoes || '') + ` [link_efficiency:${efficiencyId}]`).trim();
+                state.assayLinks.push({ from: efficiencyId, to: safetyId });
+                state.hasUnsavedChanges = true;
+                ui.toggleScheduleActions(true);
+                renderers.renderGanttChart();
+                utils.closeModal();
+                utils.showToast('Vínculo criado. Guarde as alterações para confirmar.');
+            });
+            const cancelBtn = form?.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
         });
     },
 
@@ -8123,7 +8519,7 @@ const modalHandlers = {
         form.status.value = assayToEdit.status || 'aguardando';
         form.reportDate.value = assayToEdit.reportDate || '';
         form.type.value = assayToEdit.type || '';
-        form.observacoes.value = assayToEdit.observacoes || '';
+        form.observacoes.value = utils.stripLinkTags(assayToEdit.observacoes) || '';
         
 
         // Altera o botão de "Agendar" para "Salvar"
@@ -8229,6 +8625,94 @@ const modalHandlers = {
             });
             const cancelBtn = form?.querySelector('.btn-close-modal');
             cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openAddHolidayModal: (prefill) => {
+        const contentHTML = `
+            <form id="form-add-holiday" class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nome do Feriado</label>
+                    <input type="text" name="holidayName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black" required />
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data de Início</label>
+                        <input type="date" name="startDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black" required />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data de Fim</label>
+                        <input type="date" name="endDate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-black" required />
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn-close-modal bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Adicionar</button>
+                </div>
+            </form>
+        `;
+        utils.openModal('Agendar Feriado', contentHTML, () => {
+            const form = document.getElementById('form-add-holiday');
+            if (!form) return;
+            if (prefill) {
+                const sd = typeof prefill === 'string' ? prefill : prefill.startDate;
+                const ed = typeof prefill === 'string' ? prefill : prefill.endDate;
+                if (sd) form.startDate.value = sd;
+                if (ed) form.endDate.value = ed;
+            }
+            form.addEventListener('submit', dataHandlers.handleAddHoliday);
+            const cancelBtn = form.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openAddScheduleEventModal: (prefill) => {
+        const tpl = document.getElementById('add-schedule-event-modal-content');
+        if (!tpl) return;
+        utils.openModal('Agendar Evento', tpl.innerHTML, () => {
+            const form = document.getElementById('form-add-schedule-event');
+            if (!form) return;
+            if (prefill) {
+                const sd = typeof prefill === 'string' ? prefill : prefill.startDate;
+                const ed = typeof prefill === 'string' ? prefill : prefill.endDate;
+                if (sd) form.startDate.value = sd;
+                if (ed) form.endDate.value = ed;
+            }
+            form.addEventListener('submit', dataHandlers.handleAddScheduleEvent);
+            const cancelBtn = form.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openEditScheduleEventModal: (eventId) => {
+        const evt = state.events.find(e => Number(e.id) === Number(eventId));
+        if (!evt) return;
+        const tpl = document.getElementById('edit-schedule-event-modal-content');
+        if (!tpl) return;
+        utils.openModal('Editar Evento', tpl.innerHTML, () => {
+            const form = document.getElementById('form-edit-schedule-event');
+            if (!form) return;
+            form.id.value = evt.id;
+            form.title.value = evt.title || '';
+            form.type.value = evt.type || '';
+            form.description.value = evt.description || '';
+            form.startDate.value = evt.startDate || '';
+            form.endDate.value = evt.endDate || '';
+            form.addEventListener('submit', dataHandlers.handleUpdateScheduleEvent);
+            const cancelBtn = form.querySelector('.btn-close-modal');
+            cancelBtn?.addEventListener('click', utils.closeModal);
+        });
+    },
+    openViewScheduleEventModal: (eventId) => {
+        const evt = state.events.find(e => Number(e.id) === Number(eventId));
+        if (!evt) return;
+        const tpl = document.getElementById('view-schedule-event-modal-content');
+        if (!tpl) return;
+        utils.openModal(`Evento: ${evt.title}`, tpl.innerHTML, () => {
+            const modal = document.querySelector('#modal-template');
+            modal.querySelector('[data-field="title"]').textContent = evt.title || '';
+            modal.querySelector('[data-field="type"]').textContent = evt.type || '';
+            modal.querySelector('[data-field="period"]').textContent = `${utils.formatDate(evt.startDate)} a ${utils.formatDate(evt.endDate)}`;
+            modal.querySelector('[data-field="description"]').textContent = evt.description || '';
+            const closeBtn = modal.querySelector('.btn-close-modal');
+            closeBtn?.addEventListener('click', utils.closeModal);
         });
     },
     openEditSystemUserModal: (username) => {
@@ -8553,7 +9037,7 @@ openEditCalibrationModal: (calibrationId) => {
                     <p><span class="font-semibold">Tipo:</span> ${ASSAY_TYPE_MAP[assay.type] || 'N/A'}</p>
                     <p><span class="font-semibold">Data do Relatório:</span> ${assay.reportDate ? assay.reportDate.split('-').reverse().join('/') : 'N/A'}</p>
                     <p><span class="font-semibold">Relatório:</span> ${assay.report ? (assay.report === 'Pendente' ? '<span class="text-red-500">Pendente</span>' : assay.report) : '<span class="text-red-500">Pendente</span>'}</p>
-                    <p><span class="font-semibold">Observações:</span> ${assay.observacoes || 'Nenhuma Observação'}</p>
+                    <p><span class="font-semibold">Observações:</span> ${utils.stripLinkTags(assay.observacoes) || 'Nenhuma Observação'}</p>
                 </div>
                 <div class="flex justify-end space-x-2 pt-4 border-t">
                     ${dynamicButtonsHTML}
@@ -9121,7 +9605,7 @@ openEditCalibrationModal: (calibrationId) => {
             form.querySelector('[name="type"]').value = assayToEdit.type;
             form.querySelector('[name="reportDate"]').value = assayToEdit.reportDate;
             form.querySelector('[name="id"]').value = assayToEdit.id;
-            form.querySelector('[name="observacoes"]').value = assayToEdit.observacoes || '';
+            form.querySelector('[name="observacoes"]').value = utils.stripLinkTags(assayToEdit.observacoes) || '';
             
             const submitButton = form.querySelector('button[type="submit"]');
             if (submitButton) {
@@ -10294,15 +10778,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // Botões padrão
     const btnDuplicate = contextMenu.querySelector('[data-action="duplicate"]');
     const btnPending = contextMenu.querySelector('[data-action="send-to-pending"]');
+    const btnScheduleEvent = contextMenu.querySelector('[data-action="schedule-event"]');
+    const btnScheduleHoliday = contextMenu.querySelector('[data-action="schedule-holiday"]');
+    const btnEditEvent = contextMenu.querySelector('[data-action="edit-event"]');
+    const btnEditHoliday = contextMenu.querySelector('[data-action="edit-holiday"]');
+    const btnEdit = contextMenu.querySelector('[data-action="edit"]');
+    const btnLinkToSafety = contextMenu.querySelector('[data-action="link-to-safety"]');
+    const btnUnlinkAssay = contextMenu.querySelector('[data-action="unlink-assay"]');
 
     // 1. Esconde todos os botões dinâmicos por padrão
     [btnHere, btnStart, btnFinish, btnIncomplete, btnReport].forEach(btn => btn.style.display = 'none');
 
     // 2. Mostra/Esconde seções inteiras
     if (isCalibration || item.type === 'férias') {
-        dynamicActions.style.display = 'none'; // Esconde todas as ações de status
+        dynamicActions.style.display = 'none';
         btnDuplicate.style.display = 'none';
         btnPending.style.display = 'none';
+        // Oculta ações que não se aplicam a elementos do cronograma
+        btnScheduleEvent.style.display = 'none';
+        btnScheduleHoliday && (btnScheduleHoliday.style.display = 'none');
+        btnEditEvent && (btnEditEvent.style.display = 'none');
+        btnEditHoliday && (btnEditHoliday.style.display = 'none');
+        btnLinkToSafety && (btnLinkToSafety.style.display = 'none');
+        btnUnlinkAssay && (btnUnlinkAssay.style.display = 'none');
+        // Garante visibilidade apenas de editar e excluir
+        if (btnEdit) {
+            btnEdit.style.display = 'flex';
+        }
     } else {
         dynamicActions.style.display = 'block'; // Mostra o container de ações de status
         
@@ -10334,15 +10836,86 @@ document.addEventListener('DOMContentLoaded', () => {
             btnDuplicate.style.display = 'flex';
             btnPending.style.display = 'flex';
         }
+        if (btnEdit) {
+            btnEdit.style.display = 'flex';
+        }
+        // Vínculo: mostra "Criar vínculo" só para eficiência não vinculada; mostra "Desvincular" quando há vínculo
+        const isSafety = item.type === 'seguranca-eletrica';
+        const hasLink = state.assayLinks.some(l => l.from === item.id || l.to === item.id);
+        if (btnLinkToSafety) {
+            btnLinkToSafety.style.display = (!isCalibration && !isSafety && !hasLink) ? 'flex' : 'none';
+        }
+        if (btnUnlinkAssay) {
+            btnUnlinkAssay.style.display = hasLink ? 'flex' : 'none';
+        }
+        btnScheduleEvent.style.display = 'none';
+        btnScheduleHoliday && (btnScheduleHoliday.style.display = 'none');
+        btnEditEvent && (btnEditEvent.style.display = 'none');
+        btnEditHoliday && (btnEditHoliday.style.display = 'none');
     }
 
-    // ----- Posiciona e exibe o menu -----
-    activeContextMenuTrigger = menuTrigger;
-    contextMenu.classList.remove('hidden');
-    // Atualiza posição imediatamente e mantém ancorado em scroll/resize
-    updateContextMenuPosition();
-    attachContextMenuListeners();
-});
+        // ----- Posiciona e exibe o menu -----
+        activeContextMenuTrigger = menuTrigger;
+        contextMenu.classList.remove('header-context');
+        contextMenu.classList.remove('hidden');
+        // Atualiza posição imediatamente e mantém ancorado em scroll/resize
+        updateContextMenuPosition();
+        attachContextMenuListeners();
+    });
+
+    DOM.ganttHeaderContainer.addEventListener('contextmenu', (e) => {
+        const dayCell = e.target.closest('[data-date]');
+        if (!dayCell) return;
+        e.preventDefault();
+        contextMenu.dataset.itemId = '';
+        contextMenu.dataset.isCalibration = '';
+        contextMenu.dataset.date = dayCell.getAttribute('data-date');
+        const dynamicActions = contextMenu.querySelector('#context-menu-dynamic-actions');
+    const btnDuplicate = contextMenu.querySelector('[data-action="duplicate"]');
+    const btnPending = contextMenu.querySelector('[data-action="send-to-pending"]');
+    const btnEdit = contextMenu.querySelector('[data-action="edit"]');
+    const btnDelete = contextMenu.querySelector('[data-action="delete"]');
+    const btnScheduleEvent = contextMenu.querySelector('[data-action="schedule-event"]');
+    const btnScheduleHoliday = contextMenu.querySelector('[data-action="schedule-holiday"]');
+    const btnEditEvent = contextMenu.querySelector('[data-action="edit-event"]');
+    const btnEditHoliday = contextMenu.querySelector('[data-action="edit-holiday"]');
+        dynamicActions.style.display = 'none';
+        btnDuplicate.style.display = 'none';
+        btnPending.style.display = 'none';
+        btnEdit.style.display = 'none';
+        btnEditEvent.style.display = 'none';
+        btnEditHoliday.style.display = 'none';
+        btnDelete.style.display = 'none';
+        btnScheduleEvent.style.display = 'none';
+        btnScheduleHoliday.style.display = 'none';
+        // oculta botões de vínculo no cabeçalho
+        const btnLinkToSafety = contextMenu.querySelector('[data-action="link-to-safety"]');
+        const btnUnlinkAssay = contextMenu.querySelector('[data-action="unlink-assay"]');
+        btnLinkToSafety && (btnLinkToSafety.style.display = 'none');
+        btnUnlinkAssay && (btnUnlinkAssay.style.display = 'none');
+
+        const hasEvent = !!getEventForDate(contextMenu.dataset.date);
+        const hasHoliday = utils.isHoliday(contextMenu.dataset.date);
+
+        if (hasEvent) {
+            btnEditEvent.style.display = 'flex';
+            btnDelete.style.display = 'flex';
+        } else {
+            btnScheduleEvent.style.display = 'flex';
+        }
+
+        if (hasHoliday) {
+            btnEditHoliday.style.display = 'flex';
+            btnDelete.style.display = 'flex';
+        } else {
+            btnScheduleHoliday.style.display = 'flex';
+        }
+        activeContextMenuTrigger = dayCell;
+        contextMenu.classList.remove('hidden');
+        contextMenu.classList.add('header-context');
+        updateContextMenuPosition();
+        attachContextMenuListeners();
+    });
 
     // 2. Ouve cliques NOS ITENS DO MENU para executar ações
     contextMenu.addEventListener('click', (e) => {
@@ -10352,8 +10925,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const action = actionButton.dataset.action;
     const itemId = parseInt(contextMenu.dataset.itemId, 10);
     const isCalibration = contextMenu.dataset.isCalibration === 'true';
-
-    if (isNaN(itemId)) return;
+    const headerDate = contextMenu.dataset.date;
 
     let item;
     let isSafetyAssay = false;
@@ -10367,13 +10939,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    if (!item) {
+    if (!item && !headerDate) {
         utils.showToast("Erro: Tarefa não encontrada.", true);
         return;
     }
 
     // Executa a ação
-    switch (action) {
+        switch (action) {
         
         // --- NOVAS AÇÕES DE STATUS ---
         case 'here-assay':
@@ -10435,11 +11007,81 @@ document.addEventListener('DOMContentLoaded', () => {
             utils.showToast(`Tarefa '${item.protocol}' movida para Pendentes.`);
             break;
 
+        case 'link-to-safety':
+            if (!isCalibration && !isSafetyAssay) {
+                modalHandlers.openLinkEfficiencyToSafetyModal(itemId);
+            }
+            break;
+
+        case 'unlink-assay':
+            undoManager.saveState();
+            // Remove vínculo do estado e das observações
+            const link = state.assayLinks.find(l => l.from === itemId || l.to === itemId);
+            if (link) {
+                const eff = state.scheduledAssays.find(a => a.id === link.from);
+                const saf = state.safetyScheduledAssays.find(a => a.id === link.to);
+                if (eff) eff.observacoes = utils.stripLinkTags(eff.observacoes);
+                if (saf) saf.observacoes = utils.stripLinkTags(saf.observacoes);
+                state.assayLinks = state.assayLinks.filter(l => !(l.from === link.from && l.to === link.to));
+                state.hasUnsavedChanges = true;
+                ui.toggleScheduleActions(true);
+                renderers.renderGanttChart();
+                utils.showToast('Vínculo removido. Guarde as alterações para confirmar.');
+            }
+            break;
+
+        case 'schedule-event':
+            if (item) {
+                modalHandlers.openAddScheduleEventModal({ startDate: item.startDate, endDate: item.endDate });
+            } else if (headerDate) {
+                modalHandlers.openAddScheduleEventModal({ startDate: headerDate, endDate: headerDate });
+            }
+            break;
+        case 'schedule-holiday':
+            if (headerDate) {
+                modalHandlers.openAddHolidayModal({ startDate: headerDate, endDate: headerDate });
+            }
+            break;
+        case 'edit-event':
+            if (headerDate) {
+                const ev = getEventForDate(headerDate);
+                if (ev) modalHandlers.openEditScheduleEventModal(ev.id);
+            }
+            break;
+        case 'edit-holiday':
+            if (headerDate) {
+                const holiday = state.holidays.find(h => {
+                    const d = utils.parseDate(headerDate);
+                    return d >= utils.parseDate(h.startDate) && d <= utils.parseDate(h.endDate);
+                });
+                if (holiday) modalHandlers.openEditHolidayModal(holiday.id);
+            }
+            break;
+
         case 'delete':
-            const message = `Tem a certeza de que deseja excluir a tarefa "${item.protocol}"?`;
-            ui.showConfirmationModal(message, () => {
-                dataHandlers.handleDeleteGanttItem(item.id);
-            });
+            if (headerDate) {
+                const ev = getEventForDate(headerDate);
+                if (ev) {
+                    ui.showConfirmationModal(`Excluir evento "${ev.title}" neste dia?`, () => {
+                        dataHandlers.deleteScheduleEvent(ev.id);
+                    });
+                } else if (utils.isHoliday(headerDate)) {
+                    const holiday = state.holidays.find(h => {
+                        const d = utils.parseDate(headerDate);
+                        return d >= utils.parseDate(h.startDate) && d <= utils.parseDate(h.endDate);
+                    });
+                    if (holiday) {
+                        ui.showConfirmationModal(`Excluir feriado "${holiday.name}"?`, () => {
+                            dataHandlers.deleteHolidayLocal(holiday.id);
+                        });
+                    }
+                }
+            } else {
+                const message = `Tem a certeza de que deseja excluir a tarefa "${item.protocol}"?`;
+                ui.showConfirmationModal(message, () => {
+                    dataHandlers.handleDeleteGanttItem(item.id);
+                });
+            }
             break;
     }
 
@@ -10454,6 +11096,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!contextMenu.contains(e.target) && !e.target.closest('.gantt-task-menu-trigger')) {
             contextMenu.classList.add('hidden');
             detachContextMenuListeners();
+            contextMenu.classList.remove('header-context');
         }
     });
 
@@ -10531,10 +11174,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.inventory = data.inventory || [];
                     state.historicalAssays = data.historicalAssays || [];
                     state.scheduledAssays = data.scheduledAssays || [];
-                    state.safetyScheduledAssays = data.safetyScheduledAssays || []; // Carrega a nova array
+                    state.safetyScheduledAssays = data.safetyScheduledAssays || [];
                     state.originalScheduledAssays = JSON.parse(JSON.stringify(data.scheduledAssays || []));
-                    state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(data.safetyScheduledAssays || [])); // Salva o estado original
+                    state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(data.safetyScheduledAssays || []));
                     state.originalCalibrations = JSON.parse(JSON.stringify(data.calibrations || []));
+                    state.assayLinks = [];
+                    const safetyById = new Map((state.safetyScheduledAssays || []).map(a => [Number(a.id), a]));
+                    (state.scheduledAssays || []).forEach(eff => {
+                        const obs = String(eff.observacoes || '');
+                        const m = obs.match(/\[link_safety:(\d+)\]/);
+                        if (m) {
+                            const sid = Number(m[1]);
+                            if (safetyById.has(sid)) {
+                                const exists = state.assayLinks.some(l => l.from === eff.id && l.to === sid);
+                                if (!exists) state.assayLinks.push({ from: eff.id, to: sid });
+                            }
+                        }
+                    });
+                    (state.safetyScheduledAssays || []).forEach(saf => {
+                        const obs = String(saf.observacoes || '');
+                        const m = obs.match(/\[link_efficiency:(\d+)\]/);
+                        if (m) {
+                            const eid = Number(m[1]);
+                            const exists = state.assayLinks.some(l => l.from === eid && l.to === saf.id);
+                            if (!exists) state.assayLinks.push({ from: eid, to: saf.id });
+                        }
+                    });
                     state.efficiencyCategories = data.efficiencyCategories || state.efficiencyCategories;
                     console.log('🔍 DEBUG - data.safetyCategories recebido:', data.safetyCategories);
                     state.safetyCategories = data.safetyCategories || state.safetyCategories;
@@ -10542,6 +11207,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.originalEfficiencyCategories = JSON.parse(JSON.stringify(state.efficiencyCategories));
                     state.originalSafetyCategories = JSON.parse(JSON.stringify(state.safetyCategories));                    
                     state.holidays = data.holidays || [];
+                    state.events = data.events || [];
+                    state.originalHolidays = JSON.parse(JSON.stringify(state.holidays));
+                    state.originalEvents = JSON.parse(JSON.stringify(state.events));
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || []; // Carrega os equipamentos de calibração
                     
@@ -10600,7 +11268,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     utils.hideLoading();
                 }
                 break;
-                case 'forceDataRefresh':
+            case 'forceDataRefresh':
                 try {
                     console.log("Recebida atualização forçada do backend:", message.data);
                     const data = message.data && typeof message.data === 'object' ? message.data : {};
@@ -10611,6 +11279,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.scheduledAssays = data.scheduledAssays || [];
                     state.safetyScheduledAssays = data.safetyScheduledAssays || [];
                     state.holidays = data.holidays || [];
+                    state.events = data.events || [];
                     state.calibrations = data.calibrations || [];
                     state.calibrationEquipments = data.calibrationEquipments || [];
                     state.settings = { ...state.settings, ...(data.settings || {}) };
@@ -10690,6 +11359,54 @@ document.addEventListener('DOMContentLoaded', () => {
                     utils.showToast(message.error || 'Erro na operação da categoria', true);
                 }
                 break;
+                break;
+            case 'eventOperationResult':
+                if (message.success) {
+                    const op = message.operation;
+                    if (op === 'add') {
+                        utils.showToast('Evento adicionado com sucesso!');
+                        if (message.newId && state.lastEventSubmitted) {
+                            const ev = { id: message.newId, ...state.lastEventSubmitted };
+                            state.events.push(ev);
+                            renderers.renderGanttChart();
+                            state.lastEventSubmitted = null;
+                        }
+                    } else if (op === 'update') {
+                        utils.showToast('Evento atualizado com sucesso!');
+                        if (state.lastEventSubmitted && state.lastEventSubmitted.id) {
+                            const idx = state.events.findIndex(e => Number(e.id) === Number(state.lastEventSubmitted.id));
+                            if (idx !== -1) {
+                                state.events[idx] = { ...state.events[idx], ...state.lastEventSubmitted };
+                                renderers.renderGanttChart();
+                            }
+                            state.lastEventSubmitted = null;
+                        }
+                    } else if (op === 'delete') {
+                        utils.showToast('Evento excluído com sucesso!');
+                        renderers.renderGanttChart();
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de evento', true);
+                }
+                break;
+            case 'holidayOperationResult':
+                if (message.success) {
+                    const op = message.operation;
+                    if (op === 'delete') {
+                        state.originalHolidays = JSON.parse(JSON.stringify(state.holidays));
+                        renderers.renderGanttChart();
+                        renderers.renderHolidaysList();
+                        utils.showToast('Feriado removido com sucesso!');
+                    } else if (op === 'update') {
+                        state.originalHolidays = JSON.parse(JSON.stringify(state.holidays));
+                        renderers.renderGanttChart();
+                        renderers.renderHolidaysList();
+                        utils.showToast('Feriado atualizado com sucesso!');
+                    }
+                } else {
+                    utils.showToast(message.error || 'Erro na operação de feriado', true);
+                }
+                break;
         }
     });
 
@@ -10718,6 +11435,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         state.originalScheduledAssays = JSON.parse(JSON.stringify(state.scheduledAssays));
         state.originalSafetyScheduledAssays = JSON.parse(JSON.stringify(state.safetyScheduledAssays));
+        state.originalHolidays = JSON.parse(JSON.stringify(state.holidays));
+        state.originalEvents = JSON.parse(JSON.stringify(state.events));
         state.hasUnsavedChanges = false;
         ui.toggleScheduleActions(false);
         utils.showToast("Alterações guardadas com sucesso!");
@@ -10786,12 +11505,16 @@ document.addEventListener('DOMContentLoaded', () => {
         state.calibrations = JSON.parse(JSON.stringify(state.originalCalibrations)); // Reverte o estado das calibrações
         state.efficiencyCategories = JSON.parse(JSON.stringify(state.originalEfficiencyCategories));
         state.safetyCategories = JSON.parse(JSON.stringify(state.originalSafetyCategories));
+        // Reverte feriados e eventos para o estado original
+        state.holidays = JSON.parse(JSON.stringify(state.originalHolidays));
+        state.events = JSON.parse(JSON.stringify(state.originalEvents));
         state.hasUnsavedChanges = false;
         ui.toggleScheduleActions(false);
 
         renderers.ganttInitialRenderDone = false;
         
         renderers.renderGanttChart();
+        renderers.renderHolidaysList?.();
         utils.showToast("Alterações canceladas.");
     });
     // Lógica do modal de senha
@@ -11416,6 +12139,7 @@ assaysFilters.forEach(id => {
     document.getElementById('btn-open-add-safety-assay-modal')?.addEventListener('click', () => modalHandlers.openAddSafetyAssayModal());
     document.getElementById('btn-open-add-calibration-modal')?.addEventListener('click', () => modalHandlers.openAddCalibrationModal());
     document.getElementById('btn-open-add-vacation-modal')?.addEventListener('click', () => modalHandlers.openAddVacationModal());
+    document.getElementById('btn-open-add-schedule-event-modal')?.addEventListener('click', () => modalHandlers.openAddScheduleEventModal());
     // Listener removido - já existe na linha 7447
     document.getElementById('btn-open-assay-modal')?.addEventListener('click', () => modalHandlers.openAddAssayModal());
     document.getElementById('btn-generate-pdf-report')?.addEventListener('click', () => modalHandlers.openGeneratePdfReportModal());
@@ -12040,6 +12764,42 @@ document.getElementById('btn-add-security-row')?.addEventListener('click', () =>
     // Início da aplicação
     authSystem.init();
     console.log("Webview está pronta e todos os listeners estão ativos.");
+});
+
+// Botões de ações do cronograma
+DOM.btnCancelSchedule?.addEventListener('click', () => {
+    undoManager.undo();
+    // Reverte arrays para o estado original
+    state.scheduledAssays = JSON.parse(JSON.stringify(state.originalScheduledAssays || []));
+    state.safetyScheduledAssays = JSON.parse(JSON.stringify(state.originalSafetyScheduledAssays || []));
+    state.calibrations = JSON.parse(JSON.stringify(state.originalCalibrations || []));
+    // Reconstroi vínculos a partir das observações originais
+    state.assayLinks = [];
+    const safetyById = new Map((state.safetyScheduledAssays || []).map(a => [Number(a.id), a]));
+    (state.scheduledAssays || []).forEach(eff => {
+        const obs = String(eff.observacoes || '');
+        const m = obs.match(/\[link_safety:(\d+)\]/);
+        if (m) {
+            const sid = Number(m[1]);
+            if (safetyById.has(sid)) {
+                const exists = state.assayLinks.some(l => l.from === eff.id && l.to === sid);
+                if (!exists) state.assayLinks.push({ from: eff.id, to: sid });
+            }
+        }
+    });
+    (state.safetyScheduledAssays || []).forEach(saf => {
+        const obs = String(saf.observacoes || '');
+        const m = obs.match(/\[link_efficiency:(\d+)\]/);
+        if (m) {
+            const eid = Number(m[1]);
+            const exists = state.assayLinks.some(l => l.from === eid && l.to === saf.id);
+            if (!exists) state.assayLinks.push({ from: eid, to: saf.id });
+        }
+    });
+    state.hasUnsavedChanges = false;
+    ui.toggleScheduleActions(false);
+    renderers.renderGanttChart();
+    utils.showToast('Alterações canceladas.');
 });
 
 
