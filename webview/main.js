@@ -4306,7 +4306,17 @@ renderAssayLinks: () => {
             </defs>
         `;
 
-        const LINK_COLORS = [
+        const isDarkTheme = document.documentElement.classList.contains('dark');
+        const LINK_COLORS = isDarkTheme ? [
+            { stroke: '#3b82f6', marker: 'url(#arrowhead-blue)' },
+            { stroke: '#22c55e', marker: 'url(#arrowhead-green)' },
+            { stroke: '#ef4444', marker: 'url(#arrowhead-red)' },
+            { stroke: '#f59e0b', marker: 'url(#arrowhead-orange)' },
+            { stroke: '#a855f7', marker: 'url(#arrowhead-purple)' },
+            { stroke: '#e11d48', marker: 'url(#arrowhead-pink)' },
+            { stroke: '#06b6d4', marker: 'url(#arrowhead-cyan)' },
+            { stroke: '#fde047', marker: 'url(#arrowhead-amber)' }
+        ] : [
             { stroke: '#2563eb', marker: 'url(#arrowhead-blue)' },
             { stroke: '#16a34a', marker: 'url(#arrowhead-green)' },
             { stroke: '#dc2626', marker: 'url(#arrowhead-red)' },

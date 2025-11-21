@@ -4,6 +4,12 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
+[1.4.8] - 2025-11-21
+
+### Correção
+
+- **Elementos do cronograma:** Foi corrigido a renderização de elementos no cronograma, como as setas de dependência e as tarefas.
+
 [1.4.7] - 2025-11-19
 
 ### Adicionado
