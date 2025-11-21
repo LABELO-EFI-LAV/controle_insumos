@@ -4,6 +4,12 @@ Todos as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em Keep a Changelog, e este projeto adere ao Versionamento 
 Semântico.
 
+[1.4.9] - 2025-11-21
+
+### Alteração
+
+- **Permissões:** Agora técnicos podem agendar férias no cronograma.
+
 [1.4.8] - 2025-11-21
 
 ### Correção

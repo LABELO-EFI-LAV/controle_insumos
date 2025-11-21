@@ -2450,14 +2450,12 @@ const authSystem = {
             // Drag and drop liberado para visualizadores
         }
 
-        // Para técnicos (eficiência e segurança), esconde apenas botões de férias
+        // Para técnicos (eficiência e segurança), permitem agendar férias
         if (userType === 'tecnico_eficiencia' || userType === 'tecnico_seguranca') {
-            // Esconde apenas botões de férias no cronograma (mantém ensaios visíveis)
             const ganttAddButtons = document.querySelectorAll('#btn-open-add-vacation-modal');
             ganttAddButtons.forEach(btn => {
-                if (btn) btn.style.display = 'none';
+                if (btn) btn.style.display = 'flex';
             });
-
         }
 
         // Para administrador, garante acesso total aos botões do cronograma
